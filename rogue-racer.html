@@ -5952,6 +5952,11 @@ document.addEventListener('keydown', e => {
   if (window._padCapture && e.code === 'Escape') { cancelBindCapture(); e.preventDefault(); return; }
   // Abandon a track test at any time and return to the Map Maker.
   if (e.code === 'Escape' && G._testMode) { e.preventDefault(); exitTestToEditor(); return; }
+  // Exit an in-progress race back to the menu.
+  if (e.code === 'Escape' && !G.raceOver) {
+    const gameEl = document.getElementById('game');
+    if (gameEl && gameEl.style.display !== 'none') { e.preventDefault(); exitRaceToMenu(); return; }
+  }
   if (isTypingTarget(e.target)) return;
   G.keys[e.code] = true;
   if (matchBind(KEYBINDS.drift, e.code)) e.preventDefault();
@@ -12381,6 +12386,17 @@ function doReturnToLobby() {
   if (window.__crtShowTerminal) window.__crtShowTerminal();
   if (window.__crtOpenLobby) window.__crtOpenLobby();
   if (window.crtWinFlash) window.crtWinFlash();
+}
+
+// Leave an in-progress race and return to the lobby/menu (bound to Escape).
+function exitRaceToMenu() {
+  if (G._testMode || G.raceOver) return;                 // handled elsewhere / already at results
+  const gameEl = document.getElementById('game');
+  if (!gameEl || gameEl.style.display === 'none') return; // only while the race is on screen
+  if (!window.confirm('Exit race and return to the menu?')) return;
+  try { silenceAllEngines(); } catch (_) {}
+  if (G.isHost) hostReturnToMenu();                       // host/solo: end the race and return
+  else doReturnToLobby();                                 // client: leave back to the lobby
 }
 
 document.getElementById('zoom-slider').oninput = function() {
