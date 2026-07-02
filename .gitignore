@@ -1,0 +1,7 @@
+# Tauri build output
+desktop/dist/
+desktop/src-tauri/target/
+
+# OS junk
+.DS_Store
+Thumbs.db
