@@ -9348,11 +9348,16 @@ function getTrackGroundCache() {
   minX -= margin; minY -= margin; maxX += margin; maxY += margin;
   const w = Math.ceil(maxX - minX), h = Math.ceil(maxY - minY);
   if (!(w > 0 && h > 0)) { _trackGroundCache = { key: track, ok: false }; return null; }
-  // Cap resolution so huge tracks don't blow up memory; the slight upscale blur is
-  // invisible on a fast-scrolling road.
-  const maxDim = 3072;
-  const scale = Math.min(1, maxDim / Math.max(w, h));
-  const cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
+  // Render the ground at full 1:1 resolution no matter how big the map is by baking
+  // it into a grid of tiles and stitching them at blit time. A single canvas would
+  // hit the browser's max-canvas-size limit and force a blurry downscale; tiling keeps
+  // every map crisp. A generous per-layer pixel budget only kicks in for pathologically
+  // huge maps, uniformly downscaling then so we never exhaust memory.
+  const TILE = 2048;
+  const MAX_PIXELS = 64 * 1024 * 1024; // ~256 MB/layer worst case before downscaling
+  const scale = Math.min(1, Math.sqrt(MAX_PIXELS / (w * h)));
+  const baseX = Math.floor(minX), baseY = Math.floor(minY);
+  const fullW = Math.ceil(maxX - baseX), fullH = Math.ceil(maxY - baseY);
   const layersSet = new Set();
   if (Array.isArray(track.driveFloor) && track.driveFloor.length) {
     for (const f of track.driveFloor) layersSet.add(f || 0);
@@ -9361,15 +9366,24 @@ function getTrackGroundCache() {
   }
   const layers = new Map();
   for (const layer of layersSet) {
-    const off = document.createElement('canvas');
-    off.width = cw; off.height = ch;
-    const octx = off.getContext('2d');
-    octx.scale(scale, scale);
-    octx.translate(-minX, -minY);
-    drawTrackGround(octx, layer);
-    layers.set(layer, off);
+    const tiles = [];
+    for (let ty = 0; ty < fullH; ty += TILE) {
+      const th = Math.min(TILE, fullH - ty);
+      for (let tx = 0; tx < fullW; tx += TILE) {
+        const tw = Math.min(TILE, fullW - tx);
+        const off = document.createElement('canvas');
+        off.width = Math.max(1, Math.round(tw * scale));
+        off.height = Math.max(1, Math.round(th * scale));
+        const octx = off.getContext('2d');
+        octx.scale(scale, scale);
+        octx.translate(-(baseX + tx), -(baseY + ty)); // this tile's world origin -> (0,0)
+        drawTrackGround(octx, layer);                  // clips to the tile rect automatically
+        tiles.push({ canvas: off, ox: baseX + tx, oy: baseY + ty, w: tw, h: th });
+      }
+    }
+    layers.set(layer, tiles);
   }
-  _trackGroundCache = { key: track, ok: true, layers, ox: minX, oy: minY, w, h };
+  _trackGroundCache = { key: track, ok: true, layers, ox: baseX, oy: baseY, w: fullW, h: fullH };
   return _trackGroundCache;
 }
 
@@ -9507,7 +9521,7 @@ function render(dt) {
     ctx.save();
     applyLayerTransform(layer - myLayerView);
     if (groundCache && groundCache.layers && groundCache.layers.has(layer)) {
-      ctx.drawImage(groundCache.layers.get(layer), groundCache.ox, groundCache.oy, groundCache.w, groundCache.h);
+      for (const t of groundCache.layers.get(layer)) ctx.drawImage(t.canvas, t.ox, t.oy, t.w, t.h);
     } else {
       drawTrackGround(ctx, layer);
     }
@@ -9533,7 +9547,7 @@ function render(dt) {
     // It only paints where that deck's road exists, so anything not under it is unaffected.
     if (layer >= myLayer) {
       if (groundCache && groundCache.layers && groundCache.layers.has(layer)) {
-        ctx.drawImage(groundCache.layers.get(layer), groundCache.ox, groundCache.oy, groundCache.w, groundCache.h);
+        for (const t of groundCache.layers.get(layer)) ctx.drawImage(t.canvas, t.ox, t.oy, t.w, t.h);
       } else {
         drawTrackGround(ctx, layer);
       }
