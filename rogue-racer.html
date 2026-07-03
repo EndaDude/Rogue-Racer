@@ -3631,6 +3631,10 @@ function addTrackToQueue(map, source) {
   refreshVoteSelectors();
   updateHostPlayerList();
 }
+// Detect the native desktop app. Declared here (early) because menu-wiring code
+// below runs at page load and references it — a later declaration would throw a
+// temporal-dead-zone error and halt the whole script (killing the terminal UI).
+const IS_TAURI = (typeof window !== 'undefined') && !!window.__TAURI_INTERNALS__;
 function updateLibFolderStatus() {
   const el = document.getElementById('lib-folder-status');
   if (!el) return;
@@ -4776,7 +4780,6 @@ if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
 }
 // --- File System Access API folder backing (optional) ---
 const FS_TRACKS_SUPPORTED = (typeof window !== 'undefined') && (typeof window.showDirectoryPicker === 'function');
-const IS_TAURI = (typeof window !== 'undefined') && !!window.__TAURI_INTERNALS__;
 let _tracksRootHandle = null;
 let _localDirHandle = null;
 let _historyDirHandle = null;
