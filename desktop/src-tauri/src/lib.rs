@@ -27,9 +27,10 @@ pub fn run() {
                     let _ = window.with_webview(|webview| {
                         use glib::prelude::ObjectExt;
                         use webkit2gtk::WebViewExt;
-                        let settings = WebViewExt::settings(&webview.inner());
-                        settings.set_property("enable-webrtc", true);
-                        settings.set_property("enable-media-stream", true);
+                        if let Some(settings) = WebViewExt::settings(&webview.inner()) {
+                            settings.set_property("enable-webrtc", true);
+                            settings.set_property("enable-media-stream", true);
+                        }
                     });
                 }
             }
