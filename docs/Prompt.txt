@@ -1,0 +1,26 @@
+go ahead and rebuild those features for me pretty pls also add auto detection to the mapmaker for general rotation for the path of the road, like if I place a brick wall it shouldnt be long ways along the road it should be wide ways along the road like its actually blocking it and not just existing, shouldnt be too hard. also make the walls when you add them actually adhere to the path and not just like exist on the edges broadly. 
+
+also pls fix the gigantic space in the map maker where its just nothing but the track name shit. just fill in that area and move the track naming thing to somewhere else. you see this screenshot? heres an idea. Move the map naming thing (circled in red) to where the red line leads. then move the warning that the folder isnt connected (or any other warning really) to the top of the tab next to the thing that says map maker and make the text like a befitting yellow thingy with that triangle excalamation mark thing too (not emoji, custom icon) 
+
+and in the space left over (the empty space left behind where the track naming thing was) move the actual editing UI in the top right like spread it out among that whole top area yk. you get what I Mean? by moving the name track thing we make more room for the UI. 
+
+also make it flash some text when you open it to say type help to begin or something like that. and make it type it out properly so like letter by letter but make it look good not like super slow. and make that example text darker than the normal text to show its like a preview to indicate to the user to type help. Also make it so the user can just hit enter to open up the help menu as an alternate choice to typing help, but dont say that in the example help thing here. like dont make it wordy asf. 
+
+also im just testing it here in the claude preview so if it only works in the browser version just lmk but TTS doesnt seem to work? but if im wrong correct me pls. 
+
+also make it so you can just click the room code to copy it after you host, actually just make it auto copy. 
+
+uhh also uhh 
+
+when you type ships make it pull up a new window with a spinning 2d asset of each ship in like a wide window with alot of microinteractions. when you hover your mouse over each one it should raise a little bit and the ship should slowly spin and also pull up a window showing the stats and general description of the ship and its abilities, plus any custom items it may have. 
+
+add various useless details like release date (make it like futuristic or some shit make some fake future detail shit and producer and shit) 
+
+so when I use the ships command it opens that instead of showing me a useless list basically. I think there might already be some ship details? idk but u piece everything together in this menu. also please try to solve that friend name bug where after you restart it says friend name resolved. because sometimes you send a friend request then it doesnt say the name and you have to reload to make it work and then it says friend name resolved. you mightve already fixed it I actually dont know since I havent yet tested ur most recent version im just confident you did what I said at the very least. 
+
+and again do hibby jibby whatever ok add something change something a little do whatever u think needs changing. also if theres anything on the TODO list lets try to knock that out. 
+
+
+
+also add a few things to the game anywhere. literally anywhere it can be gameplay or in the menus idc
+also add a button to save a level setting. so like if I set something to be level 1 have a button that allows you to save the level so I dont have to hit enter every single time. maybe not the word save just like set or something? idk or maybe auto set but make sure it doesnt apply to any other node when you click off? dude idfk whatever you think works best ur smarter than me.
