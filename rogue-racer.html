@@ -3634,7 +3634,8 @@ function addTrackToQueue(map, source) {
 function updateLibFolderStatus() {
   const el = document.getElementById('lib-folder-status');
   if (!el) return;
-  if (_localDirHandle) { el.innerHTML = '\u2705 ' + (tracksFolderName() || 'connected'); el.style.color = '#4ade80'; }
+  if (IS_TAURI) { el.innerHTML = '\u2705 Saved maps are real .json files in the app <b>Maps</b> folder.'; el.style.color = '#4ade80'; }
+  else if (_localDirHandle) { el.innerHTML = '\u2705 ' + (tracksFolderName() || 'connected'); el.style.color = '#4ade80'; }
   else if (FS_TRACKS_SUPPORTED) { el.textContent = 'Browser storage \u2014 connect a folder to share files with the editor.'; el.style.color = 'var(--muted)'; }
   else { el.textContent = 'Folder access unavailable in this browser/run mode.'; el.style.color = 'var(--muted)'; }
 }
@@ -3642,6 +3643,7 @@ async function renderLobbyTrackLibrary() {
   const localEl = document.getElementById('lib-local-list');
   const histEl = document.getElementById('lib-history-list');
   if (!localEl || !histEl) return;
+  if (IS_TAURI) await _tauriEnsureMaps();
   updateLibFolderStatus();
   let local, hist;
   if (_localDirHandle) local = (await _fsReadTracks(_localDirHandle)).sort((a, b) => a.name.localeCompare(b.name));
@@ -3680,7 +3682,10 @@ if (hostQueueEl) {
   });
 }
 const libConnectBtn = document.getElementById('lib-connect-folder-btn');
-if (libConnectBtn) libConnectBtn.onclick = async () => { if (await connectTracksFolder()) renderLobbyTrackLibrary(); };
+if (libConnectBtn) {
+  if (IS_TAURI) { libConnectBtn.textContent = '\uD83D\uDCC2 Open maps folder'; libConnectBtn.onclick = () => openMapsFolder(); }
+  else libConnectBtn.onclick = async () => { if (await connectTracksFolder()) renderLobbyTrackLibrary(); };
+}
 
 function pickQueuedMapForStart() {
   if (!G.mapQueue.length) return null;
@@ -4771,9 +4776,74 @@ if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
 }
 // --- File System Access API folder backing (optional) ---
 const FS_TRACKS_SUPPORTED = (typeof window !== 'undefined') && (typeof window.showDirectoryPicker === 'function');
+const IS_TAURI = (typeof window !== 'undefined') && !!window.__TAURI_INTERNALS__;
 let _tracksRootHandle = null;
 let _localDirHandle = null;
 let _historyDirHandle = null;
+
+// --- Native desktop (Tauri) real-file map storage ---
+// In the packaged app there's no folder-picker, so saved maps are written as
+// real .json files into a physical "Maps" folder inside the app's AppData dir
+// (History stays in the localStorage cache). This mirrors the browser folder
+// feature but uses the Tauri fs/path plugins instead of File System Access.
+let _tauriMapsDir = null;
+let _tauriMapsInit = null;
+function _tauriEnsureMaps() {
+  if (!IS_TAURI) return Promise.resolve();
+  if (_tauriMapsInit) return _tauriMapsInit;
+  _tauriMapsInit = (async () => {
+    try {
+      const path = window.__TAURI__.path, fs = window.__TAURI__.fs;
+      const dir = await path.join(await path.appDataDir(), 'Maps');
+      await fs.mkdir(dir, { recursive: true });
+      _tauriMapsDir = dir;
+      _localDirHandle = dir;
+      // One-time migration: turn any cached maps into real files (overwrite by name).
+      try { for (const rec of getLocalTracks()) await _tauriWriteTrack(dir, rec); } catch (_) {}
+    } catch (e) { console.warn('maps folder init failed', e); _tauriMapsInit = null; }
+  })();
+  return _tauriMapsInit;
+}
+async function _tauriWriteTrack(dir, rec) {
+  if (!dir) return;
+  try {
+    const fs = window.__TAURI__.fs, path = window.__TAURI__.path;
+    const fp = await path.join(dir, _trackFileName(rec));
+    await fs.writeTextFile(fp, JSON.stringify(_serializeTrack(rec), null, 2));
+  } catch (e) { console.warn('tauri track write failed', e); }
+}
+async function _tauriDeleteTrack(dir, rec) {
+  if (!dir || !rec) return;
+  try {
+    const fs = window.__TAURI__.fs, path = window.__TAURI__.path;
+    const fp = await path.join(dir, _trackFileName(rec));
+    if (await fs.exists(fp)) await fs.remove(fp);
+  } catch (_) {}
+}
+async function _tauriReadTracks(dir) {
+  const out = [];
+  if (!dir) return out;
+  try {
+    const fs = window.__TAURI__.fs, path = window.__TAURI__.path;
+    const entries = await fs.readDir(dir);
+    for (const e of entries) {
+      if (!e.isFile || !/\.json$/i.test(e.name)) continue;
+      try {
+        const fp = await path.join(dir, e.name);
+        const d = JSON.parse(await fs.readTextFile(fp));
+        if (Array.isArray(d.waypoints)) out.push(normalizeTrackRecord(d));
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return out;
+}
+// Open the physical Maps folder in the OS file manager (desktop app only).
+async function openMapsFolder() {
+  if (!IS_TAURI) return;
+  await _tauriEnsureMaps();
+  try { await window.__TAURI__.opener.openPath(_tauriMapsDir); }
+  catch (e) { console.warn('open maps folder failed', e); }
+}
 
 function tracksFolderName() { return _tracksRootHandle ? _tracksRootHandle.name : null; }
 function _trackFileName(rec) {
@@ -4788,6 +4858,7 @@ function _serializeTrack(rec) {
 }
 async function _fsWriteTrack(dir, rec) {
   if (!dir) return;
+  if (IS_TAURI) return _tauriWriteTrack(dir, rec);
   try {
     const fh = await dir.getFileHandle(_trackFileName(rec), { create: true });
     const w = await fh.createWritable();
@@ -4797,11 +4868,13 @@ async function _fsWriteTrack(dir, rec) {
 }
 async function _fsDeleteTrack(dir, rec) {
   if (!dir || !rec) return;
+  if (IS_TAURI) return _tauriDeleteTrack(dir, rec);
   try { await dir.removeEntry(_trackFileName(rec)); } catch (_) {}
 }
 async function _fsReadTracks(dir) {
   const out = [];
   if (!dir) return out;
+  if (IS_TAURI) return _tauriReadTracks(dir);
   try {
     for await (const entry of dir.values()) {
       if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.json')) {
@@ -5028,6 +5101,7 @@ function getHistoryTracks() { return _trackRead(TRACK_HISTORY_KEY); }
 async function saveLocalTrack(map) {
   const rec = normalizeTrackRecord(map);
   if (!rec.waypoints.length) return null;
+  if (IS_TAURI) await _tauriEnsureMaps();
   const local = getLocalTracks();
   const i = local.findIndex(t => (t.name || '').toLowerCase() === rec.name.toLowerCase());
   if (i >= 0) { rec.id = local[i].id; local[i] = rec; }
@@ -5040,6 +5114,7 @@ async function saveLocalTrack(map) {
 async function deleteLocalTrack(rec) {
   const id = (rec && typeof rec === 'object') ? rec.id : rec;
   const name = (rec && typeof rec === 'object') ? (rec.name || '') : null;
+  if (IS_TAURI) await _tauriEnsureMaps();
   _trackWrite(TRACK_LOCAL_KEY, getLocalTracks().filter(t =>
     t.id !== id && (!name || (t.name || '').toLowerCase() !== name.toLowerCase())));
   if (rec && typeof rec === 'object') await _fsDeleteTrack(_localDirHandle, rec);
@@ -13803,7 +13878,10 @@ function meCurrentMapData(){
 function updateFolderStatus(){
   const el=document.getElementById('me-folder-status');
   if(!el) return;
-  if(_localDirHandle){
+  if(IS_TAURI){
+    el.innerHTML='✅ Saves are real <b>.json</b> files in the app <b>Maps</b> folder — History stays cached.';
+    el.style.color='#4ade80';
+  } else if(_localDirHandle){
     el.innerHTML='✅ Folder: <b>'+(tracksFolderName()||'connected')+'</b> — saves go to Local/ & History/';
     el.style.color='#4ade80';
   } else if(FS_TRACKS_SUPPORTED){
@@ -13818,6 +13896,7 @@ async function renderEditorTrackLists(){
   const localEl=document.getElementById('me-local-list');
   const histEl=document.getElementById('me-history-list');
   if(!localEl||!histEl) return;
+  if(IS_TAURI) await _tauriEnsureMaps();
   updateFolderStatus();
   const mkRow=(rec,opts)=>{
     const row=document.createElement('div');row.className='me-track-row';
@@ -13847,9 +13926,11 @@ async function renderEditorTrackLists(){
   if(!hist.length) histEl.innerHTML='<div class="me-track-empty">No tracks loaded yet.</div>';
   else hist.forEach(rec=>histEl.appendChild(mkRow(rec,{save:true})));
 }
-document.getElementById('me-connect-folder-btn').onclick=async()=>{
-  if(await connectTracksFolder()) renderEditorTrackLists();
-};
+const meConnectBtn=document.getElementById('me-connect-folder-btn');
+if(meConnectBtn){
+  if(IS_TAURI){ meConnectBtn.textContent='\uD83D\uDCC2 Open maps folder'; meConnectBtn.onclick=()=>openMapsFolder(); }
+  else meConnectBtn.onclick=async()=>{ if(await connectTracksFolder()) renderEditorTrackLists(); };
+}
 document.getElementById('me-save-to-local-btn').onclick=async()=>{
   if(ME.wpts.length<4){alert('Place at least 4 waypoints first.');return;}
   await saveLocalTrack(meCurrentMapData());
