@@ -5,6 +5,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -13,6 +15,23 @@ pub fn run() {
                         .level(log::LevelFilter::Info)
                         .build(),
                 )?;
+            }
+            // On Linux the webview is WebKitGTK, which ships with WebRTC turned
+            // OFF by default — that's why online multiplayer (PeerJS/WebRTC)
+            // failed there while working on Windows (Chromium WebView2). Turn it
+            // on so peer connections work cross-platform. No-op on other OSes.
+            #[cfg(target_os = "linux")]
+            {
+                use tauri::Manager;
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.with_webview(|webview| {
+                        use glib::prelude::ObjectExt;
+                        use webkit2gtk::WebViewExt;
+                        let settings = WebViewExt::settings(&webview.inner());
+                        settings.set_property("enable-webrtc", true);
+                        settings.set_property("enable-media-stream", true);
+                    });
+                }
             }
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
