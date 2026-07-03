@@ -641,6 +641,131 @@
     overflow: hidden;
   }
 
+  /* Race event feed (kills, hits, finishes) — stacks under the minimap */
+  #event-feed {
+    position: absolute;
+    top: 160px;
+    right: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-end;
+    z-index: 13;
+    pointer-events: none;
+    max-width: 240px;
+  }
+  .feed-item {
+    background: rgba(2,6,23,0.55);
+    border: 1px solid rgba(148,163,184,0.22);
+    border-radius: 8px;
+    padding: 3px 10px;
+    font-size: 0.72rem;
+    color: #cbd5e1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    backdrop-filter: blur(3px);
+    animation: feedIn 0.25s ease;
+  }
+  .feed-item.out { opacity: 0; transform: translateX(12px); transition: all 0.35s; }
+  @keyframes feedIn { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+
+  /* Post-race stats strip */
+  #results-stats {
+    display: none;
+    gap: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+    font-size: 0.78rem;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 14px;
+    max-width: 560px;
+  }
+  #results-stats b { color: var(--text); }
+
+  /* Victory confetti on the results screen */
+  .rr-confetti {
+    position: absolute;
+    top: -16px;
+    border-radius: 2px;
+    pointer-events: none;
+    z-index: 5;
+    animation: rrConfettiFall linear forwards;
+  }
+  @keyframes rrConfettiFall {
+    to { transform: translateY(110vh) rotate(720deg); opacity: 0.65; }
+  }
+
+  /* Map-maker header warning (folder not connected etc.) */
+  #me-header-warn {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.7rem;
+    color: #facc15;
+    background: rgba(250,204,21,0.08);
+    border: 1px solid rgba(250,204,21,0.4);
+    border-radius: 7px;
+    padding: 3px 9px;
+    max-width: 40%;
+    line-height: 1.25;
+  }
+  #me-header-warn svg { width: 13px; height: 13px; flex-shrink: 0; fill: none; stroke: #facc15; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Ships showcase window */
+  .ships-wrap { display: flex; flex-direction: column; gap: 10px; height: 100%; }
+  .ships-row {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 12px 4px 8px;
+    flex: 0 0 auto;
+  }
+  .ship-card {
+    flex: 0 0 108px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 6px 7px;
+    border: 1px solid #1f7a45;
+    border-radius: 10px;
+    background: rgba(6,40,21,0.55);
+    cursor: pointer;
+    transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s;
+    user-select: none;
+  }
+  .ship-card:hover {
+    transform: translateY(-5px);
+    border-color: #5dffa0;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.5), 0 0 14px rgba(47,174,90,0.35);
+  }
+  .ship-card.sel { border-color: #5dffa0; box-shadow: 0 0 0 1px #5dffa0 inset, 0 0 16px rgba(93,255,160,0.3); }
+  .ship-card canvas { width: 84px; height: 84px; }
+  .ship-card .sc-name { font-size: 0.78rem; font-weight: 700; color: #c9ffd8; letter-spacing: 0.03em; }
+  .ship-detail {
+    flex: 1 1 auto;
+    min-height: 150px;
+    border: 1px solid #1f7a45;
+    border-radius: 10px;
+    background: rgba(2,17,10,0.6);
+    padding: 10px 14px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    overflow-y: auto;
+  }
+  .ship-detail h3 { margin: 0 0 2px; color: #eafff2; font-size: 1rem; letter-spacing: 0.04em; text-shadow: 0 0 8px rgba(180,255,210,0.6); }
+  .ship-detail .sd-lore { color: #6fdc95; font-size: 0.68rem; letter-spacing: 0.04em; margin-bottom: 7px; }
+  .ship-detail .sd-bars { display: grid; grid-template-columns: 72px 1fr; gap: 3px 8px; margin: 6px 0; max-width: 330px; }
+  .ship-detail .sd-bars span { color: #8fe6ad; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+  .ship-detail .sd-bar { height: 7px; border-radius: 4px; background: rgba(31,122,69,0.35); overflow: hidden; align-self: center; }
+  .ship-detail .sd-bar i { display: block; height: 100%; background: linear-gradient(90deg, #2fae5a, #5dffa0); border-radius: 4px; }
+  .ship-detail .sd-special { color: #ffd166; }
+  .ship-detail .sd-item { color: #9dffc6; }
+
   /* Live leaderboard + race timer (top-left) */
   #race-status-panel {
     position: absolute;
@@ -788,6 +913,70 @@
     color:var(--muted); transition:.12s;
   }
   .me-check-btn.active { border-color:#fbbf24; background:rgba(251,191,36,.2); color:#fbbf24; }
+
+  /* ===== Map Maker UI overhaul: compact fields, real sliders, mode groups ===== */
+  .me-type-btn svg, .me-check-btn svg, .me-header .btn svg, .me-config .btn svg {
+    width: 13px; height: 13px; vertical-align: -2px; margin-right: 4px;
+    fill: none; stroke: currentColor; stroke-width: 1.7;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .me-toolbar { flex-wrap: wrap; row-gap: 6px; }
+  #me-map-name { width: 132px; flex: 0 0 auto; }
+  .me-grp {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 4px 8px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface2);
+  }
+  .me-grp[hidden] { display: none; }
+  .me-field { display: inline-flex; align-items: center; gap: 6px; }
+  .me-field > label {
+    font-size: .68rem; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .04em; white-space: nowrap;
+  }
+  .me-field input[type=number] {
+    width: 46px; padding: 3px 4px; font-size: .74rem; text-align: center;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
+    color: var(--text); -moz-appearance: textfield; appearance: textfield;
+  }
+  .me-field input[type=number]::-webkit-outer-spin-button,
+  .me-field input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .me-field select {
+    height: 26px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); padding: 0 6px; font-size: .74rem;
+  }
+  /* Custom range styling: slim track, chunky glowing thumb. */
+  .me-toolbar input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 96px; height: 18px; background: transparent; cursor: pointer; margin: 0;
+  }
+  .me-toolbar input[type=range]::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent2), var(--border));
+  }
+  .me-toolbar input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 13px; height: 13px; margin-top: -4.5px; border-radius: 50%;
+    background: var(--neon); border: 2px solid var(--bg);
+    box-shadow: 0 0 6px var(--accent2);
+    transition: transform .1s;
+  }
+  .me-toolbar input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+  .me-toolbar input[type=range]::-moz-range-track {
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent2), var(--border));
+  }
+  .me-toolbar input[type=range]::-moz-range-thumb {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: var(--neon); border: 2px solid var(--bg);
+    box-shadow: 0 0 6px var(--accent2);
+  }
+  .me-grp-title {
+    font-size: .64rem; font-weight: 700; letter-spacing: .08em;
+    color: var(--muted); text-transform: uppercase; padding-right: 2px;
+    border-right: 1px solid var(--border); margin-right: 2px;
+    align-self: stretch; display: flex; align-items: center;
+  }
+  #me-mode-hint { font-size: .68rem; color: var(--muted); flex-basis: 100%; padding: 0 2px; }
 
   /* Map editor embedded inside a CRT window: green phosphor theme + fills the
      window body. Redefining the theme variables recolors all the editor chrome. */
@@ -1319,7 +1508,7 @@
 
   <div class="lobby-card" id="lobby-join" style="display:none">
     <h2>Enter Room Code</h2>
-    <input type="text" id="join-code" placeholder="6-letter code" maxlength="8" style="text-transform:uppercase;letter-spacing:4px;font-family:monospace;font-size:1.4rem;text-align:center" />
+    <input type="text" id="join-code" placeholder="room code" maxlength="48" style="text-transform:uppercase;letter-spacing:2px;font-family:monospace;font-size:1.2rem;text-align:center" />
     <button class="btn btn-primary" id="join-confirm-btn">Join Race</button>
     <div id="join-room-panel" style="display:none;gap:8px;flex-direction:column">
       <button class="btn btn-secondary" id="ready-toggle-btn">Ready: No</button>
@@ -1351,6 +1540,7 @@
   <div class="me-header">
     <button class="btn btn-secondary" id="me-back-btn" style="padding:6px 13px;font-size:.8rem">← Back</button>
     <h2>Map Editor</h2>
+    <span id="me-header-warn"></span>
     <button class="btn btn-secondary" id="me-new-btn" style="font-size:.8rem">New</button>
     <button class="btn btn-secondary" id="me-run-regression-btn" style="font-size:.8rem">🧪 Run Layer Tests</button>
     <button class="btn btn-primary" id="me-test-btn" style="font-size:.8rem">🚗 Test Track</button>
@@ -1358,6 +1548,12 @@
   <div class="me-body">
     <div class="me-sidebar">
       <div class="me-config">
+        <label style="font-size:.66rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Track Name</label>
+        <input id="me-map-name" placeholder="Map name" value="My Track" style="width:100%">
+        <select id="me-track-model" title="Track engine. V1 = classic single loop. V2 = branching splits (a section can fork into two full tracks that rejoin, recursively)." style="height:28px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);padding:0 8px;width:100%">
+          <option value="v1">Track Model: V1 (Loop)</option>
+          <option value="v2">Track Model: V2 (Splits)</option>
+        </select>
         <button class="btn btn-secondary" id="me-save-to-local-btn" style="padding:6px 9px;font-size:.78rem">💾 Save to Local</button>
         <button class="btn btn-secondary" id="me-import-track-btn" style="padding:6px 9px;font-size:.78rem">📥 Import .json</button>
         <input type="file" id="me-import-input" accept=".json" style="display:none">
@@ -1380,73 +1576,96 @@
     </div>
     <div class="me-editor">
       <div class="me-toolbar">
-        <input id="me-map-name" placeholder="Map name" value="My Track">
-        <select id="me-track-model" title="Track engine. V1 = classic single loop. V2 = branching splits (a section can fork into two full tracks that rejoin, recursively)." style="height:28px;border-radius:8px;border:1px solid var(--border);background:#111827;color:#e5e7eb;padding:0 8px">
-          <option value="v1">Track Model: V1 (Loop)</option>
-          <option value="v2">Track Model: V2 (Splits)</option>
-        </select>
-        <div class="me-node-settings">
-          <span id="me-selected-node">Node: none</span>
-          <div class="me-type-btns">
-            <button class="me-type-btn" data-type="road" title="Normal road">🛣 Road</button>
-            <button class="me-type-btn" data-type="ice" title="Ice track">🧊 Ice</button>
-            <button class="me-type-btn" data-type="river" title="River track">🌊 River</button>
-            <button class="me-type-btn" data-type="void" title="Void">🕳 Void</button>
+        <div class="me-node-settings" style="border:none;background:transparent;padding:0;gap:6px;flex:1">
+          <div class="me-grp" id="me-grp-modes">
+            <span class="me-grp-title">Mode</span>
+            <button class="me-type-btn" id="me-mode-waypoint" title="Edit track nodes">Nodes</button>
+            <button class="me-type-btn" id="me-mode-wall" title="Paint wall behavior on track edges">Walls</button>
+            <button class="me-type-btn" id="me-mode-obstacle" title="Place obstacles">Obstacles</button>
+            <button class="me-type-btn" id="me-mode-powerup" title="Place item boxes">Items</button>
+            <button class="me-type-btn" id="me-mode-erase" title="Remove placed objects">Erase</button>
           </div>
-          <button class="me-check-btn" id="me-node-checkpoint" title="Checkpoint gate on this node">🏁 Checkpoint</button>
-          <button class="me-check-btn" id="me-node-slope" title="Layer slope threshold on this node">↕ Slope</button>
-          <div class="me-type-btns" style="align-items:center">
+          <div class="me-grp" id="me-grp-node">
+            <span id="me-selected-node" style="font-size:.7rem;color:var(--muted);min-width:74px">Node: none</span>
+            <button class="me-type-btn" data-type="road" title="Normal road">Road</button>
+            <button class="me-type-btn" data-type="ice" title="Ice track">Ice</button>
+            <button class="me-type-btn" data-type="river" title="River track">River</button>
+            <button class="me-type-btn" data-type="void" title="Void (fall gap)">Void</button>
+            <button class="me-check-btn" id="me-node-checkpoint" title="Checkpoint gate on this node">Checkpoint</button>
+            <button class="me-check-btn" id="me-node-slope" title="Layer slope threshold on this node">Slope</button>
             <button class="me-type-btn" id="me-node-slope-rot-left" title="Rotate slope up-direction left">↺</button>
-            <span id="me-node-slope-angle" style="font-size:.72rem;color:var(--muted);min-width:54px;text-align:center">0°</span>
+            <span id="me-node-slope-angle" style="font-size:.7rem;color:var(--muted);min-width:34px;text-align:center">0°</span>
             <button class="me-type-btn" id="me-node-slope-rot-right" title="Rotate slope up-direction right">↻</button>
+            <button class="me-check-btn" id="me-node-split" title="V2: fork this node into a second path that rejoins the next node">Split</button>
+            <span class="me-field" title="Support layer this node belongs to">
+              <label for="me-node-support-layer">Layer</label>
+              <input id="me-node-support-layer" type="number" step="1" value="0">
+            </span>
+            <span class="me-field">
+              <label for="me-node-width-range">Width</label>
+              <input id="me-node-width-range" type="range" min="40" max="180" step="2" value="80">
+              <input id="me-node-width" type="number" min="40" max="180" step="2" value="80">
+            </span>
           </div>
-          <button class="me-check-btn" id="me-node-split" title="V2: fork this node into a second path that rejoins the next node">⑃ Split</button>
-          <label for="me-node-support-layer" style="margin-top:6px">Track Layer</label>
-          <input id="me-node-support-layer" type="number" step="1" value="0" title="Support layer this node belongs to">
-          <label for="me-node-width-range">Width</label>
-          <input id="me-node-width-range" type="range" min="40" max="180" step="2" value="80">
-          <input id="me-node-width" type="number" min="40" max="180" step="2" value="80">
-          <div class="me-type-btns" style="margin-top:6px">
-            <button class="me-type-btn" id="me-mode-waypoint" title="Edit track nodes">🧭 Node Mode</button>
-            <button class="me-type-btn" id="me-mode-wall" title="Paint wall behavior on track edges">🧱 Wall Paint</button>
-            <button class="me-type-btn" id="me-mode-obstacle" title="Place obstacles">🧱 Obstacle Mode</button>
-            <button class="me-type-btn" id="me-mode-powerup" title="Place powerups">🎁 Powerup Mode</button>
-            <button class="me-type-btn" id="me-mode-erase" title="Remove obstacles">🧽 Erase Obstacles</button>
+          <div class="me-grp" id="me-grp-wall" hidden>
+            <span class="me-grp-title">Wall</span>
+            <span class="me-field">
+              <select id="me-wall-mode">
+                <option value="solid">Solid</option>
+                <option value="bouncy">Bouncy</option>
+                <option value="open">Open</option>
+              </select>
+            </span>
+            <span class="me-field">
+              <label for="me-wall-side">Side</label>
+              <select id="me-wall-side">
+                <option value="both">Both</option>
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+              </select>
+            </span>
+            <span class="me-field">
+              <label for="me-wall-force">Force</label>
+              <input id="me-wall-force" type="number" min="20" max="300" step="5" value="120">
+            </span>
+            <span class="me-field">
+              <label for="me-wall-bounce">Bounce</label>
+              <input id="me-wall-bounce" type="number" min="0.2" max="2.0" step="0.05" value="1.0">
+            </span>
           </div>
-          <select id="me-wall-mode" style="height:28px;border-radius:8px;border:1px solid var(--border);background:#111827;color:#e5e7eb;padding:0 8px;margin-top:6px">
-            <option value="solid">Wall: Solid</option>
-            <option value="bouncy">Wall: Bouncy</option>
-            <option value="open">Wall: Open</option>
-          </select>
-          <select id="me-wall-side" style="height:28px;border-radius:8px;border:1px solid var(--border);background:#111827;color:#e5e7eb;padding:0 8px;margin-top:6px">
-            <option value="both">Side: Both</option>
-            <option value="left">Side: Left</option>
-            <option value="right">Side: Right</option>
-          </select>
-          <label for="me-wall-force" style="margin-top:6px">Wall Force</label>
-          <input id="me-wall-force" type="number" min="20" max="300" step="5" value="120">
-          <label for="me-wall-bounce">Wall Bounce</label>
-          <input id="me-wall-bounce" type="number" min="0.2" max="2.0" step="0.05" value="1.0">
-          <select id="me-obstacle-type" style="height:28px;border-radius:8px;border:1px solid var(--border);background:#111827;color:#e5e7eb;padding:0 8px;margin-top:6px">
-            <option value="wall">Wall</option>
-            <option value="cone">Cone</option>
-            <option value="moving_platform">Moving Platform</option>
-            <option value="flowing_water">Flowing Water</option>
-            <option value="ice_track">Ice Track</option>
-            <option value="snow_pile">Snow Pile</option>
-            <option value="punch_glove">Punching Glove</option>
-            <option value="brick_wall">Brick Wall</option>
-          </select>
-          <label for="me-obstacle-layer" style="margin-top:6px">Obstacle Layer</label>
-          <input id="me-obstacle-layer" type="number" step="1" value="0">
-          <label for="me-obstacle-rot-range" style="margin-top:6px">Obstacle Rotation</label>
-          <input id="me-obstacle-rot-range" type="range" min="-180" max="180" step="1" value="0">
-          <input id="me-obstacle-rot" type="number" min="-180" max="180" step="1" value="0">
-          <label for="me-obstacle-scale-range">Obstacle Scale</label>
-          <input id="me-obstacle-scale-range" type="range" min="40" max="220" step="1" value="100">
-          <input id="me-obstacle-scale" type="number" min="40" max="220" step="1" value="100">
+          <div class="me-grp" id="me-grp-obstacle" hidden>
+            <span class="me-grp-title">Object</span>
+            <span class="me-field">
+              <select id="me-obstacle-type">
+                <option value="wall">Wall</option>
+                <option value="cone">Cone</option>
+                <option value="moving_platform">Moving Platform</option>
+                <option value="flowing_water">Flowing Water</option>
+                <option value="ice_track">Ice Track</option>
+                <option value="snow_pile">Snow Pile</option>
+                <option value="punch_glove">Punching Glove</option>
+                <option value="brick_wall">Brick Wall</option>
+                <option value="boost_pad">Boost Pad</option>
+                <option value="repair_pad">Repair Pad</option>
+              </select>
+            </span>
+            <span class="me-field" title="Auto-detected from the nearest track node when you place">
+              <label for="me-obstacle-layer">Layer·auto</label>
+              <input id="me-obstacle-layer" type="number" step="1" value="0">
+            </span>
+            <span class="me-field">
+              <label for="me-obstacle-rot-range">Rotate</label>
+              <input id="me-obstacle-rot-range" type="range" min="-180" max="180" step="1" value="0">
+              <input id="me-obstacle-rot" type="number" min="-180" max="180" step="1" value="0">
+            </span>
+            <span class="me-field">
+              <label for="me-obstacle-scale-range">Scale</label>
+              <input id="me-obstacle-scale-range" type="range" min="40" max="220" step="1" value="100">
+              <input id="me-obstacle-scale" type="number" min="40" max="220" step="1" value="100">
+            </span>
+          </div>
+          <span id="me-mode-hint"></span>
         </div>
-        <span class="me-hint">Node mode: click/drag waypoints. Obstacle mode: place obstacles. Powerup mode: place item boxes. Erase mode/right-click: remove placed objects.</span>
       </div>
       <div class="me-canvas-wrap"><canvas id="me-canvas"></canvas></div>
     </div>
@@ -1511,6 +1730,7 @@
       <div id="race-timer">00:00</div>
       <div id="leaderboard"></div>
     </div>
+    <div id="event-feed" aria-hidden="true"></div>
     <div id="checkpoint-strip" aria-hidden="true"></div>
     <div id="controls-hint">
       W/↑ Accelerate &nbsp; S/↓ Brake<br>
@@ -1548,6 +1768,7 @@
   <h2 id="results-title">Race Over!</h2>
   <div id="results-podium"></div>
   <div class="results-list" id="results-list"></div>
+  <div id="results-stats"></div>
   <div id="results-next" style="display:none;color:var(--text);font-size:.95rem;margin-top:4px"></div>
   <div id="results-ship-pick" style="display:none;flex-direction:column;gap:6px;align-items:center;margin-top:2px">
     <div class="rs-label">🚀 Choose your ship for the next race</div>
@@ -1605,7 +1826,7 @@
 // Game (HTML) version. This ships independently of the desktop app via the
 // self-updating loader, so bump it whenever you publish a game update; it shows
 // on the terminal so you can confirm which build actually loaded.
-const GAME_VERSION = '0.1.3';
+const GAME_VERSION = '0.1.4';
 const TOTAL_LAPS = 3;
 const PLAYER_COLORS = ['#a855f7','#06b6d4','#fbbf24','#22c55e','#ef4444','#f97316'];
 const CAR_W = 14, CAR_H = 22;
@@ -2100,6 +2321,19 @@ const CAR_UNIQUE_POWERUPS = {
   screamer: { id:'ghoul', name:'Ghoul', icon:'👺', desc:'Sends a specter down the track, halving speeds', color:'#84cc16' },
   baller:   { id:'ball', name:'Ball', icon:'🎾', desc:'Erratic bouncing ball that disables control', color:'#f59e0b' },
   needle:   { id:'deathray', name:'Deathray', icon:'☄️', desc:'Spend 20 HP to fire a lethal beam for 5 sec', color:'#ef4444' },
+};
+
+// Flavor-only spec sheet for the Ships showcase window (fake future lore).
+const SHIP_LORE = {
+  drifter:  { special: 'Enhanced drift grip', desc: 'Balanced all-rounder with a strong natural drift for sweeping corners.', maker: 'Halcyon Dynamics', year: '2094', chassis: 'HX-Driftframe Mk.II', tagline: '“The one everybody learns on.”' },
+  dragger:  { special: 'Shift velocity-lock mastery', desc: 'Straight-line specialist; holds the shift lock longer for huge top-end runs.', maker: 'Meridian Speedworks', year: '2091', chassis: 'Longbolt QD-9', tagline: '“Point it straight and pray.”' },
+  puncher:  { special: 'Crash / weapon armor + shockwave', desc: 'Armored bruiser that shrugs off walls and weapons; Ability punches a shockwave that hurls nearby cars away.', maker: 'Ironhide Foundry', year: '2088', chassis: 'BR-Bulwark', tagline: '“Ram first. Ask never.”' },
+  needle:   { special: 'Endless top speed + spikes', desc: 'Featherweight with no speed ceiling; Ability bristles spikes that hold its line and punish rammers.', maker: 'Zephyr Aeronautics', year: '2097', chassis: 'Filament-0', tagline: '“Terminal velocity is a suggestion.”' },
+  baller:   { special: 'Inflate: one monster wall bounce', desc: 'Heavy wrecking ball; Ability balloons to double size and the next wall launches you insanely hard.', maker: 'Rebound Industries', year: '2090', chassis: 'OrbTank-5', tagline: '“Physics is a contact sport.”' },
+  rotor:    { special: 'Propeller draft wake + Downdraft', desc: 'Builds a slipstream that slows cars behind it; must spin up from a stop. Wobbles harder the faster it goes.', maker: 'Cyclone Rotordyne', year: '2093', chassis: 'AeroVane-R', tagline: '“All thrust, questionable brakes.”' },
+  coil:     { special: 'Wall-arc battery + arc storm', desc: 'Charges by hugging walls and braking; a full battery rockets its shift, but overcharge cooks your own HP.', maker: 'Voltaic Systems', year: '2095', chassis: 'Tesla-Loop', tagline: '“Danger is just stored energy.”' },
+  screamer: { special: 'Blackout scream (long range)', desc: 'Honks to blast nearby rivals with a 10-second black-mask blackout.', maker: 'Decibel Motorsport', year: '2092', chassis: 'Wailbox-SR', tagline: '“Heard before it’s seen.”' },
+  holo:     { special: 'On-demand ghost phase', desc: 'Briefly turns intangible to slip through cars, walls, and obstacles.', maker: 'Phantom Optics', year: '2099', chassis: 'Mirage-Ø', tagline: '“Now you don’t.”' },
 };
 const UPGRADES = [
   { id:'topspeed', name:'Top Speed +', icon:'🏎️', desc:'Permanently increases your max speed by 15%' },
@@ -2631,6 +2865,9 @@ let G = {
   fx: [],          // unified juice particles (exhaust, sparks, smoke, sparkles)
   skidMarks: [],   // persistent tire marks left by drifting
   toasts: [],      // on-canvas race banners (laps, overtakes, events)
+  raceStats: null, // local player's per-race stats (top speed, drifts, ...)
+  ghostRec: null,  // current-lap ghost recording (solo)
+  ghostPlay: null, // best-lap ghost being replayed (solo)
   selectedCarType: 'drifter',
   selectedColor: PLAYER_COLORS[0],
   selectedPaintTag: '',
@@ -2814,22 +3051,6 @@ function safeSpawnState(i, track) {
 // ============================================================
 let peer = null, hostConn = null, guestConns = [];
 
-// STUN servers so peers can discover their public ICE candidates and connect
-// across different networks/NATs. Shared by host + guest + social peers.
-const PEER_CONFIG = {
-  config: {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' }
-    ]
-  }
-};
-// Last fatal error from opening the host peer, so the terminal can report the
-// real cause (e.g. unavailable-id / network / server-error) instead of a
-// generic "timed out".
-let _lastHostError = null;
-
 function makeRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
@@ -2837,35 +3058,66 @@ function makeRoomCode() {
   return code;
 }
 
-function initHostPeer(code) {
+// Create one Peer and settle exactly once (open / error / timeout). A stale
+// half-dead peer from an earlier failed attempt is destroyed first — leaving it
+// around is the classic "hosting silently never works again" state.
+function _makePeerOnce(id, timeoutMs) {
   return new Promise((res, rej) => {
-    _lastHostError = null;
+    try { if (peer) { peer.destroy(); } } catch (_) {}
+    peer = null;
+    let p;
+    try { p = id ? new Peer(id) : new Peer(); }
+    catch (e) { rej(new Error('PeerJS failed to start (' + (e && e.message) + ')')); return; }
+    peer = p;
     let settled = false;
-    peer = new Peer('rogueracer-' + code.toLowerCase(), PEER_CONFIG);
-    // Give the broker a real chance to respond (the free PeerJS cloud can be
-    // slow on some networks); reject with a clear reason if it never does.
-    const to = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      _lastHostError = new Error('no response from the PeerJS signalling server (network blocked or unreachable)');
-      rej(_lastHostError);
-    }, 20000);
-    peer.on('open', () => { if (settled) return; settled = true; clearTimeout(to); res(); });
-    peer.on('error', e => {
-      // Only the pre-open error is fatal to hosting; later errors (a guest
-      // dropping, etc.) are handled elsewhere and must not reject here.
+    const done = (ok, val) => {
       if (settled) return;
       settled = true;
       clearTimeout(to);
-      _lastHostError = e;
-      rej(e);
-    });
+      if (ok) res(val);
+      else { try { p.destroy(); } catch (_) {} if (peer === p) peer = null; rej(val); }
+    };
+    const to = setTimeout(() => done(false, Object.assign(new Error('signaling server timeout — check firewall / antivirus / VPN'), { type: 'timeout' })), timeoutMs || 12000);
+    p.on('open', (pid) => done(true, pid));
+    p.on('error', (e) => done(false, Object.assign(new Error((e && e.type) || 'peer error'), { type: e && e.type })));
   });
+}
+
+// Host setup with layered fallbacks so hosting works on every machine that can
+// reach the PeerJS broker at all (i.e. any machine that can JOIN can also HOST):
+//  1) claim rogueracer-<code>   — retried with fresh codes
+//  2) anonymous peer            — broker-assigned id becomes the (long) room code
+// Returns the room code guests should type.
+async function initHostPeer(code) {
+  let lastErr = null;
+  let tryCode = code;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await _makePeerOnce('rogueracer-' + tryCode.toLowerCase(), 9000);
+      return tryCode;
+    } catch (e) {
+      lastErr = e;
+      // A network-level failure won't be cured by a different id — bail to the
+      // clear error immediately instead of burning retries.
+      if (e && (e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error' || e.type === 'browser-incompatible')) break;
+      tryCode = makeRoomCode();
+    }
+  }
+  // Fallback: anonymous peer. The broker picks the id, which always succeeds
+  // when the broker is reachable; the full id doubles as the room code.
+  try {
+    const pid = await _makePeerOnce(null, 9000);
+    return String(pid);
+  } catch (e2) {
+    throw new Error('Could not reach the multiplayer server ('
+      + ((lastErr && lastErr.message) || (e2 && e2.message) || 'unknown')
+      + '). Check firewall/antivirus, VPN, or try another network.');
+  }
 }
 
 function initGuestPeer() {
   return new Promise((res, rej) => {
-    peer = new Peer(undefined, PEER_CONFIG);
+    peer = new Peer();
     peer.on('open', id => res(id));
     peer.on('error', e => rej(e));
   });
@@ -2911,6 +3163,7 @@ function onData(data, fromId) {
     updateHostPlayerList();
   } else if (data.type === 'chat') {
     if (window.__crtChat) window.__crtChat(data.name || 'Racer', data.text || '', data.color || '#39ff14');
+    try { speakChat(data.name || 'Racer', data.text || ''); } catch (_) {}
     if (G.isHost) { guestConns.forEach(c => { if (c.peer !== data.id) { try { c.send(data); } catch(_){} } }); }
   } else if (data.type === 'kicked' && !G.isHost) {
     try { if (peer) peer.destroy(); } catch(_) {}
@@ -3405,6 +3658,18 @@ const lobbyRoomWrap = document.getElementById('lobby-room-wrap');
 const lobbyCustomize = document.getElementById('lobby-customize');
 const lobbyTracks = document.getElementById('lobby-tracks');
 const roomCodeDisplay = document.getElementById('room-code-display');
+// Copy the room code; flash the caption so the user knows it worked. `auto`
+// suppresses the error caption if the browser blocks clipboard without a gesture.
+function copyRoomCode(code, auto) {
+  const small = roomCodeDisplay && roomCodeDisplay.querySelector('small');
+  const flash = (txt) => { if (small) { small.textContent = txt; setTimeout(() => { small.textContent = 'click to copy'; }, 1600); } };
+  try {
+    const p = navigator.clipboard && navigator.clipboard.writeText(code);
+    if (p && p.then) p.then(() => flash('✓ copied!'), () => { if (!auto) flash('press to copy'); });
+    else if (!auto) flash('press to copy');
+    else flash('✓ copied!');
+  } catch (_) { if (!auto) flash('press to copy'); }
+}
 const startRaceBtn = document.getElementById('start-race-btn');
 const statusMsg = document.getElementById('status-msg');
 const hostStatus = document.getElementById('host-status');
@@ -3908,8 +4173,7 @@ document.getElementById('host-btn').onclick = async () => {
   statusMsg.textContent = 'Setting up room...';
   statusMsg.className = 'status-msg';
   try {
-    const code = makeRoomCode();
-    await initHostPeer(code);
+    const code = await initHostPeer(makeRoomCode());
     G.myId = peer.id;
     G.isHost = true;
     G.hostMode = modeChoice;
@@ -3935,7 +4199,13 @@ document.getElementById('host-btn').onclick = async () => {
     if (hostModeIndicator) hostModeIndicator.value = G.hostMode === 'vote' ? 'Vote' : 'Owner';
     if (speedClassSel) speedClassSel.value = G.speedClass;
     roomCodeDisplay.childNodes[0].textContent = code;
-    roomCodeDisplay.querySelector('small').textContent = 'click to copy';
+    // Fallback (anonymous-peer) codes are long — compact the display so they fit.
+    roomCodeDisplay.style.fontSize = code.length > 8 ? '0.85rem' : '';
+    roomCodeDisplay.style.letterSpacing = code.length > 8 ? '1px' : '';
+    // Auto-copy the code to the clipboard the moment the room is up, and keep
+    // click-to-copy as a fallback (clipboard API can reject without a gesture).
+    copyRoomCode(code, true);
+    roomCodeDisplay.onclick = () => copyRoomCode(code, false);
     updateHostPlayerList();
     renderLobbyQueue();
     renderLobbyPending();
@@ -4028,7 +4298,8 @@ roomCodeDisplay.onclick = () => {
 
 document.getElementById('join-confirm-btn').onclick = async () => {
   const profile = getLobbyProfileInput();
-  const code = document.getElementById('join-code').value.trim().toUpperCase();
+  const rawCode = document.getElementById('join-code').value.trim();
+  const code = rawCode.toUpperCase();
   if (code.length < 4) { joinStatus.textContent = 'Enter a valid code'; joinStatus.className = 'status-msg err'; return; }
   joinStatus.textContent = 'Connecting...'; joinStatus.className = 'status-msg';
   try {
@@ -4041,9 +4312,19 @@ document.getElementById('join-confirm-btn').onclick = async () => {
     p.clientUid = CLIENT_UID;
     p.ready = false;
     G.players[myId] = p;
-    const hostPeerId = 'rogueracer-' + code.toLowerCase();
+    // Short codes are claimed rooms; long codes are fallback rooms where the
+    // room code IS the host's raw (lowercase) peer id.
+    const hostPeerId = code.length > 8 ? rawCode.toLowerCase() : 'rogueracer-' + code.toLowerCase();
     hostConn = peer.connect(hostPeerId, { reliable: true });
+    // Surface a clear failure instead of sitting on "Connecting..." forever.
+    const joinTimeout = setTimeout(() => {
+      if (hostConn && !hostConn.open) {
+        joinStatus.textContent = 'No room found for that code (host offline, or a typo).';
+        joinStatus.className = 'status-msg err';
+      }
+    }, 12000);
     hostConn.on('open', () => {
+      clearTimeout(joinTimeout);
       joinStatus.textContent = 'Connected! Waiting for host...';
       joinStatus.className = 'status-msg ok';
       document.getElementById('join-room-panel').style.display = 'flex';
@@ -4084,7 +4365,8 @@ function resetPlayersForRace() {
     p.maxHealth = carMaxHealth(p.carType);
     p.health = p.maxHealth;
     p.deathRespawn = 0;
-    p.invuln = 0;
+    p.invuln = 2.0; // brief spawn protection so grid bumps don't chip anyone
+    p._lapClock = 0;
     p.nextCheckpoint=0;
     p.checkpointsDoneThisLap=false;
     p.lastCheckpointTime=0; p.lastLapTime=0;
@@ -4557,6 +4839,22 @@ function saveFriends() {
 }
 loadFriends();
 
+// Incoming friend requests wait here until accepted/declined (real requests —
+// no more silent mutual adds).
+let PENDING_REQUESTS = [];
+try { PENDING_REQUESTS = JSON.parse(localStorage.getItem('rr-friend-reqs') || '[]') || []; } catch (_) {}
+function savePendingRequests() {
+  try { localStorage.setItem('rr-friend-reqs', JSON.stringify(PENDING_REQUESTS)); } catch (_) {}
+}
+function findPendingReq(arg) {
+  const lc = String(arg || '').trim().toLowerCase();
+  if (!lc) return null;
+  return PENDING_REQUESTS.find(r => (r.name || '').toLowerCase() === lc)
+      || PENDING_REQUESTS.find(r => (r.name || '').toLowerCase().startsWith(lc))
+      || PENDING_REQUESTS.find(r => String(r.id).toLowerCase() === lc)
+      || null;
+}
+
 function friendPeerId(fid) { return 'rogueracer-fr-' + String(fid).toLowerCase(); }
 function findFriend(name) {
   const lc = String(name || '').trim().toLowerCase();
@@ -4582,7 +4880,7 @@ let socialInConns = [];  // connections other people opened to us
 let socialReady = false;
 
 function initSocialPeer() {
-  try { socialPeer = new Peer(friendPeerId(FRIEND_ID), PEER_CONFIG); }
+  try { socialPeer = new Peer(friendPeerId(FRIEND_ID)); }
   catch (e) { return; }
   socialPeer.on('open', () => { socialReady = true; try { ensureAutoLinks(); } catch (_) {} try { refreshAllFriendPresence(); } catch (_) {} });
   socialPeer.on('disconnected', () => { try { socialPeer.reconnect(); } catch (_) {} });
@@ -4628,6 +4926,35 @@ function handleSocialData(d, conn) {
     else FRIENDS.push({ id: fromId, name: fromName, autojoin: false });
     saveFriends();
     friendNotify('\u2605 ' + fromName + ' added you as a friend (id ' + fromId + ').', 'hi');
+  } else if (d.type === 'friend_request_v2') {
+    // Real friend request: goes into a pending list; nothing is added until
+    // this player explicitly accepts.
+    const fromId = String(d.fromId || '');
+    const fromName = String(d.fromName || 'Racer').slice(0, 24);
+    if (!fromId || fromId === FRIEND_ID) return;
+    if (FRIENDS.find(f => f.id === fromId)) {
+      // Already friends on this side — auto-confirm so the sender syncs up.
+      try { conn.send({ type: 'friend_accept', fromId: FRIEND_ID, fromName: myRacerName() }); } catch (_) {}
+      return;
+    }
+    if (!PENDING_REQUESTS.find(r => r.id === fromId)) {
+      PENDING_REQUESTS.push({ id: fromId, name: fromName, at: Date.now() });
+      if (PENDING_REQUESTS.length > 20) PENDING_REQUESTS.splice(0, PENDING_REQUESTS.length - 20);
+      savePendingRequests();
+    }
+    friendNotify('★ Friend request from ' + fromName + '  (' + fromId + ')', 'hi');
+    friendNotify('   type:  accept ' + fromName + '   or   decline ' + fromName, 'dim');
+  } else if (d.type === 'friend_accept') {
+    const fromId = String(d.fromId || '');
+    const fromName = String(d.fromName || 'Racer').slice(0, 24);
+    if (!fromId || fromId === FRIEND_ID) return;
+    const ex = FRIENDS.find(f => f.id === fromId);
+    if (ex) { if (!ex.name) ex.name = fromName; }
+    else FRIENDS.push({ id: fromId, name: fromName, autojoin: false });
+    saveFriends();
+    friendNotify('✓ ' + fromName + ' accepted your friend request!', 'hi');
+  } else if (d.type === 'friend_decline') {
+    friendNotify('Your friend request was declined by ' + String(d.fromName || 'the player').slice(0, 24) + '.', 'dim');
   } else if (d.type === 'friend_remove') {
     const fromId = String(d.fromId || '');
     const before = FRIENDS.length;
@@ -4669,6 +4996,85 @@ function friendSend(targetFriendId, message, onFail) {
   });
   conn.on('data', (d) => { if (d && d.type === 'presence_state') noteFriendName(d.fromId, d.fromName); });
   conn.on('error', () => { if (!done) { done = true; clearTimeout(timer); if (onFail) onFail('friend appears offline'); } });
+}
+
+// ============================================================
+// UNIQUE USERNAMES — the PeerJS broker doubles as the name registry.
+// Claiming a name = holding the peer id `rr-user-<name>`; if someone
+// already holds it, the broker rejects it → "username already taken".
+// Friends can then be requested by name instead of the long friend ID.
+// (Claims are held while you're online — same model as the room codes.)
+// ============================================================
+let namePeer = null;
+let CLAIMED_NAME = '';
+try { CLAIMED_NAME = localStorage.getItem('rr-claimed-name') || ''; } catch (_) {}
+
+function sanitizeUsername(v) {
+  return String(v || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 16);
+}
+function usernamePeerId(u) { return 'rr-user-' + u; }
+
+function claimUsername(name, cb) {
+  const u = sanitizeUsername(name);
+  if (u.length < 3) { if (cb) cb(false, 'username needs 3+ letters/numbers'); return; }
+  if (namePeer && CLAIMED_NAME === u && !namePeer.destroyed) { if (cb) cb(true, u); return; }
+  try { if (namePeer) namePeer.destroy(); } catch (_) {}
+  namePeer = null;
+  let p;
+  try { p = new Peer(usernamePeerId(u)); }
+  catch (e) { if (cb) cb(false, 'name service failed to start'); return; }
+  let settled = false;
+  const to = setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    try { p.destroy(); } catch (_) {}
+    if (cb) cb(false, 'name service timeout');
+  }, 9000);
+  p.on('open', () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(to);
+    namePeer = p;
+    CLAIMED_NAME = u;
+    try { localStorage.setItem('rr-claimed-name', u); } catch (_) {}
+    // Friend requests addressed to the username land here.
+    p.on('connection', (conn) => { conn.on('data', (d) => handleSocialData(d, conn)); });
+    if (cb) cb(true, u);
+  });
+  p.on('error', (e) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(to);
+    try { p.destroy(); } catch (_) {}
+    if (namePeer === p) namePeer = null;
+    if (e && e.type === 'unavailable-id') { if (cb) cb(false, 'username already taken'); }
+    else if (cb) cb(false, (e && e.type) || 'name service error');
+  });
+}
+
+// One-shot message to a claimed username (friend requests by name).
+function sendToUsername(username, message, onFail) {
+  const u = sanitizeUsername(username);
+  if (u.length < 3) { if (onFail) onFail('invalid username'); return; }
+  if (!socialPeer || !socialReady) { if (onFail) onFail('social layer not ready yet — try again in a moment'); return; }
+  let done = false, conn;
+  try { conn = socialPeer.connect(usernamePeerId(u), { reliable: true }); }
+  catch (e) { if (onFail) onFail('could not reach that user'); return; }
+  const timer = setTimeout(() => { if (!done) { done = true; if (onFail) onFail('no one online with that username'); try { conn.close(); } catch (_) {} } }, 8000);
+  conn.on('open', () => {
+    try { conn.send(message); } catch (_) {}
+    setTimeout(() => { done = true; clearTimeout(timer); try { conn.close(); } catch (_) {} }, 2500);
+  });
+  conn.on('error', () => { if (!done) { done = true; clearTimeout(timer); if (onFail) onFail('no one online with that username'); } });
+}
+
+// Re-claim the saved username on boot (quietly — a note only on failure).
+if (CLAIMED_NAME) {
+  setTimeout(() => {
+    claimUsername(CLAIMED_NAME, (ok, msg) => {
+      if (!ok && window.__crtPrint) window.__crtPrint('could not re-claim username "' + CLAIMED_NAME + '": ' + msg, 'dim');
+    });
+  }, 2500);
 }
 
 // ---- Auto-join: keep a live subscription to each auto-join friend's presence.
@@ -6032,6 +6438,16 @@ function startGame() {
   G._cdPrev = -1;
   G._cdStamp = 0;
   G._speedZoom = 1;
+  G._finishPunch = 0;
+  G._launchHold = 0;
+  G._introStart = performance.now();
+  G.raceStats = { topSpeed: 0, bestLapMs: null, drifts: 0, itemsUsed: 0, wallHits: 0, dmgTaken: 0 };
+  G.ghostRec = null;
+  loadBestGhost();
+  G._theme = BACKDROP_THEMES[Math.abs(G.seed || 0) % BACKDROP_THEMES.length];
+  if (G.track) G.track._vb = null; // recompute intro-flyover bounds per race
+  const feedEl = document.getElementById('event-feed');
+  if (feedEl) feedEl.innerHTML = '';
   G.countdownVal = 3;
   playCountdownVoice();
   resizeCanvas();
@@ -6042,6 +6458,15 @@ function startGame() {
     if (G.countdownVal <= 0) {
       G.raceStarted = true;
       G.raceStartTime = Date.now();
+      // Perfect start: reward throttle pressed inside the last ~0.6s of the
+      // countdown (too early = nothing, so it's a timing game).
+      const hold = G._launchHold || 0;
+      const meL = G.players[G.myId];
+      if (meL && hold > 0.02 && hold <= 0.6) {
+        meL.boosting = Math.max(meL.boosting || 0, 1.3);
+        addToast('PERFECT START!', { color: '#4ade80', glow: '#16a34a', size: 30, duration: 1.6 });
+        playOvertakeBlip(true);
+      }
       clearInterval(countdownTimer);
     }
   }, 1000);
@@ -6492,10 +6917,53 @@ function setIceSlide(amount) {
   } catch (_) {}
 }
 function stopIceSlide() {
+  stopDriftScreech();
   if (!iceSlide) return;
   try { iceSlide.src.stop(); } catch (_) {}
   try { iceSlide.src.disconnect(); iceSlide.flt.disconnect(); iceSlide.gain.disconnect(); } catch (_) {}
   iceSlide = null;
+}
+
+// Tire screech while drifting — same looped-noise recipe as the ice slide but
+// bandpassed much lower, pitch rising with slip intensity.
+let driftScreech = null;
+function ensureDriftScreech() {
+  if (driftScreech || !audioCtx) return;
+  try {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const src = audioCtx.createBufferSource();
+    src.buffer = getSfxNoiseBuffer();
+    src.loop = true;
+    const flt = audioCtx.createBiquadFilter();
+    flt.type = 'bandpass';
+    flt.frequency.value = 900;
+    flt.Q.value = 1.4;
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0;
+    src.connect(flt); flt.connect(gain); gain.connect(audioCtx.destination);
+    src.start(0);
+    driftScreech = { src, gain, flt };
+  } catch (_) {}
+}
+function setDriftScreech(amount) {
+  const g = fxGain();
+  if (g <= 0 || !(amount > 0.001)) {
+    if (driftScreech) { try { driftScreech.gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.07); } catch (_) {} }
+    return;
+  }
+  ensureDriftScreech();
+  if (!driftScreech) return;
+  const a = Math.min(1, amount);
+  try {
+    driftScreech.gain.gain.setTargetAtTime(a * g * 0.13, audioCtx.currentTime, 0.05);
+    driftScreech.flt.frequency.setTargetAtTime(650 + a * 750, audioCtx.currentTime, 0.08);
+  } catch (_) {}
+}
+function stopDriftScreech() {
+  if (!driftScreech) return;
+  try { driftScreech.src.stop(); } catch (_) {}
+  try { driftScreech.src.disconnect(); driftScreech.flt.disconnect(); driftScreech.gain.disconnect(); } catch (_) {}
+  driftScreech = null;
 }
 
 function spawnResetSmoke() {
@@ -6698,6 +7166,8 @@ function useItem() {
   const item = me.heldItem;
   me.heldItem = null;
   G.heldItem = null;
+  if (G._rouletteTimer) { clearInterval(G._rouletteTimer); G._rouletteTimer = null; }
+  if (G.raceStats) G.raceStats.itemsUsed++;
   updatePowerupHud();
   playItemUse(item);
   const effect = { type:'item_used', id:G.myId, item };
@@ -7024,6 +7494,11 @@ function gameLoop(ts) {
   updateCrtActive();
 
   if (!G.track) return;
+  // Perfect-start timing: measure how long the throttle has been held during
+  // the countdown; evaluated the instant the race goes green.
+  if (!G.raceStarted && !G.raceOver && G.countdownVal > 0) {
+    G._launchHold = kbHeld('throttle') ? (G._launchHold || 0) + dt : 0;
+  }
   if (G.raceStarted && !G.raceOver) {
     updateObstacleDynamics(dt);
     updateObstacleRespawns(dt);
@@ -7489,6 +7964,9 @@ function updateMyPlayer(dt) {
       && me.driftCommitTimer >= CAR_TUNING.driftMinCommitSec
       && me.driftNoBoostTimer <= 0;
 
+    if (committedDrift && !me._wasCommittedDrift && G.raceStats) G.raceStats.drifts++;
+    me._wasCommittedDrift = committedDrift;
+
     if (committedDrift && forwardSpeed > 15) {
       me.driftBoostStack = Math.min(CAR_TUNING.driftBoostStackMax, me.driftBoostStack + CAR_TUNING.driftBoostBuildPerSec * slipGate * dt);
       const chainMult = 1 + me.driftBoostStack * CAR_TUNING.driftSpeedBonusStackScale;
@@ -7662,6 +8140,7 @@ function updateMyPlayer(dt) {
           const vnInto = (me.vx * nxv + me.vy * nyv) * Math.sign(signed);
           const impact = Math.min(1, Math.max(Math.abs(vnInto), (me.speed || 0) * 0.45) / 260);
           playWallHit(impact);
+          if (G.raceStats) G.raceStats.wallHits++;
         }
         me._wallContact = true;
         // Grinding along a wall at speed showers sparks back into the track.
@@ -7800,6 +8279,23 @@ function updateMyPlayer(dt) {
       }
       if (obs.type === 'ice_track' && d < hitR) {
         onIce = true;
+        continue;
+      }
+      if (obs.type === 'boost_pad' && d < hitR) {
+        // Launch strip: hard shove along the pad's arrow plus a short nitro
+        // window so the flame/vignette kick in.
+        const dir = ((obs.rot || 0) * Math.PI) / 180;
+        me.vx += Math.cos(dir) * 620 * speedScale * dt;
+        me.vy += Math.sin(dir) * 620 * speedScale * dt;
+        me.boosting = Math.max(me.boosting || 0, 0.55);
+        if (Math.random() < 0.4) spawnFxBurst(me.x, me.y, me.layer || 0, 'sparks', Math.cos(dir), Math.sin(dir));
+        continue;
+      }
+      if (obs.type === 'repair_pad' && d < hitR) {
+        if ((me.health || 0) < (me.maxHealth || CAR_TUNING.baseHealth)) {
+          me.health = Math.min(me.maxHealth || CAR_TUNING.baseHealth, (me.health || 0) + 9 * dt);
+          if (Math.random() < 0.05) spawnFxBurst(me.x, me.y, me.layer || 0, 'heal');
+        }
         continue;
       }
       if (d < hitR) {
@@ -8043,6 +8539,11 @@ function updateMyPlayer(dt) {
     ? Math.min(1, (me.speed / 200) * (0.45 + Math.min(1, Math.abs(lateralNow) / 55)))
     : 0;
   setIceSlide(iceSlideAmt);
+  // Tire screech scales with sideways slip while drifting (not on ice — ice
+  // has its own shimmer).
+  setDriftScreech((isDriftActive && !onIce)
+    ? Math.min(1, (Math.abs(lateralNow) / 90) * (0.35 + me.speed / 420))
+    : 0);
   if (isDriftActive) {
     me.driftTrailTimer += dt;
     const rearX = nx - fwdNowX * (CAR_H * 0.48);
@@ -8079,6 +8580,12 @@ function updateMyPlayer(dt) {
   }
 
   me.x = nx; me.y = ny;
+
+  // Lap clock (only ticks while the race is live, so it's pause-immune),
+  // top-speed stat and best-lap ghost recording.
+  me._lapClock = (me._lapClock || 0) + dt;
+  if (G.raceStats && me.speed > G.raceStats.topSpeed) G.raceStats.topSpeed = me.speed;
+  if (!me.finished) ghostRecordSample(me);
 
   // Ordered checkpoint gates (custom maps): must pass in sequence to validate lap.
   if (G.track && G.track.checkpoints && G.track.checkpoints.length) {
@@ -8123,7 +8630,7 @@ function updateMyPlayer(dt) {
         if (uniq && Math.random() < 0.25) chosenId = uniq.id;
         me.heldItem = chosenId;
         G.heldItem = chosenId;
-        updatePowerupHud();
+        startItemRoulette(); // slot-machine flicker, then reveals the real item
         playPowerupPickup();
         spawnFxBurst(item.x, item.y, me.layer || 0, 'pickup');
         disableItem(idx, CAR_TUNING.powerupRespawnSec, true);
@@ -8155,6 +8662,29 @@ function updateMyPlayer(dt) {
     me.lastLapTime = G.raceStartTime ? (Date.now() - G.raceStartTime) : 0;
     // Rotor: crossing the finish line repairs the propeller.
     if (me.carType === 'rotor') { me.propHealth = CAR_TUNING.rotorPropMaxHealth; me.propBroken = false; }
+
+    // Lap timing via the pause-immune lap clock: stats + best-lap ghost.
+    const lapMs = Math.round((me._lapClock || 0) * 1000);
+    if (G.raceStats && lapMs > 3000) {
+      G.raceStats.bestLapMs = (G.raceStats.bestLapMs == null || lapMs < G.raceStats.bestLapMs) ? lapMs : G.raceStats.bestLapMs;
+    }
+    if (ghostEnabled() && lapMs > 3000 && G.ghostRec && G.ghostRec.frames.length > 4) {
+      ghostRecordSample(me, true); // capture the finish-line frame
+      const prev = G.ghostPlay;
+      if (!prev || lapMs < prev.lapMs) {
+        const shape = getCarTypeCfg(me.carType).shape;
+        saveBestGhost(lapMs, G.ghostRec.frames, shape);
+        G.ghostPlay = { lapMs, frames: G.ghostRec.frames, shape };
+        addToast('★ NEW BEST LAP ' + formatFinishTime(lapMs), { color: '#fde047', glow: '#f59e0b', size: 26, duration: 2.6 });
+      } else {
+        const dMs = lapMs - prev.lapMs;
+        addToast((dMs >= 0 ? '+' : '−') + (Math.abs(dMs) / 1000).toFixed(2) + 's vs best',
+          { color: dMs >= 0 ? '#f87171' : '#4ade80', glow: dMs >= 0 ? '#b91c1c' : '#16a34a', size: 20, duration: 2.0 });
+      }
+    }
+    me._lapClock = 0;
+    G.ghostRec = null; // fresh recording starts with the new lap
+
     me.lap++;
     me.nextCheckpoint = 0;
     me.checkpointsDoneThisLap = false;
@@ -8166,6 +8696,10 @@ function updateMyPlayer(dt) {
         me.finishTime = Date.now();
         me.finishElapsedMs = G.raceStartTime ? (Date.now() - G.raceStartTime) : 0;
         G.finishOrder.push(me.id);
+        addToast('FINISHED!', { color: '#4ade80', glow: '#16a34a', size: 36, duration: 2.2 });
+        addFeed(`🏁 ${me.name} finished P${G.finishOrder.length}`);
+        G._finishPunch = 1;
+        playFinalLapSting();
         broadcast({ type:'player_finished', id:me.id, time: me.finishElapsedMs });
         checkRaceOver();
       }
@@ -8417,12 +8951,24 @@ function applyDamage(player, rawDamage, cause) {
     if (player.propHealth <= 0) { player.propHealth = 0; player.propBroken = true; }
   }
   player.health = Math.max(0, (player.health || player.maxHealth || CAR_TUNING.baseHealth) - dmg);
+  // Floating damage number over the victim.
+  if (dmg >= 1 && Array.isArray(G.fx)) {
+    spawnFxParticle({
+      x: player.x + (Math.random() - 0.5) * 8, y: player.y - 10,
+      vx: (Math.random() - 0.5) * 20, vy: -46,
+      r: dmg >= 20 ? 13 : 11, life: 0.75, maxLife: 0.75, layer: player.layer || 0,
+      c0: [255, 140, 100], c1: [255, 60, 60], a0: 1, drag: 1.5, grow: 0,
+      text: '-' + Math.round(dmg),
+    });
+  }
+  if (player.id === G.myId && G.raceStats) G.raceStats.dmgTaken += dmg;
   if (player.health <= 0) {
     player.deathRespawn = CAR_TUNING.deathRespawnTime;
     player.invuln = CAR_TUNING.respawnInvuln;
     player.vx = 0; player.vy = 0; player.speed = 0;
     spawnExplosion(player.x, player.y, CAR_TUNING.deathExplosionRadius, 'death');
     addScreenShake(CAR_TUNING.deathExplosionShake, 0.35);
+    addFeed(`💥 ${player.name || 'Racer'} wrecked`);
     broadcast({ type:'death_explosion', x: player.x, y: player.y, radius: CAR_TUNING.deathExplosionRadius, layer: player.layer || 0, id: player.id, cause: cause || 'hit' });
     return true;
   }
@@ -8795,6 +9341,14 @@ function drawFx(ctx, layer) {
     const gg = Math.round(lerp(p.c0[1], p.c1[1], t));
     const bb = Math.round(lerp(p.c0[2], p.c1[2], t));
     ctx.fillStyle = `rgba(${rr},${gg},${bb},${a})`;
+    if (p.text) {
+      // Text particle (e.g. floating damage numbers).
+      ctx.font = `800 ${Math.round(p.r)}px system-ui`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(p.text, p.x, p.y);
+      continue;
+    }
     ctx.beginPath();
     ctx.arc(p.x, p.y, Math.max(0.4, p.r), 0, Math.PI * 2);
     ctx.fill();
@@ -8886,6 +9440,143 @@ function drawToasts(ctx, W, H) {
   ctx.restore();
 }
 
+// ---- Race event feed (DOM, under the minimap) --------------------------------
+function addFeed(text) {
+  const feed = document.getElementById('event-feed');
+  if (!feed) return;
+  const div = document.createElement('div');
+  div.className = 'feed-item';
+  div.textContent = text;
+  feed.prepend(div);
+  while (feed.children.length > 5) feed.removeChild(feed.lastChild);
+  setTimeout(() => {
+    div.classList.add('out');
+    setTimeout(() => div.remove(), 400);
+  }, 4200);
+}
+
+// ---- Item pickup roulette: badge flickers like a slot machine, then reveals --
+function startItemRoulette() {
+  const badge = document.getElementById('powerup-badge');
+  if (!badge) { updatePowerupHud(); return; }
+  const pool = POWERUPS_LIST.concat(Object.values(CAR_UNIQUE_POWERUPS));
+  const t0 = performance.now();
+  if (G._rouletteTimer) clearInterval(G._rouletteTimer);
+  G._rouletteTimer = setInterval(() => {
+    if (performance.now() - t0 > 520 || !G.heldItem) {
+      clearInterval(G._rouletteTimer);
+      G._rouletteTimer = null;
+      updatePowerupHud();
+      return;
+    }
+    const p = pool[Math.floor(Math.random() * pool.length)];
+    badge.innerHTML = (iconSvg(p.id, 15) || p.icon) + ' ' + p.name;
+    badge.className = 'powerup-badge active';
+    badge.style.borderColor = p.color;
+    badge.style.color = p.color;
+  }, 55);
+}
+
+// ---- Victory confetti (DOM, on the results screen) ----------------------------
+function spawnWinConfetti(container) {
+  if (!container) return;
+  const colors = ['#fbbf24', '#a855f7', '#06b6d4', '#22c55e', '#ef4444', '#e879f9'];
+  for (let i = 0; i < 60; i++) {
+    const s = document.createElement('span');
+    s.className = 'rr-confetti';
+    s.style.left = Math.random() * 100 + '%';
+    s.style.background = colors[i % colors.length];
+    const sz = (5 + Math.random() * 6) + 'px';
+    s.style.width = sz; s.style.height = sz;
+    s.style.animationDuration = (2.2 + Math.random() * 2.2) + 's';
+    s.style.animationDelay = (Math.random() * 1.2) + 's';
+    container.appendChild(s);
+    setTimeout(() => s.remove(), 6200);
+  }
+}
+
+// ---- Backdrop themes: each race seed picks a palette --------------------------
+const BACKDROP_THEMES = [
+  { nebula: '#11101e', deep: '#06060a', star: '200,210,255', grid: 'rgba(124,58,237,0.05)' },  // violet void
+  { nebula: '#1c1210', deep: '#0a0605', star: '255,220,185', grid: 'rgba(249,115,22,0.05)' },  // ember dusk
+  { nebula: '#0e1620', deep: '#050a0e', star: '190,235,255', grid: 'rgba(56,189,248,0.055)' }, // arctic night
+  { nebula: '#101a12', deep: '#050a06', star: '205,255,215', grid: 'rgba(34,197,94,0.05)' },   // toxic mire
+];
+
+// ============================================================
+// BEST-LAP GHOST (solo) — your fastest lap on this track+class is
+// recorded and replayed as a translucent pace car. Sampling is keyed
+// to the pause-immune per-lap clock, so upgrade pauses don't skew it.
+// ============================================================
+const GHOST_SAMPLE_MS = 60;
+
+function ghostEnabled() { return !inMultiplayerRace(); }
+
+function ghostTrackSig() {
+  if (!G.track) return null;
+  const base = (G.customMap && G.customMap.name) ? 'map:' + G.customMap.name : 'seed:' + (G.seed || 0);
+  return 'rr-ghost-' + base + '|' + (G.speedClass || 'neighborhood') + '|' + (G.track.spline ? G.track.spline.length : 0);
+}
+
+function loadBestGhost() {
+  G.ghostPlay = null;
+  if (!ghostEnabled()) return;
+  try {
+    const sig = ghostTrackSig();
+    if (!sig) return;
+    const raw = localStorage.getItem(sig);
+    if (!raw) return;
+    const g = JSON.parse(raw);
+    if (g && Array.isArray(g.frames) && g.frames.length > 4 && Number.isFinite(g.lapMs)) G.ghostPlay = g;
+  } catch (_) {}
+}
+
+function saveBestGhost(lapMs, frames, shape) {
+  try {
+    const sig = ghostTrackSig();
+    if (sig) localStorage.setItem(sig, JSON.stringify({ lapMs, frames, shape }));
+  } catch (_) {}
+}
+
+function ghostRecordSample(me, force) {
+  if (!ghostEnabled()) return;
+  if (!G.ghostRec) G.ghostRec = { frames: [], nextT: 0 };
+  const tMs = (me._lapClock || 0) * 1000;
+  if (!force && tMs < G.ghostRec.nextT) return;
+  G.ghostRec.nextT = tMs + GHOST_SAMPLE_MS;
+  if (G.ghostRec.frames.length < 4000) {
+    G.ghostRec.frames.push([+me.x.toFixed(1), +me.y.toFixed(1), +me.angle.toFixed(3), me.layer || 0]);
+  }
+}
+
+function drawGhost(ctx, layer) {
+  const g = G.ghostPlay;
+  const me = G.players[G.myId];
+  if (!g || !me || !G.raceStarted || me.finished) return;
+  const fi = ((me._lapClock || 0) * 1000) / GHOST_SAMPLE_MS;
+  const i0 = Math.floor(fi);
+  if (i0 >= g.frames.length - 1) return; // ghost already completed its lap
+  const f0 = g.frames[i0], f1 = g.frames[i0 + 1];
+  if ((f0[3] || 0) !== (layer || 0)) return;
+  const ft = fi - i0;
+  const gx = lerp(f0[0], f1[0], ft), gy = lerp(f0[1], f1[1], ft);
+  const ga = f0[2] + angleDiff(f0[2], f1[2]) * ft;
+  ctx.save();
+  ctx.translate(gx, gy);
+  ctx.rotate(ga + Math.PI / 2);
+  ctx.globalAlpha *= 0.36;
+  ctx.fillStyle = '#7dd3fc';
+  drawCarSilhouette(ctx, g.shape || 'drifter', CAR_W, CAR_H);
+  ctx.rotate(-(ga + Math.PI / 2));
+  ctx.globalAlpha = Math.min(1, ctx.globalAlpha + 0.18);
+  ctx.fillStyle = 'rgba(125,211,252,0.85)';
+  ctx.font = '700 9px system-ui';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('BEST', 0, -CAR_H * 0.72);
+  ctx.restore();
+}
+
 // ---- Tiny procedural jingles (built on playSweep) ----------------------------
 function playLapJingle() {
   playSweep(520, 780, 0.12, 'square', 0.5);
@@ -8899,6 +9590,146 @@ function playFinalLapSting() {
 function playOvertakeBlip(up) {
   if (up) playSweep(620, 930, 0.09, 'triangle', 0.45);
   else playSweep(520, 330, 0.12, 'triangle', 0.4);
+}
+
+// ============================================================
+// JANK RETRO TTS — per-player robot voices for lobby chat.
+// Not real speech: 8-bit style character babble. Each racer's name
+// hashes to a base pitch, waveform, and tempo, so everyone gets their
+// own recognizably awful voice. Messages queue with a gap (slowdown),
+// and a repeated message within 30s prints silently.
+// ============================================================
+const TTS = { queue: [], playing: false, recent: new Map(), enabled: true };
+
+function ttsHash(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+function ttsVoiceFor(name) {
+  const h = ttsHash(String(name || 'Racer').toLowerCase());
+  const bases = [92, 130, 175, 235, 320, 420]; // deep rumbler → shrill tin-can
+  return {
+    base: bases[h % bases.length] * (1 + ((h >> 3) % 13) / 100),
+    wave: ['square', 'sawtooth', 'triangle'][(h >> 5) % 3],
+    drawl: 0.85 + ((h >> 11) % 40) / 100,
+  };
+}
+
+function speakChat(name, text) {
+  if (!TTS.enabled) return;
+  const msg = String(text || '').trim().slice(0, 90);
+  if (!msg) return;
+  const key = msg.toLowerCase();
+  const now = Date.now();
+  if (now - (TTS.recent.get(key) || 0) < 30000) return; // repeat: no audio
+  TTS.recent.set(key, now);
+  if (TTS.recent.size > 40) TTS.recent.delete(TTS.recent.keys().next().value);
+  TTS.queue.push({ name, msg });
+  if (TTS.queue.length > 4) TTS.queue.splice(0, TTS.queue.length - 4);
+  if (!TTS.playing) ttsPump();
+}
+
+function ttsPump() {
+  const next = TTS.queue.shift();
+  if (!next) { TTS.playing = false; return; }
+  TTS.playing = true;
+  const dur = ttsSpeak(next.name, next.msg);
+  setTimeout(ttsPump, dur * 1000 + 650);
+}
+
+function ttsSpeak(name, msg) {
+  const g0 = fxGain();
+  if (g0 <= 0 || !audioCtx) return 0.1;
+  try { if (audioCtx.state === 'suspended') audioCtx.resume(); } catch (_) {}
+  const v = ttsVoiceFor(name);
+  const t0 = audioCtx.currentTime + 0.03;
+  let t = t0;
+  const vowels = 'aeiouy';
+  const master = audioCtx.createGain();
+  master.gain.value = 0.16 * g0;
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = 2100; lp.Q.value = 2.5; // boxy speaker
+  master.connect(lp); lp.connect(audioCtx.destination);
+  const words = msg.toLowerCase().split(/\s+/).slice(0, 14);
+  for (const w of words) {
+    for (let i = 0; i < Math.min(w.length, 8); i++) {
+      const ch = w[i];
+      if (!/[a-z0-9]/.test(ch)) continue;
+      const isV = vowels.includes(ch);
+      const durB = (isV ? 0.085 : 0.05) * v.drawl;
+      // Quantized semitone ladder per character = the bit-crushed robot feel.
+      const semi = Math.round((ch.charCodeAt(0) * 7) % 12) - 5;
+      const f = v.base * Math.pow(2, semi / 12) * (isV ? 1 : 1.35);
+      const o = audioCtx.createOscillator();
+      o.type = v.wave;
+      o.frequency.setValueAtTime(f, t);
+      if (isV) o.frequency.setValueAtTime(f * 1.06, t + durB * 0.5); // stepped warble
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(1, t + 0.008);
+      g.gain.setValueAtTime(1, Math.max(t + 0.009, t + durB - 0.015));
+      g.gain.linearRampToValueAtTime(0.0001, t + durB);
+      o.connect(g); g.connect(master);
+      o.start(t); o.stop(t + durB + 0.01);
+      t += durB + 0.012 * v.drawl;
+    }
+    t += 0.07 * v.drawl;
+  }
+  setTimeout(() => { try { master.disconnect(); lp.disconnect(); } catch (_) {} }, (t - t0 + 0.5) * 1000);
+  return t - t0;
+}
+
+// ============================================================
+// MISSILE LOCK-ON WARNING — audio only, no HUD element. A crunchy
+// retro two-tone blip that repeats faster as the missile closes in,
+// like an old heat-seeker RWR. One longer growl when lock is acquired.
+// ============================================================
+const lockWarn = { t: 0 };
+
+function playLockBeep(freq, dur, vol) {
+  const g0 = fxGain();
+  if (g0 <= 0 || !audioCtx) return;
+  try {
+    const t = audioCtx.currentTime;
+    const master = audioCtx.createGain();
+    master.gain.value = (vol || 0.12) * g0;
+    const lp = audioCtx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 2600; lp.Q.value = 4;
+    master.connect(lp); lp.connect(audioCtx.destination);
+    // Two hard-panned-ish detuned squares = cheap bit-crush crunch.
+    [0, 27].forEach(det => {
+      const o = audioCtx.createOscillator();
+      o.type = 'square';
+      o.frequency.value = freq + det;
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(1, t);
+      g.gain.setValueAtTime(1, t + dur * 0.7);
+      g.gain.linearRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(master);
+      o.start(t); o.stop(t + dur + 0.01);
+    });
+    setTimeout(() => { try { master.disconnect(); lp.disconnect(); } catch (_) {} }, dur * 1000 + 220);
+  } catch (_) {}
+}
+
+function playLockAcquired() {
+  playLockBeep(560, 0.16, 0.14);
+  setTimeout(() => playLockBeep(860, 0.2, 0.14), 170);
+}
+
+// Called each frame with the distance of the nearest missile locked on me
+// (Infinity when clear). Faster pips as it closes.
+function updateLockBeeper(nearestDist, dt) {
+  if (!Number.isFinite(nearestDist)) { lockWarn.t = 0; return; }
+  const closeness = Math.max(0, Math.min(1, 1 - nearestDist / 1100));
+  const interval = lerp(0.55, 0.11, closeness);
+  lockWarn.t += dt;
+  if (lockWarn.t >= interval) {
+    lockWarn.t = 0;
+    playLockBeep(1180 + closeness * 260, 0.05, 0.1);
+  }
 }
 
 // ============================================================
@@ -8926,6 +9757,21 @@ function getBotCount() {
 }
 function setBotCount(n) {
   try { localStorage.setItem('rr-bot-count', String(n)); } catch (_) {}
+}
+
+// Bot difficulty: bounded skill bands so bots are never faster than the ship
+// stats allow — they're "equally capable players", not cheaters.
+const BOT_DIFFICULTY = {
+  easy:   { skillMin: 0.62, skillMax: 0.78, corner: 1.15, bandUp: 0.35, bandDown: 0.35, accel: 0.8 },
+  medium: { skillMin: 0.78, skillMax: 0.92, corner: 1.0,  bandUp: 0.22, bandDown: 0.22, accel: 0.92 },
+  hard:   { skillMin: 0.90, skillMax: 1.0,  corner: 0.88, bandUp: 0.1,  bandDown: 0.12, accel: 1.0 },
+};
+function getBotDifficulty() {
+  const v = localStorage.getItem('rr-bot-difficulty');
+  return BOT_DIFFICULTY[v] ? v : 'medium';
+}
+function setBotDifficulty(v) {
+  try { if (BOT_DIFFICULTY[v]) localStorage.setItem('rr-bot-difficulty', v); } catch (_) {}
 }
 
 // Roll the item a bot receives from a box (mirrors the player's pickup roll, including
@@ -9202,7 +10048,11 @@ function spawnBots(count) {
     const id = 'bot-' + (i + 1);
     const b = makePlayer(id, spec.name, spec.color, 0, 0, 0, types[Math.floor(Math.random() * types.length)]);
     b.isBot = true;
-    b._skill = 0.9 + Math.random() * 0.16;       // pace multiplier (per-bot personality)
+    // Pace multiplier from the selected difficulty band — always ≤ 1, so a bot
+    // can never out-run what its ship's stats allow a human to do.
+    const diff = BOT_DIFFICULTY[getBotDifficulty()] || BOT_DIFFICULTY.medium;
+    b._skill = diff.skillMin + Math.random() * (diff.skillMax - diff.skillMin);
+    b._diff = getBotDifficulty();
     b._latAmp = 8 + Math.random() * 16;          // how far they wander off the racing line
     b._latPhase = Math.random() * Math.PI * 2;
     b._apexBias = 0.7 + Math.random() * 0.7;     // how aggressively this bot cuts corners
@@ -9228,7 +10078,7 @@ function botFinishLap(b) {
     b.finishTime = Date.now();
     b.finishElapsedMs = G.raceStartTime ? (Date.now() - G.raceStartTime) : 0;
     if (!G.finishOrder.includes(b.id)) G.finishOrder.push(b.id);
-    addToast(`${b.name} finished!`, { color: b.color, size: 20, duration: 2.2 });
+    addFeed(`🏁 ${b.name} finished P${G.finishOrder.length}`);
     checkRaceOver();
   }
 }
@@ -9277,22 +10127,31 @@ function updateBots(dt) {
     const curv = Math.max(Math.abs(angleDiff(t0, t1)), Math.abs(angleDiff(t1, t2)) * 0.7);
 
     const cfg = getCarTypeCfg(b.carType);
-    const vmax = CAR_TUNING.baseMaxSpeed * speedScale * cfg.topSpeedMult * b._skill * ((b.boosting || 0) > 0 ? 1.55 : 1);
-    let target = vmax * Math.max(0.34, Math.min(1, 1.06 - curv * 0.85));
+    const diff = BOT_DIFFICULTY[b._diff] || BOT_DIFFICULTY.medium;
+    // Ship-stat ceiling: exactly what a human in this ship gets. Nitro uses the
+    // same player multiplier, and NOTHING below may push the target past it.
+    const shipTop = CAR_TUNING.baseMaxSpeed * speedScale * cfg.topSpeedMult
+      * ((b.boosting || 0) > 0 ? CAR_TUNING.boostSpeedMultiplier : 1);
+    const vmax = shipTop * Math.min(1, b._skill || 1);
+    let target = vmax * Math.max(0.34, Math.min(1, 1.06 - curv * 0.85 * diff.corner));
     if ((b.stun || 0) > 0) { b.stun -= dt; target = 0; }
     // Ghoul slow halves the bot's ceiling; Ball's control-loss stops it entirely.
     if ((b.ghoulSlow || 0) > 0) target = Math.min(target, CAR_TUNING.baseMaxSpeed * speedScale * CAR_TUNING.ghoulSlowMult);
     if ((b.noControl || 0) > 0) target = 0;
-    // Rubber-banding: trailing bots push a little harder, leaders ease off.
+    // Rubber-banding: trailing bots push a little harder, leaders ease off —
+    // but never past the ship's real top speed (no cheating, only catching up
+    // to their own ceiling faster).
     if (me && !me.finished) {
       const myProg = (me.lap || 1) + (me.lapProgress || 0);
       const botProg = (b.lap || 1) + (b._idxF / n);
       const gap = myProg - botProg; // >0 means the bot is behind the human
-      if (gap > 0.25) target *= Math.min(1.22, 1 + gap * 0.3);
-      else if (gap < -0.25) target *= Math.max(0.8, 1 + gap * 0.18);
+      if (gap > 0.25) target *= 1 + Math.min(0.6, gap) * diff.bandUp;
+      else if (gap < -0.25) target *= Math.max(0.7, 1 + gap * diff.bandDown);
+      target = Math.min(target, vmax);
     }
 
-    const accel = CAR_TUNING.baseAccel * speedScale * CAR_TUNING.botAccelBaseMult * (cfg.accelMult || 1);
+    // Acceleration from the ship's own stats (difficulty trims it, never boosts it).
+    const accel = CAR_TUNING.baseAccel * speedScale * (cfg.accelMult || 1) * 1.6 * diff.accel;
     const cur = b._speed || 0;
     b._speed = cur < target
       ? Math.min(target, cur + accel * dt)
@@ -9397,6 +10256,99 @@ function updateBots(dt) {
   });
 }
 
+// ============================================================
+// ICON SYSTEM — crisp inline SVGs replacing UI emojis.
+// Item/upgrade icons are bold + filled (readable at 14px on the HUD);
+// editor icons are strokes that inherit the button's color.
+// ============================================================
+function iconSvg(id, size) {
+  const s = size || 14;
+  const bodies = {
+    // Items — filled, colorful, unmistakable.
+    boost:   '<path fill="#fbbf24" d="M9 1 3 9h3.4L6 15l7-8.6H9.6z"/>',
+    shield:  '<path fill="#06b6d4" d="M8 1 14 3.4v4.3c0 3.6-2.6 6.2-6 7.3-3.4-1.1-6-3.7-6-7.3V3.4z"/><path fill="#e0f2fe" d="M8 3.2 12 4.8v2.9c0 2.5-1.7 4.4-4 5.3z"/>',
+    missile: '<path fill="#ef4444" d="M6.6 2.6C7.3 1.4 8.7 1.4 9.4 2.6L10.5 5v6h-5V5z"/><path fill="#fbbf24" d="M8 0.6 9.4 2.6H6.6z"/><path fill="#b91c1c" d="M5.5 11 4 14l2.6-1h2.8L12 14l-1.5-3z"/><path fill="#f97316" d="M7 13.3 8 15.6 9 13.3z"/>',
+    mine:    '<circle fill="#f97316" cx="8" cy="9" r="4.4"/><path stroke="#f97316" stroke-width="1.6" d="M8 3.4V1.6M3.6 9H1.8M14.2 9h-1.8M4.9 5.9 3.6 4.6M11.1 5.9l1.3-1.3"/><circle fill="#1c1917" cx="8" cy="9" r="1.6"/>',
+    pulse:   '<circle fill="none" stroke="#fb7185" stroke-width="1.8" cx="8" cy="8" r="2.4"/><circle fill="none" stroke="#fb7185" stroke-width="1.4" opacity="0.7" cx="8" cy="8" r="5"/><circle fill="none" stroke="#fb7185" stroke-width="1" opacity="0.4" cx="8" cy="8" r="7.2"/>',
+    oil:     '<path fill="#64748b" d="M8 1.6c2.6 3.2 4.6 5.7 4.6 8.2A4.6 4.6 0 0 1 8 14.4 4.6 4.6 0 0 1 3.4 9.8C3.4 7.3 5.4 4.8 8 1.6z"/><path fill="#94a3b8" d="M6.4 10.4a2 2 0 0 0 2 2v-1.2a1 1 0 0 1-.9-.8z"/>',
+    ghost:   '<path fill="#c084fc" d="M8 1.6a5 5 0 0 1 5 5v7.4l-1.7-1.4-1.6 1.4L8 12.6 6.3 14 4.7 12.6 3 14V6.6a5 5 0 0 1 5-5z"/><circle fill="#2e1065" cx="6.2" cy="6.6" r="1"/><circle fill="#2e1065" cx="9.8" cy="6.6" r="1"/>',
+    repair:  '<path fill="#4ade80" d="M13.8 4.7a3.9 3.9 0 0 1-5.2 4.9L4.8 13.4a1.7 1.7 0 0 1-2.4-2.4l3.8-3.8a3.9 3.9 0 0 1 4.9-5.2L8.9 4.2l0.8 2.1 2.1.8z"/>',
+    emp:     '<path fill="none" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round" d="M8 2.2a5.8 5.8 0 1 1-5.7 4.7"/><path fill="#38bdf8" d="M2.5 2.6 5 6.9H1.6z"/><circle fill="#7dd3fc" cx="8" cy="8" r="1.7"/>',
+    prop_replenish: '<circle fill="#22d3ee" cx="8" cy="8" r="1.8"/><path fill="#22d3ee" opacity="0.85" d="M8 6.4C8 3.4 9.5 1.6 12 2.2 11 4.4 9.6 5.7 8 6.4zM8 9.6c0 3-1.5 4.8-4 4.2 1-2.2 2.4-3.5 4-4.2zM6.4 8C3.4 8 1.6 6.5 2.2 4 4.4 5 5.7 6.4 6.4 8zM9.6 8c3 0 4.8 1.5 4.2 4-2.2-1-3.5-2.4-4.2-4z"/>',
+    zap:     '<path fill="#a78bfa" d="M9 1 3 9h3.4L6 15l7-8.6H9.6z"/><circle fill="none" stroke="#a78bfa" stroke-width="1.2" opacity="0.6" cx="8" cy="8" r="7"/>',
+    flipper: '<path fill="none" stroke="#f472b6" stroke-width="1.9" stroke-linecap="round" d="M12.6 5.4A5.4 5.4 0 0 0 3 6.8"/><path fill="#f472b6" d="M2.2 3.4v4h4z"/><path fill="none" stroke="#f472b6" stroke-width="1.9" stroke-linecap="round" d="M3.4 10.6a5.4 5.4 0 0 0 9.6-1.4"/><path fill="#f472b6" d="M13.8 12.6v-4h-4z"/>',
+    // Upgrades
+    topspeed:'<path fill="#f97316" d="M1.5 8.7h6l-2 4.7 8.9-7.1h-6l2-4.7z"/>',
+    accel:   '<path fill="#ef4444" d="M2 13.5c0-3.3 2.2-5.1 4.4-5.7A6.2 6.2 0 0 1 13 2.1c.8 3.9-1.3 6.4-3.7 7.3-.4 1.9-1.9 4.1-7.3 4.1z"/><circle fill="#fef3c7" cx="10" cy="5.6" r="1.3"/>',
+    handling:'<circle fill="none" stroke="#22d3ee" stroke-width="1.9" cx="8" cy="8" r="5.6"/><circle fill="#22d3ee" cx="8" cy="8" r="1.7"/><path stroke="#22d3ee" stroke-width="1.9" d="M8 2.4v3M8 10.6v3M2.4 8h3M10.6 8h3"/>',
+    luckbox: '<rect fill="#fbbf24" x="2" y="2" width="12" height="12" rx="2.4"/><circle fill="#78350f" cx="5.4" cy="5.4" r="1.15"/><circle fill="#78350f" cx="10.6" cy="5.4" r="1.15"/><circle fill="#78350f" cx="8" cy="8" r="1.15"/><circle fill="#78350f" cx="5.4" cy="10.6" r="1.15"/><circle fill="#78350f" cx="10.6" cy="10.6" r="1.15"/>',
+    armor:   '<path fill="#94a3b8" d="M8 1 14 3.4v4.3c0 3.6-2.6 6.2-6 7.3-3.4-1.1-6-3.7-6-7.3V3.4z"/><path fill="#475569" d="M8 1v14c-3.4-1.1-6-3.7-6-7.3V3.4z"/>',
+    draft:   '<path fill="none" stroke="#a5f3fc" stroke-width="1.8" stroke-linecap="round" d="M1.6 5h8.6a2 2 0 1 0-2-2.6M1.6 8.4h11.2a2 2 0 1 1-2 2.6M1.6 11.8h5.2"/>',
+    regen:   '<path fill="none" stroke="#4ade80" stroke-width="1.9" stroke-linecap="round" d="M13 6.6A5.4 5.4 0 0 0 3.6 5"/><path fill="#4ade80" d="M2.6 1.8v4h4z"/><path fill="none" stroke="#4ade80" stroke-width="1.9" stroke-linecap="round" d="M3 9.4a5.4 5.4 0 0 0 9.4 1.6"/><path fill="#4ade80" d="M13.4 14.2v-4h-4z"/>',
+    mag:     '<path fill="none" stroke="#f87171" stroke-width="2.6" d="M4 2v6a4 4 0 0 0 8 0V2"/><path fill="#e2e8f0" d="M2.7 1h2.6v3H2.7zM10.7 1h2.6v3h-2.6z"/>',
+    overdrive:'<circle fill="none" stroke="#fde047" stroke-width="1.9" cx="8" cy="8.6" r="5.4"/><path stroke="#fde047" stroke-width="1.9" stroke-linecap="round" d="M8 8.6 10.8 6M6.4 1.4h3.2"/>',
+  };
+  const body = bodies[id];
+  if (!body) return '';
+  return `<svg width="${s}" height="${s}" viewBox="0 0 16 16" style="vertical-align:-2px" aria-hidden="true">${body}</svg>`;
+}
+
+// Editor toolbar icons: monochrome strokes that inherit each button's color.
+const ME_ICONS = {
+  road:      '<path d="M2 14C4 9 12 7 14 2"/><path d="M6.2 11.2l1.2.8M9.5 8l1.2.8M12 4.6l1.2.8" opacity="0.7"/>',
+  ice:       '<path d="M8 1.5v13M2.4 4.7l11.2 6.6M13.6 4.7 2.4 11.3M8 4.5 6 2.9M8 4.5l2-1.6M8 11.5l-2 1.6M8 11.5l2 1.6"/>',
+  river:     '<path d="M1.5 5.5c2.2-2 4.3 2 6.5 0s4.3 2 6.5 0M1.5 10.5c2.2-2 4.3 2 6.5 0s4.3 2 6.5 0"/>',
+  void:      '<circle cx="8" cy="8" r="5.8"/><path d="M3.9 12.1 12.1 3.9"/>',
+  checkpoint:'<path d="M3.5 14.5v-13"/><path d="M3.5 2h9l-2.2 2.8L12.5 7h-9"/>',
+  slope:     '<path d="M2 13h12"/><path d="M2 13 12 4.5"/><path d="M12 4.5V8M12 4.5H8.5"/>',
+  split:     '<path d="M8 14V9"/><path d="M8 9C8 6 4.5 6.5 4.5 3M8 9c0-3 3.5-2.5 3.5-6"/><circle cx="4.5" cy="2.4" r="1.1"/><circle cx="11.5" cy="2.4" r="1.1"/>',
+  nodes:     '<circle cx="3.2" cy="12.8" r="1.7"/><circle cx="8" cy="4" r="1.7"/><circle cx="12.8" cy="11" r="1.7"/><path d="M4.4 11.5 6.9 5.5M9.6 5.1l2.3 4.5"/>',
+  walls:     '<path d="M1.5 3.5h13v9h-13z"/><path d="M1.5 6.5h13M1.5 9.5h13M5.8 3.5v3M10.2 6.5v3M5.8 9.5v3"/>',
+  obstacles: '<path d="M8 1.8 14 5v6L8 14.2 2 11V5z"/><path d="M8 6.2v3.2M8 11.4v.4" stroke-width="2"/>',
+  items:     '<rect x="2" y="5.5" width="12" height="8.5" rx="1"/><path d="M8 5.5v8.5M2 8.8h12"/><path d="M8 5.5C5.5 5.5 4 2.5 6 1.8 7.4 1.3 8 3.5 8 5.5c0-2 0.6-4.2 2-3.7 2 0.7 0.5 3.7-2 3.7z"/>',
+  erase:     '<path d="M5.5 13.5 1.8 9.8a1.4 1.4 0 0 1 0-2L7.5 2a1.4 1.4 0 0 1 2 0l4.4 4.4a1.4 1.4 0 0 1 0 2l-5 5.1z"/><path d="M4 6 10 12"/><path d="M5.5 13.5H14"/>',
+  save:      '<path d="M2.5 2.5h9L13.5 5v8.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1z"/><path d="M5 2.5V6h5V2.5M5 14v-4.5h6V14"/>',
+  import:    '<path d="M8 1.8v7.4M5 6.5 8 9.6l3-3.1"/><path d="M2 10.5v2.5a1.2 1.2 0 0 0 1.2 1.2h9.6A1.2 1.2 0 0 0 14 13v-2.5"/>',
+  folder:    '<path d="M1.8 4a1.2 1.2 0 0 1 1.2-1.2h3.4L8 4.6h6.2v8.2a1.2 1.2 0 0 1-1.2 1.2H3a1.2 1.2 0 0 1-1.2-1.2z"/>',
+  newdoc:    '<path d="M8 3v10M3 8h10"/>',
+  play:      '<path d="M4 2.5 13 8l-9 5.5z"/>',
+  bots:      '<rect x="2.8" y="5" width="10.4" height="8" rx="2"/><path d="M8 5V2.4M8 2.4h2.4"/><circle cx="5.9" cy="8.6" r="1.05"/><circle cx="10.1" cy="8.6" r="1.05"/><path d="M6 11.2h4"/>',
+  gauge:     '<path d="M2.2 12.5a6.5 6.5 0 0 1 11.6 0"/><path d="M8 12.5 11 7"/><circle cx="8" cy="12.5" r="1.2"/>',
+  tests:     '<path d="M6 1.8h4M7 1.8v4.4L3 12a2 2 0 0 0 1.8 3h6.4A2 2 0 0 0 13 12L9 6.2V1.8"/><path d="M4.6 10.5h6.8"/>',
+};
+function meIcon(name) {
+  const b = ME_ICONS[name];
+  return b ? `<svg viewBox="0 0 16 16" aria-hidden="true">${b}</svg>` : '';
+}
+
+// Inject SVG icons into the map-editor chrome (replaces the emoji labels).
+(function initEditorIcons() {
+  const put = (el, icon, label) => {
+    if (!el) return;
+    el.innerHTML = meIcon(icon) + (label != null ? label : el.textContent.trim());
+  };
+  const byId = (id) => document.getElementById(id);
+  document.querySelectorAll('.me-type-btn[data-type]').forEach(btn => {
+    const t = btn.dataset.type;
+    put(btn, t === 'road' ? 'road' : t === 'ice' ? 'ice' : t === 'river' ? 'river' : 'void');
+  });
+  put(byId('me-node-checkpoint'), 'checkpoint');
+  put(byId('me-node-slope'), 'slope');
+  put(byId('me-node-split'), 'split');
+  put(byId('me-mode-waypoint'), 'nodes');
+  put(byId('me-mode-wall'), 'walls');
+  put(byId('me-mode-obstacle'), 'obstacles');
+  put(byId('me-mode-powerup'), 'items');
+  put(byId('me-mode-erase'), 'erase');
+  put(byId('me-save-to-local-btn'), 'save', ' Save to Local');
+  put(byId('me-import-track-btn'), 'import', ' Import .json');
+  put(byId('me-connect-folder-btn'), 'folder', ' Connect folder…');
+  put(byId('lib-connect-folder-btn'), 'folder', ' Connect folder…');
+  put(byId('me-new-btn'), 'newdoc', ' New');
+  put(byId('me-test-btn'), 'play', ' Test Track');
+  put(byId('me-run-regression-btn'), 'tests', ' Run Layer Tests');
+})();
+
 // Bot-count picker in the Map Editor header ("Test Track" runs vs bots).
 (function initBotUi() {
   const testBtn = document.getElementById('me-test-btn');
@@ -9407,7 +10359,7 @@ function updateBots(dt) {
   btn.style.fontSize = '.8rem';
   btn.title = 'AI opponents for Test Track';
   const seq = [0, 1, 2, 3, 5, 7];
-  const label = () => { btn.textContent = '🤖 Bots: ' + getBotCount(); };
+  const label = () => { btn.innerHTML = meIcon('bots') + ' Bots: ' + getBotCount(); };
   btn.onclick = () => {
     const i = seq.indexOf(getBotCount());
     setBotCount(seq[(i + 1) % seq.length]);
@@ -9415,6 +10367,23 @@ function updateBots(dt) {
   };
   label();
   testBtn.parentNode.insertBefore(btn, testBtn);
+  // Difficulty picker: how hard the AI pushes (skill / cornering / rubber-band).
+  const dBtn = document.createElement('button');
+  dBtn.className = 'btn btn-secondary';
+  dBtn.id = 'me-botdiff-btn';
+  dBtn.style.fontSize = '.8rem';
+  dBtn.title = 'Bot difficulty';
+  const dLabel = () => {
+    const d = getBotDifficulty();
+    dBtn.innerHTML = meIcon('gauge') + ' ' + d.charAt(0).toUpperCase() + d.slice(1);
+  };
+  dBtn.onclick = () => {
+    const order = ['easy', 'medium', 'hard'];
+    setBotDifficulty(order[(order.indexOf(getBotDifficulty()) + 1) % order.length]);
+    dLabel();
+  };
+  dLabel();
+  testBtn.parentNode.insertBefore(dBtn, testBtn);
 })();
 
 // ============================================================
@@ -9526,10 +10495,11 @@ const _bgStars = (() => {
 })();
 
 function drawBackdrop(ctx, W, H) {
+  const th = G._theme || BACKDROP_THEMES[0];
   const g = ctx.createRadialGradient(W * 0.5, H * 0.35, 0, W * 0.5, H * 0.35, Math.max(W, H) * 0.95);
-  g.addColorStop(0, '#11101e');
+  g.addColorStop(0, th.nebula);
   g.addColorStop(0.55, '#0a0a12');
-  g.addColorStop(1, '#06060a');
+  g.addColorStop(1, th.deep);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
   const camX = G.camera.x, camY = G.camera.y;
@@ -9539,7 +10509,7 @@ function drawBackdrop(ctx, W, H) {
     const sx = ((s.x * W * 1.7 - camX * par) % W + W) % W;
     const sy = ((s.y * H * 1.7 - camY * par) % H + H) % H;
     const a = 0.2 + 0.28 * s.z + 0.18 * Math.sin(t * 1.5 + s.tw);
-    ctx.fillStyle = `rgba(200,210,255,${Math.max(0.06, a)})`;
+    ctx.fillStyle = `rgba(${th.star},${Math.max(0.06, a)})`;
     ctx.fillRect(sx, sy, s.r, s.r);
   }
 }
@@ -9570,8 +10540,34 @@ function render(dt) {
     camTarget = { x: G.camera.x, y: G.camera.y, speed: 0 };
   } else {
     camTarget = (G.spectateId && G.players[G.spectateId]) ? G.players[G.spectateId] : me;
-    G.camera.x = lerp(G.camera.x, camTarget.x, camK);
-    G.camera.y = lerp(G.camera.y, camTarget.y, camK);
+    // Velocity lookahead: the camera leads slightly into the direction of
+    // travel so there's more road visible where you're actually going.
+    const lookX = Math.max(-90, Math.min(90, (camTarget.vx || 0) * 0.16));
+    const lookY = Math.max(-90, Math.min(90, (camTarget.vy || 0) * 0.16));
+    G.camera.x = lerp(G.camera.x, camTarget.x + lookX, camK);
+    G.camera.y = lerp(G.camera.y, camTarget.y + lookY, camK);
+  }
+
+  // Cinematic countdown flyover: open on a fitted full-track view, then sweep
+  // down into the player's car as the lights count down.
+  let introBlend = 0;
+  if (!G.freeCam && !G.raceStarted && !G.raceOver && G.countdownVal > 0 && G._introStart) {
+    const it = Math.min(1, (performance.now() - G._introStart) / 2700);
+    introBlend = 1 - it * it * (3 - 2 * it);
+  }
+  if (introBlend > 0) {
+    if (!G.track._vb) {
+      let mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity;
+      const bp = (Array.isArray(G.track.driveSpline) && G.track.driveSpline.length) ? G.track.driveSpline : G.track.spline;
+      for (const p of bp) {
+        if (p.x < mnX) mnX = p.x; if (p.y < mnY) mnY = p.y;
+        if (p.x > mxX) mxX = p.x; if (p.y > mxY) mxY = p.y;
+      }
+      G.track._vb = { cx: (mnX + mxX) / 2, cy: (mnY + mxY) / 2, w: Math.max(200, mxX - mnX + TRACK_W * 4), h: Math.max(200, mxY - mnY + TRACK_W * 4) };
+    }
+    const vb = G.track._vb;
+    G.camera.x = lerp(G.camera.x, vb.cx, introBlend);
+    G.camera.y = lerp(G.camera.y, vb.cy, introBlend);
   }
 
   const shake = (G.camera.shakeTime > 0) ? G.camera.shakeMag : 0;
@@ -9590,7 +10586,19 @@ function render(dt) {
   const speedZoomTarget = Math.max(0.86, 1 - camSpd * 0.00026);
   if (!Number.isFinite(G._speedZoom)) G._speedZoom = 1;
   G._speedZoom += (speedZoomTarget - G._speedZoom) * (1 - Math.exp(-(dt > 0 ? dt : 0.016) / 0.5));
-  const effZoom = G.camera.zoom * G._tunnelZoom * G._speedZoom;
+  let effZoom = G.camera.zoom * G._tunnelZoom * G._speedZoom;
+  // Intro flyover zooms out to fit the whole track, easing in toward race zoom.
+  if (introBlend > 0 && G.track._vb) {
+    const vb = G.track._vb;
+    const fitZoom = Math.min(effZoom, Math.min(W / vb.w, H / vb.h) * 0.92);
+    effZoom = lerp(effZoom, fitZoom, introBlend);
+  }
+  // Finish-line camera punch: a quick zoom swell the moment you finish.
+  if ((G._finishPunch || 0) > 0) {
+    const fp = Math.max(0, Math.min(1, G._finishPunch));
+    effZoom *= 1 + 0.12 * Math.sin(fp * Math.PI);
+    G._finishPunch -= (dt > 0 ? dt : 0.016) / 0.9;
+  }
   ctx.scale(effZoom, effZoom);
   ctx.translate(-G.camera.x, -G.camera.y);
 
@@ -9600,7 +10608,7 @@ function render(dt) {
     const gHalfW = (W / 2) / effZoom, gHalfH = (H / 2) / effZoom;
     const gx0 = Math.floor((G.camera.x - gHalfW) / step) * step;
     const gy0 = Math.floor((G.camera.y - gHalfH) / step) * step;
-    ctx.strokeStyle = 'rgba(124,58,237,0.05)';
+    ctx.strokeStyle = (G._theme || BACKDROP_THEMES[0]).grid;
     ctx.lineWidth = 1 / effZoom;
     ctx.beginPath();
     for (let gx = gx0; gx <= G.camera.x + gHalfW; gx += step) {
@@ -9686,6 +10694,7 @@ function render(dt) {
     drawImpactParticles(ctx, layer);
     drawSkidMarks(ctx, layer);
     drawDriftTrails(ctx, layer);
+    drawGhost(ctx, layer);
     drawPlayers(ctx, layer);
     drawFx(ctx, layer);
     ctx.restore();
@@ -11534,7 +12543,13 @@ function drawMinimap() {
 
 function updateMissiles(dt) {
   const T = CAR_TUNING;
+  let _lockNear = Infinity; // nearest missile locked on ME, for the audio warning
+  const _meWarn = G.players[G.myId];
   G.missiles = G.missiles.filter(m => {
+    if (m.locked && m.targetId === G.myId && _meWarn && !_meWarn.finished) {
+      const dW = dist(m.x, m.y, _meWarn.x, _meWarn.y);
+      if (dW < _lockNear) _lockNear = dW;
+    }
     const speed = T.missileSpeed;
     // Back-compat: older spawns only carried angle+speed.
     if (m.vx === undefined) { m.vx = Math.cos(m.angle || 0) * speed; m.vy = Math.sin(m.angle || 0) * speed; }
@@ -11550,7 +12565,11 @@ function updateMissiles(dt) {
       if (nearId && nearD <= T.missileLockRange) {
         m.lockT = (m.lockT || 0) + dt;
         m._candidate = nearId;
-        if (m.lockT >= T.missileLockTime) { m.locked = true; m.targetId = nearId; }
+        if (m.lockT >= T.missileLockTime) {
+          m.locked = true; m.targetId = nearId;
+          // RWR growl for the victim the moment lock is acquired (local player only).
+          if (nearId === G.myId && !m._warnedMe) { m._warnedMe = true; playLockAcquired(); }
+        }
       } else { m.lockT = 0; m._candidate = null; }
       bounceProjectileOffWall(m, T.missileRadius);
     } else {
@@ -11586,12 +12605,17 @@ function updateMissiles(dt) {
           applyDamage(p, T.missileDamage / Math.max(0.5, getCarTypeCfg(p.carType).weaponResist || 1), 'missile');
           if (p.isBot) { p.stun = Math.max(p.stun || 0, 1.1); p._speed = (p._speed || 0) * 0.3; }
         }
+        {
+          const owner = G.players[m.ownerId];
+          addFeed(`🚀 ${owner ? owner.name : '?'} hit ${p.name || 'Racer'}`);
+        }
         spawnExplosion(m.x, m.y, 70, 'missile'); addScreenShake(4, 0.1);
         return false;
       }
     }
     return m.life > 0;
   });
+  updateLockBeeper(_lockNear, dt);
 }
 
 // Nearest centerline point, outward normal and half-width for a world point (main
@@ -12154,7 +13178,9 @@ function updatePowerupHud() {
     let p = POWERUPS_LIST.find(x=>x.id===G.heldItem);
     if (!p) p = Object.values(CAR_UNIQUE_POWERUPS).find(x=>x.id===G.heldItem);
     if (p) {
-      badge.textContent = p.icon+' '+p.name;
+      const svg = iconSvg(p.id, 15);
+      if (svg) badge.innerHTML = svg + ' ' + p.name;
+      else badge.textContent = p.icon + ' ' + p.name;
       badge.className='powerup-badge active';
       badge.style.borderColor=p.color;
       badge.style.color=p.color;
@@ -12197,7 +13223,7 @@ function showUpgradeScreen() {
   shuffled.forEach(up=>{
     const card = document.createElement('div');
     card.className='upgrade-card';
-    card.innerHTML=`<div class="upgrade-icon">${up.icon}</div><div class="upgrade-name">${up.name}</div><div class="upgrade-desc">${up.desc}</div>`;
+    card.innerHTML=`<div class="upgrade-icon">${iconSvg(up.id, 30) || up.icon}</div><div class="upgrade-name">${up.name}</div><div class="upgrade-desc">${up.desc}</div>`;
     card.onclick=()=>{
       const me = G.players[G.myId];
       if (me) {
@@ -12323,6 +13349,24 @@ function showResults() {
     if (myPos===1) { title.textContent='🏆 You Win!'; title.style.color='#fbbf24'; }
     else if (myPos>0) { title.textContent=`You finished ${myPos}${['st','nd','rd'][myPos-1]||'th'}`; title.style.color='#c084fc'; }
     else { title.textContent='Race Over!'; title.style.color='#c084fc'; }
+
+    // Personal race stats strip.
+    const rs = G.raceStats;
+    const statsEl = document.getElementById('results-stats');
+    if (statsEl && rs) {
+      statsEl.style.display = 'flex';
+      statsEl.innerHTML =
+        `<span>🏎️ Top speed <b>${Math.round(rs.topSpeed || 0)}</b></span>` +
+        `<span>⏱️ Best lap <b>${rs.bestLapMs ? formatFinishTime(rs.bestLapMs) : '—'}</b></span>` +
+        `<span>🌀 Drifts <b>${rs.drifts || 0}</b></span>` +
+        `<span>🎁 Items <b>${rs.itemsUsed || 0}</b></span>` +
+        `<span>💢 Damage <b>${Math.round(rs.dmgTaken || 0)}</b></span>` +
+        `<span>🧱 Wall hits <b>${rs.wallHits || 0}</b></span>`;
+    } else if (statsEl) {
+      statsEl.style.display = 'none';
+    }
+    // Winner gets the confetti drop.
+    if (myPos === 1) spawnWinConfetti(screen);
 
     const finishers = G.finishOrder.map(id=>G.players[id]).filter(Boolean);
     const dnf = Object.values(G.players).filter(p=>!G.finishOrder.includes(p.id));
@@ -12608,6 +13652,17 @@ document.getElementById('play-again-btn').onclick = ()=>{
     G.finishOrder=[];G.raceOver=false;G.raceStarted=false;G.heldItem=null;G.driftTrails=[];G.mines=[];G.explosions=[];
     G.nukeParticles=[];G.checkpointConfetti=[];G.snowParticles=[];G.brickShards=[];
     G.camera.shakeTime=0;G.camera.shakeMag=0;
+    // Juice-system resets (this path skips startGame, so mirror them here).
+    G.fx=[];G.skidMarks=[];G.toasts=[];
+    G._prevPos=0;G._goStamp=0;G._cdPrev=-1;G._finishPunch=0;G._launchHold=0;
+    G._introStart=performance.now();
+    G.raceStats={topSpeed:0,bestLapMs:null,drifts:0,itemsUsed:0,wallHits:0,dmgTaken:0};
+    G.ghostRec=null;G.seed=seed;loadBestGhost();
+    G._theme=BACKDROP_THEMES[Math.abs(seed||0)%BACKDROP_THEMES.length];
+    if(G.track)G.track._vb=null;
+    Object.values(G.players).forEach(p=>{p._lapClock=0;p._idxF=null;p._speed=0;p._itemT=6+Math.random()*8;p.invuln=2.0;});
+    const feedEl2=document.getElementById('event-feed');
+    if(feedEl2)feedEl2.innerHTML='';
     G.totalLaps = resolveRaceLaps(G.customMap);
     G.countdownVal=3;
     playCountdownVoice();
@@ -12615,8 +13670,21 @@ document.getElementById('play-again-btn').onclick = ()=>{
     const msg = {type:'start_race',seed,players:G.players,laps:G.totalLaps};
     if (G.customMap) msg.customMap = G.customMap;
     sendToAll(msg);
-    // local countdown
-    const t=setInterval(()=>{G.countdownVal--;if(G.countdownVal<=0){G.raceStarted=true;G.raceStartTime=Date.now();clearInterval(t);}},1000);
+    // local countdown (with the same perfect-start timing check as startGame)
+    const t=setInterval(()=>{
+      G.countdownVal--;
+      if(G.countdownVal<=0){
+        G.raceStarted=true;G.raceStartTime=Date.now();
+        const hold=G._launchHold||0;
+        const meL=G.players[G.myId];
+        if(meL&&hold>0.02&&hold<=0.6){
+          meL.boosting=Math.max(meL.boosting||0,1.3);
+          addToast('PERFECT START!',{color:'#4ade80',glow:'#16a34a',size:30,duration:1.6});
+          playOvertakeBlip(true);
+        }
+        clearInterval(t);
+      }
+    },1000);
   }
 };
 
@@ -12927,6 +13995,53 @@ function meInjectLegacyBridgeSlopes(pts) {
     pts[e].slope = true;
     if (!Number.isFinite(pts[e].slopeDir)) pts[e].slopeDir = eDir;
   }
+}
+
+// Auto-layer detection: objects placed on the map inherit the support layer of
+// the nearest track node (main loop + any V2 branch nodes), so bridge decks get
+// deck obstacles without touching the layer box.
+function meAutoLayerAt(wx, wy) {
+  let best = 0, bd = Infinity;
+  const consider = (p) => {
+    if (!p) return;
+    const d2 = (p.x - wx) * (p.x - wx) + (p.y - wy) * (p.y - wy);
+    if (d2 < bd) { bd = d2; best = Math.round(p.supportLayer || 0); }
+  };
+  (ME.wpts || []).forEach(consider);
+  const walkBranches = (branches) => {
+    if (!branches) return;
+    Object.values(branches).forEach(list => (Array.isArray(list) ? list : []).forEach(path => {
+      (path && path.nodes ? path.nodes : []).forEach(nd => { consider(nd); if (nd && nd.branches) walkBranches(nd.branches); });
+    }));
+  };
+  try { walkBranches(ME.branches); } catch (_) {}
+  return best;
+}
+
+// Nearest-segment tangent (radians) of the track at a world point — used to
+// auto-orient obstacles to the road direction on placement.
+function meAutoTangentAt(wx, wy) {
+  const sp = ME.spline;
+  if (!sp || sp.length < 2) return 0;
+  let bi = 0, bd = Infinity;
+  for (let i = 0; i < sp.length; i++) {
+    const d2 = (sp[i].x - wx) ** 2 + (sp[i].y - wy) ** 2;
+    if (d2 < bd) { bd = d2; bi = i; }
+  }
+  const a = sp[(bi - 1 + sp.length) % sp.length];
+  const b = sp[(bi + 1) % sp.length];
+  return Math.atan2(b.y - a.y, b.x - a.x);
+}
+
+// Obstacles that visually READ as a barrier get turned broadside to the road so
+// they actually block the lane; flowing/directional pieces align WITH the road.
+const OBS_BLOCKERS = new Set(['wall', 'brick_wall', 'moving_platform', 'punch_glove', 'snow_pile']);
+const OBS_ALONG = new Set(['flowing_water', 'boost_pad', 'ice_track']);
+function meAutoObstacleRot(type, wx, wy) {
+  const tangDeg = meAutoTangentAt(wx, wy) * 180 / Math.PI;
+  if (OBS_BLOCKERS.has(type)) return Math.round(((tangDeg + 90) % 360 + 360) % 360 - 180);
+  if (OBS_ALONG.has(type)) return Math.round(((tangDeg) % 360 + 360) % 360 - 180);
+  return ME.obstacleRot || 0; // round pieces (cone, repair pad): leave as-is
 }
 
 function meDefaultObstacle(type, x, y, layer) {
@@ -13584,6 +14699,21 @@ function meInitEditor(){
     modeObstacleBtn.classList.toggle('active', ME.mode === 'obstacle');
     modePowerupBtn.classList.toggle('active', ME.mode === 'powerup');
     modeEraseBtn.classList.toggle('active', ME.mode === 'erase');
+    // Contextual toolbar: only the active mode's controls are visible.
+    const grpNode = document.getElementById('me-grp-node');
+    const grpWall = document.getElementById('me-grp-wall');
+    const grpObs  = document.getElementById('me-grp-obstacle');
+    if (grpNode) grpNode.hidden = ME.mode !== 'waypoint';
+    if (grpWall) grpWall.hidden = ME.mode !== 'wall';
+    if (grpObs)  grpObs.hidden  = !(ME.mode === 'obstacle' || ME.mode === 'powerup');
+    const hint = document.getElementById('me-mode-hint');
+    if (hint) hint.textContent = {
+      waypoint: 'Click to add track nodes · drag to move · click a node to edit its type / width / layer.',
+      wall:     'Click a track edge segment to paint the selected wall behavior · right-click removes it.',
+      obstacle: 'Click the track to place — the layer is auto-detected from the nearest node. Right-click erases.',
+      powerup:  'Click the track to drop an item box — layer auto-detected. Right-click erases.',
+      erase:    'Click any placed obstacle or item box to remove it.',
+    }[ME.mode] || '';
   }
 
   function resize(){const w=canvas.parentElement;canvas.width=w.clientWidth;canvas.height=w.clientHeight;meDraw();}
@@ -13608,7 +14738,10 @@ function meInitEditor(){
   document.getElementById('me-node-slope').onclick = meToggleSelectedSlope;
   document.getElementById('me-node-slope-rot-left').onclick = ()=>meRotateSelectedSlope(-15);
   document.getElementById('me-node-slope-rot-right').onclick = ()=>meRotateSelectedSlope(15);
-  if (nodeSupportLayerSel) nodeSupportLayerSel.onchange = ()=>meSetSelectedSupportLayer(nodeSupportLayerSel.value);
+  // Layer applies LIVE to the selected node as you type — no Enter needed, and
+  // it only ever touches meActiveNode(), so clicking off never bleeds it onto
+  // another node.
+  if (nodeSupportLayerSel) nodeSupportLayerSel.oninput = ()=>meSetSelectedSupportLayer(nodeSupportLayerSel.value);
   wallModeSel.onchange=()=>{ ME.wallMode = wallModeSel.value || 'solid'; };
   wallSideSel.onchange=()=>{ ME.wallSide = wallSideSel.value || 'both'; };
   wallForceInp.oninput=()=>{ ME.wallForce = Math.max(20, Math.min(300, parseFloat(wallForceInp.value) || 120)); };
@@ -13708,7 +14841,20 @@ function meInitEditor(){
     }
 
     if (ME.mode === 'obstacle') {
-      ME.obstacles.push(meDefaultObstacle(ME.obstacleType, meXtoW(cx), meYtoW(cy), ME.obstacleLayer || 0));
+      const owx = meXtoW(cx), owy = meYtoW(cy);
+      const autoLayer = meAutoLayerAt(owx, owy);
+      ME.obstacleLayer = autoLayer;
+      const layerBox = document.getElementById('me-obstacle-layer');
+      if (layerBox) layerBox.value = String(autoLayer);
+      const obs = meDefaultObstacle(ME.obstacleType, owx, owy, autoLayer);
+      // Auto-orient to the road: blockers turn broadside so they block the lane.
+      obs.rot = meAutoObstacleRot(ME.obstacleType, owx, owy);
+      const rotBox = document.getElementById('me-obstacle-rot');
+      const rotRange = document.getElementById('me-obstacle-rot-range');
+      if (rotBox) rotBox.value = String(obs.rot);
+      if (rotRange) rotRange.value = String(obs.rot);
+      ME.obstacleRot = obs.rot;
+      ME.obstacles.push(obs);
       meDraw();
       return;
     }
@@ -13731,7 +14877,12 @@ function meInitEditor(){
       }
     }
     if (ME.mode === 'powerup') {
-      ME.powerups.push({ x: meXtoW(cx), y: meYtoW(cy), r: 12, active: true, respawn: 0, layer: ME.obstacleLayer || 0 });
+      const pwx = meXtoW(cx), pwy = meYtoW(cy);
+      const pAuto = meAutoLayerAt(pwx, pwy);
+      ME.obstacleLayer = pAuto;
+      const pLayerBox = document.getElementById('me-obstacle-layer');
+      if (pLayerBox) pLayerBox.value = String(pAuto);
+      ME.powerups.push({ x: pwx, y: pwy, r: 12, active: true, respawn: 0, layer: pAuto });
       meDraw();
       return;
     }
@@ -13926,6 +15077,7 @@ function meCurrentMapData(){
 function updateFolderStatus(){
   const el=document.getElementById('me-folder-status');
   if(!el) return;
+  let warnText = '';
   if(IS_TAURI){
     el.innerHTML='✅ Saves are real <b>.json</b> files in the app <b>Maps</b> folder — History stays cached.';
     el.style.color='#4ade80';
@@ -13933,11 +15085,21 @@ function updateFolderStatus(){
     el.innerHTML='✅ Folder: <b>'+(tracksFolderName()||'connected')+'</b> — saves go to Local/ & History/';
     el.style.color='#4ade80';
   } else if(FS_TRACKS_SUPPORTED){
-    el.textContent='Not connected — saving to browser storage. Connect your “Saved tracks” folder to write real files.';
-    el.style.color='var(--muted)';
+    warnText='Not connected — saving to browser storage. Connect a folder to write real files.';
   } else {
-    el.textContent='This browser/run mode can’t access folders. Use Import / Export, or run from a local server.';
-    el.style.color='var(--muted)';
+    warnText='This run mode can’t access folders. Use Import / Export, or run from a local server.';
+  }
+  // Warnings live in the header as a yellow pill; the sidebar line only shows
+  // the healthy "connected" states.
+  el.style.display = warnText ? 'none' : '';
+  const warn = document.getElementById('me-header-warn');
+  if (warn) {
+    if (warnText) {
+      warn.style.display = 'flex';
+      warn.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.6 13.4H1.4z"/><path d="M8 6.6v3.4M8 12.1v.2"/></svg><span>' + warnText + '</span>';
+    } else {
+      warn.style.display = 'none';
+    }
   }
 }
 async function renderEditorTrackLists(){
@@ -15486,6 +16648,108 @@ function runLayerSystemRegressionTests() {
     });
     return printLines(lines, { speed: 8 });
   }
+
+  // Ships showcase: a wide CRT window with a spinning 2D asset per ship, hover
+  // lift + a live detail panel (stats, ability, unique item, fake future lore).
+  function openShipsWindow() {
+    return openWindow('ships', 'SHIP HANGAR', {
+      width: Math.min(720, window.innerWidth - 40), height: 440, minW: 420, minH: 320,
+      onOpen: (win) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'ships-wrap';
+        const row = document.createElement('div');
+        row.className = 'ships-row';
+        const detail = document.createElement('div');
+        detail.className = 'ship-detail';
+        wrap.appendChild(row); wrap.appendChild(detail);
+        win.body.style.padding = '10px 12px';
+        win.body.appendChild(wrap);
+
+        const keys = shipList();
+        const cards = [];           // { key, canvas, cfg, spin, hover }
+        const barPct = (v, lo, hi) => Math.round(Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * 100);
+
+        function showDetail(key) {
+          const c = CAR_TYPES[key];
+          const lore = SHIP_LORE[key] || {};
+          const uniq = CAR_UNIQUE_POWERUPS[key];
+          detail.innerHTML =
+            '<h3>' + (c.name || key) + '</h3>' +
+            '<div class="sd-lore">' + (lore.maker || 'Unknown Motors') + ' · est. ' + (lore.year || '20XX') +
+              ' · chassis ' + (lore.chassis || '—') + '</div>' +
+            '<div class="sd-bars">' +
+              '<span>Top Speed</span><div class="sd-bar"><i style="width:' + barPct(c.topSpeedMult, 0.9, 1.15) + '%"></i></div>' +
+              '<span>Accel</span><div class="sd-bar"><i style="width:' + barPct(c.accelMult, 0.5, 1.05) + '%"></i></div>' +
+              '<span>Handling</span><div class="sd-bar"><i style="width:' + barPct(c.handlingMult, 0.6, 1.2) + '%"></i></div>' +
+            '</div>' +
+            '<div class="sd-special">◆ ' + (lore.special || '—') + '</div>' +
+            (uniq ? '<div class="sd-item">✦ Signature item: <b>' + uniq.name + '</b> — ' + uniq.desc + '</div>' : '') +
+            '<div style="margin-top:6px">' + (lore.desc || '') + '</div>' +
+            '<div class="sd-lore" style="margin-top:7px;font-style:italic">' + (lore.tagline || '') + '</div>';
+        }
+
+        keys.forEach((key, i) => {
+          const cfg = CAR_TYPES[key];
+          const card = document.createElement('div');
+          card.className = 'ship-card' + (key === G.selectedCarType ? ' sel' : '');
+          const cv = document.createElement('canvas');
+          cv.width = 84; cv.height = 84;
+          const nm = document.createElement('div');
+          nm.className = 'sc-name';
+          nm.textContent = cfg.name || key;
+          card.appendChild(cv); card.appendChild(nm);
+          row.appendChild(card);
+          const rec = { key, canvas: cv, cfg, spin: i * 0.7, hover: false };
+          cards.push(rec);
+          card.addEventListener('mouseenter', () => { rec.hover = true; showDetail(key); });
+          card.addEventListener('mouseleave', () => { rec.hover = false; });
+          // Click = select this ship for your next race.
+          card.addEventListener('click', () => {
+            if (!CAR_TYPES[key]) return;
+            G.selectedCarType = key;
+            try { refreshShipGrid(); } catch (_) {}
+            getLobbyProfileInput();
+            cards.forEach(r => r.canvas.parentElement.classList.toggle('sel', r.key === key));
+            print('ship set to ' + (cfg.name || key), 'hi');
+          });
+        });
+
+        showDetail(G.selectedCarType && CAR_TYPES[G.selectedCarType] ? G.selectedCarType : keys[0]);
+
+        // One shared animation loop spins every ship; hovered ones lift + speed up.
+        let last = performance.now();
+        function frame(now) {
+          if (!openWindows['ships']) return; // window closed → stop the loop
+          const dt = Math.min(0.05, (now - last) / 1000); last = now;
+          for (const rec of cards) {
+            rec.spin += dt * (rec.hover ? 1.8 : 0.7);
+            const lift = rec.hover ? -6 : 0;
+            rec.canvas.parentElement.style.transform = 'translateY(' + lift + 'px)';
+            const g = rec.canvas.getContext('2d');
+            g.clearRect(0, 0, 84, 84);
+            g.save();
+            g.translate(42, 44);
+            g.rotate(rec.spin);
+            const sc = 1.7;
+            g.scale(sc, sc);
+            // Soft ground shadow.
+            g.save(); g.rotate(-rec.spin);
+            g.fillStyle = 'rgba(0,0,0,0.28)';
+            g.beginPath(); g.ellipse(0, 12, 12, 5, 0, 0, Math.PI * 2); g.fill();
+            g.restore();
+            g.fillStyle = (rec.key === G.selectedCarType) ? (G.selectedColor || '#a855f7') : '#5dffa0';
+            try { drawCarSilhouette(g, rec.cfg.shape, CAR_W, CAR_H); } catch (_) {}
+            try { drawCarGlass(g, rec.cfg.shape, CAR_W, CAR_H); } catch (_) {}
+            g.restore();
+          }
+          win._raf = requestAnimationFrame(frame);
+        }
+        win._raf = requestAnimationFrame(frame);
+      },
+      onClose: (win) => { if (win._raf) cancelAnimationFrame(win._raf); },
+    });
+  }
+
   function setName(v){
     const el = document.getElementById('player-name'); if (el) el.value = String(v).slice(0,16);
     const cz = document.getElementById('lobby-c-name'); if (cz) cz.value = String(v).slice(0,16);
@@ -15522,9 +16786,16 @@ function runLayerSystemRegressionTests() {
     const name = (me && me.name) || (nameEl && nameEl.value) || 'Racer';
     const color = (me && me.color) || G.selectedColor || '#39ff14';
     printChat(name, msg, color);
+    try { speakChat(name, msg); } catch (_) {}
     const payload = { type: 'chat', id: G.myId, name, color, text: msg };
     if (G.isHost) sendToAll(payload);
     else if (hostConn) sendToHost(payload);
+  }
+  // Player-defined command aliases (see: commandchange).
+  let CMD_ALIASES = {};
+  try { CMD_ALIASES = JSON.parse(localStorage.getItem('rr-cmd-aliases') || '{}') || {}; } catch (_) {}
+  function saveCmdAliases() {
+    try { localStorage.setItem('rr-cmd-aliases', JSON.stringify(CMD_ALIASES)); } catch (_) {}
   }
   const CMDS = {
     help: { desc: 'Displays this list', instant: true, run: () => new Promise(resolve => {
@@ -15566,11 +16837,19 @@ function runLayerSystemRegressionTests() {
           'Whoami - Shows your current profile',
           'Resetplayerdata - Wipe your saved profile, friends & IDs (fresh start)',
           'Myid - Shows your friend ID (share it to be added)',
-          'Add friend <id> - Add a friend by their friend ID',
+          'Name <text> - Set your name & claim it as a unique username',
+          'Add friend <user/id> - Send a friend request (they must accept)',
+          'Friend <user/id> - Same as add friend',
+          'Requests - List pending friend requests',
+          'Accept <name> - Accept a friend request',
+          'Decline <name> - Decline a friend request',
           'List friends - List your friends',
           'Remove friend <name> - Remove a friend by name',
           'Invite <name> - Invite a friend to your room (while hosting)',
           'Togglefriendautojoin <name> - Auto-join a friend when they host',
+          'Commandchange <cmd> - Rebind any command to your own word',
+          'TTS [on/off] - Toggle the robot chat voices',
+          'Bots <0-7> / Botdiff <easy/medium/hard> - Test-track AI settings',
           'Volume [master/music/fx] <0-100> - Sets audio volume',
           'Touch [on/off] - Toggles touch controls',
           'Controls - Remap keyboard / controller bindings',
@@ -15579,9 +16858,21 @@ function runLayerSystemRegressionTests() {
         ], { speed: 26 }).then(resolve);
       }, dur);
     }) },
-    name: { desc: 'set name', run: (a) => {
+    name: { desc: 'set name (claims it as your unique username)', run: (a) => {
       if (!a.length) { print('usage: name <text>', 'warn'); return; }
-      const v = a.join(' ').slice(0,16); setName(v); print('name set to "' + v + '"', 'hi');
+      const v = a.join(' ').slice(0,16);
+      const uname = sanitizeUsername(v);
+      if (uname.length < 3) {
+        // Too short/odd to register — set the display name only.
+        setName(v); print('name set to "' + v + '" (too short to claim as a unique username)', 'hi');
+        return;
+      }
+      print('checking if "' + uname + '" is free…', 'dim');
+      claimUsername(uname, (ok, msg) => {
+        if (ok) { setName(v); print('name set to "' + v + '" — username "' + msg + '" is yours while you\'re online', 'hi'); }
+        else if (msg === 'username already taken') { print('username already taken', 'err'); }
+        else { setName(v); print('name set to "' + v + '" (name service unreachable: ' + msg + ')', 'dim'); }
+      });
     } },
     color: { desc: 'set color', run: (a) => {
       let v = (a[0] || '').trim(); if (!v) { print('usage: color <#hex>', 'warn'); return; }
@@ -15599,8 +16890,7 @@ function runLayerSystemRegressionTests() {
       G.selectedCarType = t; try { refreshShipGrid(); } catch(e){} getLobbyProfileInput();
       print('ship set to ' + (CAR_TYPES[t].name || t), 'hi');
     } },
-    ships: { desc: 'list ships', run: () => printLines(
-      [{ text: 'SHIPS', cls: 'hi' }].concat(shipList().map(k => '  ' + k.padEnd(12) + (CAR_TYPES[k].name || ''))), { speed: 10 }) },
+    ships: { desc: 'open the ship hangar (spinning showcase)', win: true, run: () => openShipsWindow() },
     whoami: { desc: 'profile', run: () => {
       const nm = (document.getElementById('player-name') || {}).value || 'Racer';
       const cl = (document.getElementById('car-color') || {}).value || '?';
@@ -15623,19 +16913,28 @@ function runLayerSystemRegressionTests() {
     friendid: { desc: 'show your friend ID', instant: true, run: () => {
       printCopyable('YOUR FRIEND ID: ' + FRIEND_ID, FRIEND_ID, 'hi');
     } },
-    add: { desc: 'add a friend by ID  (add friend <id>)', run: (a) => {
-      if ((a[0] || '').toLowerCase() !== 'friend') { print('usage: add friend <id>', 'warn'); return; }
-      let fid = a.slice(1).join('').trim().toUpperCase();
+    add: { desc: 'send a friend request  (add friend <username or ID>)', run: (a) => {
+      if ((a[0] || '').toLowerCase() !== 'friend') { print('usage: add friend <username or ID>', 'warn'); return; }
+      const rawArg = a.slice(1).join('').trim();
+      if (!rawArg) { print('usage: add friend <username or ID>', 'warn'); return; }
+      const req = { type: 'friend_request_v2', fromId: FRIEND_ID, fromName: myRacerName() };
+      // Friend-ID form (AB12-CD34): request via their social peer.
+      let fid = rawArg.toUpperCase();
       if (/^[A-Z0-9]{8}$/.test(fid)) fid = fid.slice(0, 4) + '-' + fid.slice(4);
-      if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(fid)) { print('usage: add friend <id>   (e.g. add friend AB12-CD34)', 'warn'); return; }
-      if (fid === FRIEND_ID) { print("that's your own ID", 'warn'); return; }
-      if (FRIENDS.find(f => f.id === fid)) { print(fid + ' is already your friend', 'dim'); return; }
-      FRIENDS.push({ id: fid, name: '', autojoin: false });
-      saveFriends();
-      print('added ' + fid, 'hi');
-      friendSend(fid, { type: 'friend_request', fromId: FRIEND_ID, fromName: myRacerName() }, (err) => print('note: ' + err, 'dim'));
-      // Probe their presence shortly after so their name auto-fills once reachable.
-      setTimeout(() => { try { refreshFriendPresence(fid); } catch (_) {} }, 1200);
+      if (/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(fid)) {
+        if (fid === FRIEND_ID) { print("that's your own ID", 'warn'); return; }
+        if (FRIENDS.find(f => f.id === fid)) { print(fid + ' is already your friend', 'dim'); return; }
+        friendSend(fid, req,
+          (err) => print('could not deliver the request: ' + err, 'err'));
+        print('friend request sent to ' + fid + ' — they have to accept it.', 'hi');
+        return;
+      }
+      // Otherwise treat it as a claimed username.
+      const uname = sanitizeUsername(rawArg);
+      if (uname.length < 3) { print('usage: add friend <username or ID>   (e.g. add friend troy  /  add friend AB12-CD34)', 'warn'); return; }
+      if (uname === CLAIMED_NAME) { print("that's your own username", 'warn'); return; }
+      sendToUsername(uname, req, (err) => print('could not deliver the request: ' + err, 'err'));
+      print('friend request sent to "' + uname + '" — they have to accept it.', 'hi');
     } },
     list: { desc: 'list friends  (list friends)', run: (a) => {
       const what = (a[0] || '').toLowerCase();
@@ -15699,14 +16998,7 @@ function runLayerSystemRegressionTests() {
           print('Room ready \u2014 code: ' + code, 'hi');
           openLobbyWindow();
           printLobbyHelp();
-        } else if (_lastHostError) {
-          // Surface the real signalling failure instead of a vague timeout.
-          clearInterval(iv);
-          const et = _lastHostError.type ? (' [' + _lastHostError.type + ']') : '';
-          print('Host setup failed' + et + ': ' + (_lastHostError.message || _lastHostError), 'err');
-          if (_lastHostError.type === 'unavailable-id') print('That room code is in use \u2014 run  host  again for a new one.', 'dim');
-          else print('Check your internet connection, then try  host  again.', 'dim');
-        } else if (tries > 210) { clearInterval(iv); print('Host setup timed out (no response from the server).', 'err'); }
+        } else if (tries > 60) { clearInterval(iv); print('Host setup timed out.', 'err'); }
       }, 100);
     } },
     join: { desc: 'join a race by code', run: (a) => {
@@ -15804,21 +17096,110 @@ function runLayerSystemRegressionTests() {
       });
       print('use  accept <n>  or  reject <n>', 'dim');
     } },
-    accept: { desc: 'accept a pending uploaded map (host)', run: (a) => {
+    accept: { desc: 'accept a pending map (host) or a friend request  (accept <n|name>)', run: (a) => {
+      const arg = a.join(' ').trim();
+      const n = parseInt(a[0], 10);
+      // Non-numeric argument = a friend request by name/id.
+      if (arg && !Number.isFinite(n)) {
+        const r = findPendingReq(arg);
+        if (!r) { print('no friend request from "' + arg + '"  (see "requests")', 'err'); return; }
+        PENDING_REQUESTS = PENDING_REQUESTS.filter(x => x !== r);
+        savePendingRequests();
+        if (!FRIENDS.find(f => f.id === r.id)) FRIENDS.push({ id: r.id, name: r.name || '', autojoin: false });
+        saveFriends();
+        friendSend(r.id, { type: 'friend_accept', fromId: FRIEND_ID, fromName: myRacerName() }, (err) => print('note: ' + err, 'dim'));
+        print('you are now friends with ' + (r.name || r.id), 'hi');
+        return;
+      }
       if (!G.isHost) { print('host only', 'err'); return; }
       if (!G.pendingMaps.length) { print('no pending map submissions', 'dim'); return; }
-      const n = parseInt(a[0], 10);
       if (!Number.isFinite(n) || n < 1 || n > G.pendingMaps.length) { print('usage: accept <n>  (see "pending")', 'warn'); return; }
       const pm = acceptPendingMap(G.pendingMaps[n - 1].id);
       if (pm) print('accepted "' + (pm.map.name || 'Unnamed') + '" \u2014 added to the queue', 'hi');
     } },
-    reject: { desc: 'reject a pending uploaded map (host)', run: (a) => {
+    reject: { desc: 'reject a pending map (host) or a friend request  (reject <n|name>)', run: (a) => {
+      const arg = a.join(' ').trim();
+      const n = parseInt(a[0], 10);
+      if (arg && !Number.isFinite(n)) {
+        const r = findPendingReq(arg);
+        if (!r) { print('no friend request from "' + arg + '"  (see "requests")', 'err'); return; }
+        PENDING_REQUESTS = PENDING_REQUESTS.filter(x => x !== r);
+        savePendingRequests();
+        friendSend(r.id, { type: 'friend_decline', fromId: FRIEND_ID, fromName: myRacerName() });
+        print('declined the request from ' + (r.name || r.id), 'warn');
+        return;
+      }
       if (!G.isHost) { print('host only', 'err'); return; }
       if (!G.pendingMaps.length) { print('no pending map submissions', 'dim'); return; }
-      const n = parseInt(a[0], 10);
       if (!Number.isFinite(n) || n < 1 || n > G.pendingMaps.length) { print('usage: reject <n>  (see "pending")', 'warn'); return; }
       const pm = rejectPendingMap(G.pendingMaps[n - 1].id);
       if (pm) print('rejected "' + (pm.map.name || 'Unnamed') + '"', 'warn');
+    } },
+    decline: { desc: 'decline a friend request  (decline <name>)', run: (a) => { CMDS.reject.run(a); } },
+    requests: { desc: 'list pending friend requests', instant: true, run: () => {
+      if (!PENDING_REQUESTS.length) { print('no pending friend requests', 'dim'); return; }
+      print('FRIEND REQUESTS (' + PENDING_REQUESTS.length + ')', 'hi');
+      PENDING_REQUESTS.forEach((r, i) => print('  ' + (i + 1) + '. ' + (r.name || '?') + '   ' + r.id + '   \u2192 accept ' + (r.name || r.id) + '  /  decline ' + (r.name || r.id)));
+    } },
+    friend: { desc: 'send a friend request  (friend <username or ID>)', run: (a) => { CMDS.add.run(['friend'].concat(a)); } },
+    claimname: { desc: 'claim a unique username  (claimname <name>)', run: (a) => {
+      const want = a.join(' ').trim();
+      if (!want) { print('usage: claimname <name>   (3-16 letters/numbers)', 'warn'); return; }
+      print('claiming "' + sanitizeUsername(want) + '"\u2026', 'dim');
+      claimUsername(want, (ok, msg) => {
+        if (ok) { print('username claimed: ' + msg + '   \u2014 friends can now use  friend ' + msg, 'hi'); setName(want.slice(0, 16)); }
+        else print(msg, 'err');
+      });
+    } },
+    commandchange: { desc: 'rebind a command  (commandchange <command> [alias])', run: (a) => {
+      const target = (a[0] || '').toLowerCase();
+      if (!target || !CMDS[target]) { print('usage: commandchange <command>   e.g.  commandchange host', 'warn'); return; }
+      const applyAlias = (raw) => {
+        const alias = String(raw || '').trim().toLowerCase().split(/\s+/)[0];
+        if (!alias) { print('cancelled', 'dim'); return; }
+        if (alias === 'reset') {
+          Object.keys(CMD_ALIASES).forEach(k => { if (CMD_ALIASES[k] === target) delete CMD_ALIASES[k]; });
+          saveCmdAliases();
+          print('aliases for "' + target + '" cleared', 'hi');
+          return;
+        }
+        if (CMDS[alias] || CMD_ALIASES[alias]) { print('"' + alias + '" is already a command', 'err'); return; }
+        Object.keys(CMD_ALIASES).forEach(k => { if (CMD_ALIASES[k] === target) delete CMD_ALIASES[k]; });
+        CMD_ALIASES[alias] = target;
+        saveCmdAliases();
+        print('"' + alias + '" now runs "' + target + '"   (commandchange ' + target + ' reset  to undo)', 'hi');
+      };
+      if (a[1]) { applyAlias(a[1]); return; }
+      ask('What would you like (' + target + ') to?', applyAlias);
+    } },
+    tts: { desc: 'toggle chat voices  (tts on/off)', instant: true, run: (a) => {
+      const s = (a[0] || '').toLowerCase();
+      TTS.enabled = s ? s !== 'off' : !TTS.enabled;
+      print('chat voices ' + (TTS.enabled ? 'ON' : 'OFF'), TTS.enabled ? 'hi' : 'warn');
+    } },
+    say: { desc: 'speak text in your robot voice (test TTS)  (say <text>)', instant: true, run: (a) => {
+      const txt = a.join(' ').trim();
+      if (!txt) { print('usage: say <text>', 'warn'); return; }
+      const wasOn = TTS.enabled; TTS.enabled = true;
+      try { if (typeof audioCtx !== 'undefined' && audioCtx.state === 'suspended') audioCtx.resume(); } catch (_) {}
+      TTS.recent.delete(txt.toLowerCase());   // never dedupe an explicit test
+      speakChat(myRacerName(), txt);
+      TTS.enabled = wasOn;
+      print('🔊 "' + txt + '"', 'dim');
+    } },
+    bots: { desc: 'set test-track bot count  (bots <0-7>)', instant: true, run: (a) => {
+      const n = parseInt(a[0], 10);
+      if (!Number.isFinite(n) || n < 0 || n > 7) { print('bots: ' + getBotCount() + '   difficulty: ' + getBotDifficulty() + '   (bots <0-7>)', 'hi'); return; }
+      setBotCount(n);
+      const b = document.getElementById('me-bots-btn'); if (b) b.innerHTML = meIcon('bots') + ' Bots: ' + n;
+      print('bot count set to ' + n, 'hi');
+    } },
+    botdiff: { desc: 'set bot difficulty  (botdiff easy/medium/hard)', instant: true, run: (a) => {
+      const v = (a[0] || '').toLowerCase();
+      if (!BOT_DIFFICULTY[v]) { print('difficulty: ' + getBotDifficulty() + '   (botdiff easy/medium/hard)', 'hi'); return; }
+      setBotDifficulty(v);
+      const b = document.getElementById('me-botdiff-btn'); if (b) b.innerHTML = meIcon('gauge') + ' ' + v.charAt(0).toUpperCase() + v.slice(1);
+      print('bot difficulty set to ' + v, 'hi');
     } },
     laps: { desc: 'set lap count (host)', run: (a) => {
       if (!G.isHost) { print('host only', 'err'); return; }
@@ -15973,7 +17354,8 @@ function runLayerSystemRegressionTests() {
     history.unshift(v); histIdx = -1; if (history.length > 60) history.pop();
     const parts = v.split(/\s+/);
     const cmd = parts[0].toLowerCase();
-    const c = CMDS[cmd];
+    let c = CMDS[cmd];
+    if (!c && CMD_ALIASES[cmd] && CMDS[CMD_ALIASES[cmd]]) c = CMDS[CMD_ALIASES[cmd]];
     if (!c) { print('Unknown command "' + v + '" use "HELP" for a list of commands.', 'err'); return; }
     const exec = () => {
       try { const r = c.run(parts.slice(1)); if (r && r.catch) r.catch(e => print('error: ' + e.message, 'err')); }
@@ -16021,7 +17403,7 @@ function runLayerSystemRegressionTests() {
 
   input.addEventListener('input', () => { typed.textContent = input.value; });
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); const v = input.value; input.value = ''; typed.textContent = ''; if (pending) { addLine(promptEl.textContent + ' ' + v, 'dim'); const h = pending; pending = null; try { h(v); } catch(err){ print('error: ' + err.message, 'err'); } } else if (chatting && v.trim().toLowerCase() !== 'togglechat') { sendChat(v); } else run(v); }
+    if (e.key === 'Enter') { e.preventDefault(); const v = input.value; input.value = ''; typed.textContent = ''; if (pending) { addLine(promptEl.textContent + ' ' + v, 'dim'); const h = pending; pending = null; try { h(v); } catch(err){ print('error: ' + err.message, 'err'); } } else if (chatting && v.trim().toLowerCase() !== 'togglechat') { sendChat(v); } else if (!v.trim()) { run('help'); } else run(v); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); if (history.length) { histIdx = Math.min(histIdx + 1, history.length - 1); input.value = history[histIdx] || ''; typed.textContent = input.value; } }
     else if (e.key === 'ArrowDown') { e.preventDefault(); histIdx = Math.max(histIdx - 1, -1); input.value = histIdx >= 0 ? (history[histIdx] || '') : ''; typed.textContent = input.value; }
     else if (e.key === 'Tab') { e.preventDefault(); const p = input.value.toLowerCase(); const m = Object.keys(CMDS).filter(k => k.startsWith(p)); if (m.length === 1) { input.value = m[0] + ' '; typed.textContent = input.value; } else if (m.length > 1) { print(m.join('   '), 'dim'); } }
@@ -16031,7 +17413,18 @@ function runLayerSystemRegressionTests() {
   window.addEventListener('focus', () => { if (term.classList.contains('on')) { try { input.focus(); } catch(e){} } });
 
   function boot(){
-    addLine('Hello World!');
+    addLine('ROGUE RACER OS', 'hi');
+    // Dim "preview" hint that types itself out, letter by letter, to nudge the
+    // user toward the help command (Enter also works — intentionally unstated).
+    const hint = addLine('', 'dim');
+    const msg = 'type help to begin';
+    let i = 0;
+    if (window.__introTyper) clearInterval(window.__introTyper);
+    window.__introTyper = setInterval(() => {
+      hint.textContent = msg.slice(0, ++i);
+      scrollDown();
+      if (i >= msg.length) { clearInterval(window.__introTyper); window.__introTyper = null; }
+    }, 38);
   }
 
   // Persistent version readout in the corner of the terminal.
