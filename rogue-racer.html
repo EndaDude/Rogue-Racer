@@ -1035,6 +1035,12 @@
     overflow: hidden; cursor: text;
   }
   #crt-terminal.on { display: flex; }
+  #term-version {
+    position: absolute; right: clamp(18px, 4vw, 70px); bottom: 12px;
+    font-size: clamp(10px, 1.1vw, 12px); color: #2f9e63; opacity: 0.65;
+    pointer-events: none; user-select: none; letter-spacing: 0.5px;
+    text-shadow: 0 0 4px rgba(47,158,99,0.5); z-index: 2;
+  }
   #crt-terminal::after {
     content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 30px/48px;
     box-shadow: inset 0 0 180px rgba(0,0,0,0.92), inset 0 0 40px rgba(0,40,15,0.55);
@@ -1586,6 +1592,7 @@
     <span class="term-prompt" id="term-prompt">&gt;</span><span class="term-typed" id="term-typed"></span><span class="term-cursor"></span>
     <input id="term-input" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
   </div>
+  <div id="term-version"></div>
 </div>
 <div id="crt-fx"></div>
 
@@ -1595,6 +1602,10 @@
 // ============================================================
 // CONSTANTS & CONFIG
 // ============================================================
+// Game (HTML) version. This ships independently of the desktop app via the
+// self-updating loader, so bump it whenever you publish a game update; it shows
+// on the terminal so you can confirm which build actually loaded.
+const GAME_VERSION = '0.1.2';
 const TOTAL_LAPS = 3;
 const PLAYER_COLORS = ['#a855f7','#06b6d4','#fbbf24','#22c55e','#ef4444','#f97316'];
 const CAR_W = 14, CAR_H = 22;
@@ -15894,6 +15905,7 @@ function runLayerSystemRegressionTests() {
     clear: { desc: 'clear', instant: true, run: () => { scroll.innerHTML = ''; } },
     cls: { desc: 'clear', instant: true, run: () => { scroll.innerHTML = ''; } },
     reboot: { desc: 'reboot', instant: true, run: () => { scroll.innerHTML = ''; boot(); } },
+    version: { desc: 'version', instant: true, run: () => { print('Rogue Racer v' + GAME_VERSION, 'hi'); } },
     about: { desc: 'about', run: () => printLines([
       { text: 'ROGUE RACER OS', cls: 'hi' },
       'A multiplayer roguelike racer rendered on an imaginary CRT.',
@@ -15980,6 +15992,14 @@ function runLayerSystemRegressionTests() {
   function boot(){
     addLine('Hello World!');
   }
+
+  // Persistent version readout in the corner of the terminal.
+  (function initVersionTicker(){
+    try {
+      const v = document.getElementById('term-version');
+      if (v) v.textContent = 'v' + GAME_VERSION;
+    } catch (e) {}
+  })();
 
   showTerminal();
   boot();

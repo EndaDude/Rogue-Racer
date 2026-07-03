@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rogue Racer</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #05060a; color: #7CFF6B;
+      font-family: "Consolas", "Courier New", monospace; overflow: hidden; }
+    #status { display: flex; align-items: center; justify-content: center;
+      height: 100%; font-size: 15px; letter-spacing: 1px; text-align: center;
+      padding: 0 24px; text-shadow: 0 0 6px rgba(124,255,107,0.5); }
+  </style>
+</head>
+<body>
+  <div id="status">Loading Rogue Racer&hellip;</div>
+  <script>
+  // Self-updating bootstrapper.
+  // On launch this pulls the latest rogue-racer.html straight from the repo,
+  // so game updates ship by pushing that file to the "main" branch -- no CI
+  // build, no installer download. Falls back to a cached copy, then to the
+  // copy bundled with the app, so it still runs offline.
+  (function () {
+    'use strict';
+    var REMOTE = 'https://raw.githubusercontent.com/EndaDude/Rogue-Racer/main/rogue-racer.html';
+    var CACHE_FILE = 'game-cache.html';
+    var T = (typeof window !== 'undefined' && window.__TAURI__) || {};
+    var http = T.http;
+    var fs = T.fs;
+    var AppData = (fs && fs.BaseDirectory) ? fs.BaseDirectory.AppData : undefined;
+
+    function setStatus(msg) {
+      var el = document.getElementById('status');
+      if (el) el.textContent = msg;
+    }
+
+    // Replace the whole document with the game HTML. document.write() (with an
+    // implicit document.open) keeps the SAME window/origin, so window.__TAURI__,
+    // localStorage, and relative "Audio/..." paths all keep working.
+    function boot(html) {
+      document.open();
+      document.write(html);
+      document.close();
+    }
+
+    function withTimeout(promise, ms) {
+      return Promise.race([
+        promise,
+        new Promise(function (_, reject) {
+          setTimeout(function () { reject(new Error('timeout')); }, ms);
+        })
+      ]);
+    }
+
+    async function pullRemote() {
+      if (!http || !http.fetch) return null;
+      try {
+        var res = await withTimeout(http.fetch(REMOTE, { method: 'GET' }), 7000);
+        if (res && res.ok) {
+          var txt = await res.text();
+          if (txt && txt.length > 2000) return txt;
+        }
+      } catch (e) { /* offline or blocked - fall through */ }
+      return null;
+    }
+
+    async function readCache() {
+      try {
+        if (fs && await fs.exists(CACHE_FILE, { baseDir: AppData })) {
+          return await fs.readTextFile(CACHE_FILE, { baseDir: AppData });
+        }
+      } catch (e) { /* ignore */ }
+      return null;
+    }
+
+    async function writeCache(html) {
+      try { if (fs) await fs.writeTextFile(CACHE_FILE, html, { baseDir: AppData }); }
+      catch (e) { /* ignore */ }
+    }
+
+    async function readBundled() {
+      try {
+        var res = await fetch('./game.html', { cache: 'no-store' });
+        if (res.ok) return await res.text();
+      } catch (e) { /* ignore */ }
+      return null;
+    }
+
+    (async function () {
+      var html = await pullRemote();
+      if (html) { writeCache(html); boot(html); return; }
+      var cached = await readCache();
+      if (cached) { boot(cached); return; }
+      var bundled = await readBundled();
+      if (bundled) { boot(bundled); return; }
+      setStatus('Could not load Rogue Racer. Connect to the internet once to download it.');
+    })();
+  })();
+  </script>
+</body>
+</html>
