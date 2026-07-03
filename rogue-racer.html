@@ -1826,7 +1826,7 @@
 // Game (HTML) version. This ships independently of the desktop app via the
 // self-updating loader, so bump it whenever you publish a game update; it shows
 // on the terminal so you can confirm which build actually loaded.
-const GAME_VERSION = '0.1.5';
+const GAME_VERSION = '0.1.6';
 const TOTAL_LAPS = 3;
 const PLAYER_COLORS = ['#a855f7','#06b6d4','#fbbf24','#22c55e','#ef4444','#f97316'];
 const CAR_W = 14, CAR_H = 22;
@@ -4878,26 +4878,96 @@ function myPresence() {
 let socialPeer = null;
 let socialInConns = [];  // connections other people opened to us
 let socialReady = false;
+let socialOnCanonicalId = false;   // are we actually holding rogueracer-fr-<FRIEND_ID>?
+let socialReclaimTimer = null;     // background retry to reclaim the canonical id
 
-function initSocialPeer() {
-  try { socialPeer = new Peer(friendPeerId(FRIEND_ID)); }
-  catch (e) { return; }
-  socialPeer.on('open', () => { socialReady = true; try { ensureAutoLinks(); } catch (_) {} try { refreshAllFriendPresence(); } catch (_) {} });
-  socialPeer.on('disconnected', () => { try { socialPeer.reconnect(); } catch (_) {} });
-  socialPeer.on('error', (e) => {
-    socialReady = false;
+// Wire the common handlers onto whichever social peer we ended up with.
+function _attachSocialPeerHandlers(peerObj, isCanonical) {
+  peerObj.on('open', () => {
+    socialReady = true;
+    socialOnCanonicalId = isCanonical;
+    if (isCanonical && socialReclaimTimer) { clearInterval(socialReclaimTimer); socialReclaimTimer = null; }
+    if (!isCanonical) scheduleCanonicalIdReclaim();
+    try { ensureAutoLinks(); } catch (_) {}
+    try { refreshAllFriendPresence(); } catch (_) {}
+  });
+  peerObj.on('disconnected', () => { try { peerObj.reconnect(); } catch (_) {} });
+  peerObj.on('error', (e) => {
     const t = (e && e.type) || '';
-    if (t === 'unavailable-id' || t === 'network' || t === 'server-error' || t === 'socket-error' || t === 'socket-closed') {
-      setTimeout(() => { try { if (socialPeer) socialPeer.destroy(); } catch (_) {} socialPeer = null; initSocialPeer(); }, 4000);
+    // The canonical id is deterministic, so after a reload/crash the broker may
+    // still think our old peer holds it (unavailable-id). Rather than spin on the
+    // same claim forever — which left the whole social layer permanently "not
+    // ready" — fall back to an anonymous peer so OUTBOUND actions work now, and
+    // keep trying to reclaim the canonical id in the background for inbound reach.
+    if (t === 'unavailable-id') {
+      try { if (socialPeer === peerObj) socialPeer.destroy(); } catch (_) {}
+      if (socialPeer === peerObj) socialPeer = null;
+      initSocialPeerAnonymous();
+      return;
+    }
+    socialReady = false;
+    if (t === 'network' || t === 'server-error' || t === 'socket-error' || t === 'socket-closed') {
+      setTimeout(() => {
+        if (socialPeer !== peerObj) return; // a newer peer already took over
+        try { peerObj.destroy(); } catch (_) {}
+        socialPeer = null; initSocialPeer();
+      }, 4000);
     }
   });
-  socialPeer.on('connection', (conn) => {
+  peerObj.on('connection', (conn) => {
     socialInConns.push(conn);
     conn.on('open', () => { try { conn.send(myPresence()); } catch (_) {} });
     conn.on('data', (d) => handleSocialData(d, conn));
     conn.on('close', () => { socialInConns = socialInConns.filter(c => c !== conn); });
     conn.on('error', () => { socialInConns = socialInConns.filter(c => c !== conn); });
   });
+}
+
+// Primary path: claim the deterministic id so friends can reach us by it.
+function initSocialPeer() {
+  let p;
+  try { p = new Peer(friendPeerId(FRIEND_ID)); }
+  catch (e) { return; }
+  socialPeer = p;
+  _attachSocialPeerHandlers(p, true);
+}
+
+// Fallback path: broker-assigned id. We can still send requests/invites/presence
+// out from here; only inbound-by-canonical-id is unavailable until reclaim wins.
+function initSocialPeerAnonymous() {
+  let p;
+  try { p = new Peer(); }
+  catch (e) { return; }
+  socialPeer = p;
+  _attachSocialPeerHandlers(p, false);
+}
+
+// While on the anonymous fallback, periodically probe whether the canonical id
+// has freed up (stale broker claims expire in ~a minute). When it has, swap over.
+function scheduleCanonicalIdReclaim() {
+  if (socialReclaimTimer) return;
+  socialReclaimTimer = setInterval(() => {
+    if (socialOnCanonicalId) { clearInterval(socialReclaimTimer); socialReclaimTimer = null; return; }
+    let probe;
+    try { probe = new Peer(friendPeerId(FRIEND_ID)); }
+    catch (_) { return; }
+    let settled = false;
+    probe.on('open', () => {
+      if (settled) return; settled = true;
+      // Canonical id is ours again — retire the anonymous peer and adopt this one.
+      const old = socialPeer;
+      if (old && old !== probe) { try { old.destroy(); } catch (_) {} }
+      socialInConns = [];
+      socialPeer = probe;
+      _attachSocialPeerHandlers(probe, true);
+      socialReady = true;
+      socialOnCanonicalId = true;
+      if (socialReclaimTimer) { clearInterval(socialReclaimTimer); socialReclaimTimer = null; }
+      try { refreshAllFriendPresence(); } catch (_) {}
+    });
+    // Still claimed / unreachable — discard this probe and try again next tick.
+    probe.on('error', () => { if (!settled) { settled = true; try { probe.destroy(); } catch (_) {} } });
+  }, 15000);
 }
 
 // Learn a friend's display name from their broadcast presence (names are no
