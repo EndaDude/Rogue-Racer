@@ -1605,7 +1605,7 @@
 // Game (HTML) version. This ships independently of the desktop app via the
 // self-updating loader, so bump it whenever you publish a game update; it shows
 // on the terminal so you can confirm which build actually loaded.
-const GAME_VERSION = '0.1.2';
+const GAME_VERSION = '0.1.3';
 const TOTAL_LAPS = 3;
 const PLAYER_COLORS = ['#a855f7','#06b6d4','#fbbf24','#22c55e','#ef4444','#f97316'];
 const CAR_W = 14, CAR_H = 22;
@@ -2814,6 +2814,22 @@ function safeSpawnState(i, track) {
 // ============================================================
 let peer = null, hostConn = null, guestConns = [];
 
+// STUN servers so peers can discover their public ICE candidates and connect
+// across different networks/NATs. Shared by host + guest + social peers.
+const PEER_CONFIG = {
+  config: {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' }
+    ]
+  }
+};
+// Last fatal error from opening the host peer, so the terminal can report the
+// real cause (e.g. unavailable-id / network / server-error) instead of a
+// generic "timed out".
+let _lastHostError = null;
+
 function makeRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
@@ -2823,15 +2839,33 @@ function makeRoomCode() {
 
 function initHostPeer(code) {
   return new Promise((res, rej) => {
-    peer = new Peer('rogueracer-' + code.toLowerCase());
-    peer.on('open', () => res());
-    peer.on('error', e => rej(e));
+    _lastHostError = null;
+    let settled = false;
+    peer = new Peer('rogueracer-' + code.toLowerCase(), PEER_CONFIG);
+    // Give the broker a real chance to respond (the free PeerJS cloud can be
+    // slow on some networks); reject with a clear reason if it never does.
+    const to = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      _lastHostError = new Error('no response from the PeerJS signalling server (network blocked or unreachable)');
+      rej(_lastHostError);
+    }, 20000);
+    peer.on('open', () => { if (settled) return; settled = true; clearTimeout(to); res(); });
+    peer.on('error', e => {
+      // Only the pre-open error is fatal to hosting; later errors (a guest
+      // dropping, etc.) are handled elsewhere and must not reject here.
+      if (settled) return;
+      settled = true;
+      clearTimeout(to);
+      _lastHostError = e;
+      rej(e);
+    });
   });
 }
 
 function initGuestPeer() {
   return new Promise((res, rej) => {
-    peer = new Peer();
+    peer = new Peer(undefined, PEER_CONFIG);
     peer.on('open', id => res(id));
     peer.on('error', e => rej(e));
   });
@@ -4548,7 +4582,7 @@ let socialInConns = [];  // connections other people opened to us
 let socialReady = false;
 
 function initSocialPeer() {
-  try { socialPeer = new Peer(friendPeerId(FRIEND_ID)); }
+  try { socialPeer = new Peer(friendPeerId(FRIEND_ID), PEER_CONFIG); }
   catch (e) { return; }
   socialPeer.on('open', () => { socialReady = true; try { ensureAutoLinks(); } catch (_) {} try { refreshAllFriendPresence(); } catch (_) {} });
   socialPeer.on('disconnected', () => { try { socialPeer.reconnect(); } catch (_) {} });
@@ -15665,7 +15699,14 @@ function runLayerSystemRegressionTests() {
           print('Room ready \u2014 code: ' + code, 'hi');
           openLobbyWindow();
           printLobbyHelp();
-        } else if (tries > 60) { clearInterval(iv); print('Host setup timed out.', 'err'); }
+        } else if (_lastHostError) {
+          // Surface the real signalling failure instead of a vague timeout.
+          clearInterval(iv);
+          const et = _lastHostError.type ? (' [' + _lastHostError.type + ']') : '';
+          print('Host setup failed' + et + ': ' + (_lastHostError.message || _lastHostError), 'err');
+          if (_lastHostError.type === 'unavailable-id') print('That room code is in use \u2014 run  host  again for a new one.', 'dim');
+          else print('Check your internet connection, then try  host  again.', 'dim');
+        } else if (tries > 210) { clearInterval(iv); print('Host setup timed out (no response from the server).', 'err'); }
       }, 100);
     } },
     join: { desc: 'join a race by code', run: (a) => {
