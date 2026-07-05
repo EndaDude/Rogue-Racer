@@ -298,16 +298,6 @@
     const nameEl = document.getElementById('player-name');
     persistCustomization({ name: (me && me.name) || (nameEl && nameEl.value) || 'Racer', color: v, paintTag: (me && me.paintTag) || G.selectedPaintTag || '', carType: (me && me.carType) || G.selectedCarType });
   }
-  function colorPrompt(){
-    ask('Enter a hex color (e.g. #ff3366), or type "picker":', (ans) => {
-      let v = (ans || '').trim();
-      if (!v) { print('color unchanged', 'warn'); return; }
-      if (/^picker$/i.test(v)) { openColorPicker(); return; }
-      if (v[0] !== '#') v = '#' + v;
-      if (!/^#[0-9a-fA-F]{6}$/.test(v)) { print('invalid hex color: ' + v, 'err'); return; }
-      applyColor(v); print('color set to ' + v.toLowerCase(), 'hi');
-    });
-  }
   function openColorPicker(){
     return openWindow('colorpick', 'CAR COLOR', { width: 264, height: 262, minW: 236, minH: 236, onOpen: (w) => {
       const body = w.body; body.innerHTML = '';
@@ -1051,7 +1041,7 @@
           'Help - Displays this list',
           'Mapmaker - Opens map maker',
           'Tag - Draw your paint tag in a window',
-          'Color - Set your car color (hex or picker)',
+          'Color - Open the ship color picker',
           'Customize [tag/name/color] - Draw tag / set name / set color',
           'Host [owner/vote] - Hosts a new race room',
           'Join [code] - Joins a race by room code',
@@ -1115,14 +1105,7 @@
         else { setName(v); print('name set to "' + v + '" (name service unreachable: ' + msg + ')', 'dim'); }
       });
     } },
-    color: { desc: 'set color', run: (a) => {
-      let v = (a[0] || '').trim(); if (!v) { print('usage: color <#hex>', 'warn'); return; }
-      if (v[0] !== '#') v = '#' + v;
-      if (!/^#[0-9a-fA-F]{6}$/.test(v)) { print('invalid hex color: ' + v, 'err'); return; }
-      const el = document.getElementById('car-color'); if (el) el.value = v.toLowerCase();
-      const cz = document.getElementById('lobby-c-color'); if (cz) cz.value = v.toLowerCase();
-      getLobbyProfileInput(); print('color set to ' + v.toLowerCase(), 'hi');
-    } },
+    color: { desc: 'open the ship color picker', run: () => { openColorPicker(); } },
     ship: { desc: 'set ship  (ship desc for full stats)', run: (a) => {
       const first = (a[0] || '').toLowerCase();
       if (first === 'desc' || first === 'descriptions' || first === 'info' || first === 'stats') { printShipDescriptions(); return; }
@@ -1540,7 +1523,7 @@
       if (typeof kickPlayer === 'function') kickPlayer(match.id);
       print('kicked ' + (match.name || 'player'), 'warn');
     } },
-    customize: { desc: 'Opens respective window or asks respective question', run: (a) => {
+    customize: { desc: 'open the ship customization window', win: true, run: (a) => {
       const sub = (a[0] || '').toLowerCase();
       if (sub === 'name') {
         ask('Enter your racer name:', (ans) => {
@@ -1550,15 +1533,14 @@
         });
         return;
       }
-      if (sub === 'color') {
-        colorPrompt();
-        return;
-      }
-      // 'tag' or no argument -> open the paint-tag draw window.
-      openTagDraw();
+      if (sub === 'color') { openColorPicker(); return; }
+      if (sub === 'tag') { openTagDraw(); return; }
+      // no argument -> open the full ship customization window.
+      openShipCustomize();
     } },
+    customization: { desc: 'open the ship customization window', win: true, run: () => { openShipCustomize(); } },
     tag: { desc: 'draw your paint tag', win: true, run: () => { openTagDraw(); } },
-    color: { desc: 'set your car color', run: () => { colorPrompt(); } },
+    color: { desc: 'open the car color picker', win: true, run: () => { openColorPicker(); } },
     mapmaker: { desc: 'Opens map maker', win: true, run: () => { openMapMakerWindow(); } },
     editor: { desc: 'Opens map maker', win: true, run: () => { openMapMakerWindow(); } },
     settings: { desc: 'audio settings', run: () => {

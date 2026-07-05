@@ -148,11 +148,20 @@ initSocialPeer();
 function persistCustomization(profile) {
   if (!profile) return;
   try {
+    // Merge onto whatever is already saved so partial updates (e.g. just the
+    // color) never wipe the other customization fields.
+    let cur = {};
+    try { cur = JSON.parse(localStorage.getItem('rr-customization') || '{}') || {}; } catch (_) {}
+    const m = { ...cur, ...profile };
     localStorage.setItem('rr-customization', JSON.stringify({
-      name: (profile.name || 'Racer').slice(0, 16),
-      color: profile.color || PLAYER_COLORS[0],
-      paintTag: profile.paintTag || '',
-      carType: CAR_TYPES[profile.carType] ? profile.carType : 'drifter',
+      name: (m.name || 'Racer').slice(0, 16),
+      color: m.color || PLAYER_COLORS[0],
+      paintTag: m.paintTag || '',
+      carType: CAR_TYPES[m.carType] ? m.carType : 'drifter',
+      smokeColor: m.smokeColor || '',
+      trailColor: m.trailColor || '',
+      decal: m.decal || '',
+      showTag: m.showTag !== false,
     }));
   } catch(_) {}
 }
@@ -176,6 +185,10 @@ function loadCustomization() {
     if (typeof s.color === 'string') { G.selectedColor = s.color; const el = document.getElementById('car-color'); if (el) el.value = s.color; }
     if (typeof s.paintTag === 'string' && s.paintTag) { G.selectedPaintTag = s.paintTag; drawDataUrlOnCanvas('paint-tag-canvas', s.paintTag); }
     if (typeof s.carType === 'string' && CAR_TYPES[s.carType]) G.selectedCarType = s.carType;
+    if (typeof s.smokeColor === 'string') G.selectedSmokeColor = s.smokeColor;
+    if (typeof s.trailColor === 'string') G.selectedTrailColor = s.trailColor;
+    if (typeof s.decal === 'string') G.selectedDecal = s.decal;
+    if (typeof s.showTag === 'boolean') G.selectedShowTag = s.showTag;
   } catch(_) {}
 }
 

@@ -105,7 +105,9 @@ function getLobbyProfileInput() {
   const color = document.getElementById('car-color').value || PLAYER_COLORS[0];
   const paintTagCv = document.getElementById('paint-tag-canvas');
   const paintTag = paintTagCv ? paintTagCv.toDataURL('image/png') : DEFAULT_PAINT_TAG;
-  const profile = { name: name.slice(0, 16), color, paintTag, carType: G.selectedCarType };
+  const profile = { name: name.slice(0, 16), color, paintTag, carType: G.selectedCarType,
+    smokeColor: G.selectedSmokeColor || '', trailColor: G.selectedTrailColor || '',
+    decal: G.selectedDecal || '', showTag: G.selectedShowTag !== false };
   persistCustomization(profile);
   G.selectedColor = profile.color;
   G.selectedPaintTag = profile.paintTag;
@@ -117,6 +119,7 @@ function getLobbyProfileInput() {
     me.color = profile.color;
     me.paintTag = profile.paintTag;
     me.carType = profile.carType;
+    applyProfileExtras(me, profile);
     if (G.isHost) {
       updateHostPlayerList();
       sendLobbySync();
@@ -125,6 +128,16 @@ function getLobbyProfileInput() {
     }
   }
   return profile;
+}
+
+// Copy the extended customization (smoke/trail colors, hull decal, tag toggle)
+// from a profile onto a player object.
+function applyProfileExtras(p, profile) {
+  if (!p || !profile) return;
+  if (typeof profile.smokeColor === 'string') p.smokeColor = profile.smokeColor;
+  if (typeof profile.trailColor === 'string') p.trailColor = profile.trailColor;
+  if (typeof profile.decal === 'string') p.decal = profile.decal;
+  if (typeof profile.showTag === 'boolean') p.showTag = profile.showTag;
 }
 
 function sendLobbySync() {
@@ -435,7 +448,9 @@ function readCustomizeProfile() {
   const color = document.getElementById('lobby-c-color').value || PLAYER_COLORS[0];
   const cv = document.getElementById('lobby-c-paint-canvas');
   const paintTag = cv ? cv.toDataURL('image/png') : DEFAULT_PAINT_TAG;
-  return { name: name.slice(0, 16), color, paintTag, carType: G.selectedCarType };
+  return { name: name.slice(0, 16), color, paintTag, carType: G.selectedCarType,
+    smokeColor: G.selectedSmokeColor || '', trailColor: G.selectedTrailColor || '',
+    decal: G.selectedDecal || '', showTag: G.selectedShowTag !== false };
 }
 
 // Push the customize-panel values to the local player and the rest of the room.
@@ -447,6 +462,7 @@ function applyCustomize() {
   me.color = profile.color;
   me.paintTag = profile.paintTag;
   me.carType = profile.carType;
+  applyProfileExtras(me, profile);
   G.selectedColor = profile.color;
   G.selectedPaintTag = profile.paintTag;
   G.selectedCarType = profile.carType;
@@ -551,6 +567,7 @@ document.getElementById('host-btn').onclick = async () => {
     G.mapVotes = {};
     const p = makePlayer(G.myId, profile.name, profile.color, 0, 0, 0, G.selectedCarType);
     p.paintTag = profile.paintTag;
+    applyProfileExtras(p, profile);
     p.clientUid = CLIENT_UID;
     p.ready = true;
     G.players[G.myId] = p;
@@ -673,6 +690,7 @@ document.getElementById('join-confirm-btn').onclick = async () => {
     const colorIdx = Object.keys(G.players).length % PLAYER_COLORS.length;
     const p = makePlayer(myId, profile.name, profile.color || PLAYER_COLORS[colorIdx], 0, 0, 0, G.selectedCarType);
     p.paintTag = profile.paintTag;
+    applyProfileExtras(p, profile);
     p.clientUid = CLIENT_UID;
     p.ready = false;
     G.players[myId] = p;

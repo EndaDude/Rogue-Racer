@@ -308,11 +308,15 @@ function botCollideObstacles(b) {
 }
 
 function spawnBots(count) {
-  const types = Object.keys(CAR_TYPES);
+  // Bots mirror the players: they only race ships that are currently unlocked in
+  // the lobby (honors the host allowed-car list and the prototype gate). Prototypes
+  // are off-limits unless `enableprototypes` has unlocked them.
+  const selectable = Object.keys(CAR_TYPES).filter(carTypeSelectable);
+  const pool = selectable.length ? selectable : [firstSelectableCarType()];
   for (let i = 0; i < count; i++) {
     const spec = BOT_ROSTER[i % BOT_ROSTER.length];
     const id = 'bot-' + (i + 1);
-    const b = makePlayer(id, spec.name, spec.color, 0, 0, 0, types[Math.floor(Math.random() * types.length)]);
+    const b = makePlayer(id, spec.name, spec.color, 0, 0, 0, pool[Math.floor(Math.random() * pool.length)]);
     b.isBot = true;
     // Pace multiplier from the selected difficulty band — always ≤ 1, so a bot
     // can never out-run what its ship's stats allow a human to do.

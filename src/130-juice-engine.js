@@ -54,6 +54,9 @@ function updateFxEmitters(dt) {
     const boost = (p.boosting || 0) > 0;
     const rearX = p.x - Math.cos(p.angle) * (CAR_H * 0.62);
     const rearY = p.y - Math.sin(p.angle) * (CAR_H * 0.62);
+    // Custom exhaust-smoke / boost-trail colors (fall back to defaults when unset).
+    const smokeRgb = p.smokeColor ? hexToRgb(p.smokeColor) : null;
+    const trailRgb = p.trailColor ? hexToRgb(p.trailColor) : null;
     // Exhaust: faster = denser and hotter; boosting swaps to flame colors.
     p._exhaustT = (p._exhaustT || 0) + dt;
     const rate = boost ? 0.016 : (spd > 40 ? Math.max(0.03, 0.11 - spd * 0.00012) : 0.22);
@@ -67,8 +70,8 @@ function updateFxEmitters(dt) {
         vy: -Math.sin(p.angle) * (boost ? 90 : 26) + jy * 4,
         r: boost ? 2.6 + Math.random() * 2.2 : 1.6 + Math.random() * 1.5,
         life: L, maxLife: L, layer: p.layer || 0,
-        c0: boost ? [255, 214, 120] : [148, 163, 184],
-        c1: boost ? [249, 115, 22] : [71, 85, 105],
+        c0: boost ? (trailRgb || [255, 214, 120]) : (smokeRgb || [148, 163, 184]),
+        c1: boost ? (trailRgb ? shadeRgb(trailRgb, 0.5) : [249, 115, 22]) : (smokeRgb ? shadeRgb(smokeRgb, 0.5) : [71, 85, 105]),
         a0: boost ? 0.85 : 0.3, drag: 1.6, grow: boost ? 2.5 : 4.5,
       });
     }
