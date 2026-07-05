@@ -18,4 +18,24 @@ if git diff --cached --name-only | grep -Eq '^(src/|build\.ts|rogue-racer\.html)
     exit 1
   fi
 fi
+
+# Guard: the two agent instruction sets (CLAUDE.md and .github/copilot-instructions.md)
+# carry the same project facts and must be kept in sync. If a commit changes ONE without
+# the other, block it — otherwise they silently drift. This is a heuristic (it can't tell a
+# shared-fact edit from a tool-specific tweak), so it's overridable: if you truly only need
+# to touch one file, commit with `git commit --no-verify`.
+STAGED=$(git diff --cached --name-only)
+has_claude=$(printf '%s\n' "$STAGED" | grep -qx 'CLAUDE.md' && echo 1 || echo 0)
+has_copilot=$(printf '%s\n' "$STAGED" | grep -qx '.github/copilot-instructions.md' && echo 1 || echo 0)
+if [ "$has_claude" != "$has_copilot" ]; then
+  echo "pre-commit: instruction files out of sync."
+  if [ "$has_claude" = 1 ]; then
+    echo "  You staged CLAUDE.md but not .github/copilot-instructions.md."
+  else
+    echo "  You staged .github/copilot-instructions.md but not CLAUDE.md."
+  fi
+  echo "  These two must carry the same project facts — update both, or override with:"
+  echo "    git commit --no-verify"
+  exit 1
+fi
 exit 0
