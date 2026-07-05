@@ -4,15 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Rogue Racer is a 2D top-down multiplayer racing game. **The entire game is one file: [rogue-racer.html](rogue-racer.html)** (~17.5k lines — HTML + CSS + one big inline `<script>`). It renders to a 2D canvas (no THREE.js / no 3D engine) and has no build step. Its only runtime dependency is PeerJS, loaded from unpkg via a `<script>` tag.
+Rogue Racer is a 2D top-down multiplayer racing game that **ships as one self-contained file, `rogue-racer.html`** (~17.5k lines — HTML + CSS + one big `<script>`). It renders to a 2D canvas (no THREE.js / no 3D engine). Its only runtime dependency is PeerJS, loaded from unpkg via a `<script>` tag.
+
+**`rogue-racer.html` is now GENERATED — do not hand-edit it.** The source lives in [src/](src/): a shell `index.html` plus `NNN-*.js` files (one per subsystem, plain scripts sharing one global scope — no ES modules), concatenated back into the single `rogue-racer.html` by `bun build.ts`. Edit `src/`, run `bun run build`, commit both. See [src/README.md](src/README.md).
 
 `desktop/` is a thin Tauri (Rust) wrapper that packages the game as a native desktop app. The game itself is engine-agnostic and runs by opening the HTML file directly in a browser.
 
 ## Running & editing the game
 
-- **Develop the game:** open [rogue-racer.html](rogue-racer.html) in a browser (or serve the repo root). Edit the file, refresh. No compile, no bundler, no npm.
-- There is **no test suite, linter, or package.json** at the repo root. Verify changes by playing.
-- The single-file layout is how the game ships **today** — keep it self-contained in `rogue-racer.html` for now. A move to a bundled `src/` (still emitting one file) is planned but not yet built; see [docs/features/rebuild-plan.md](docs/features/rebuild-plan.md). Until that lands, don't split the file or add a build pipeline unless you're doing that planned work.
+- **Develop the game:** edit files under [src/](src/), run `bun run build` to regenerate [rogue-racer.html](rogue-racer.html), then open it in a browser (or serve the repo root) and refresh. The build is plain concatenation via `bun build.ts` — no npm, no module system.
+- **Enable the build guard once per clone:** `bun run hooks` (installs `.githooks/pre-commit`, which blocks committing a stale/hand-edited `rogue-racer.html`). `bun run check` is the same check for CI.
+- There is **no test suite or linter.** Verify changes by playing.
+- Keep the shipped artifact a single self-contained `rogue-racer.html` — that's what the loader `document.write`s. The split is source-time only; it does not change how the game ships. Full context: [docs/features/rebuild-plan.md](docs/features/rebuild-plan.md).
 
 ## Ship / release model (important — two independent paths)
 

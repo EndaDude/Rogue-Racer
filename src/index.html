@@ -1,0 +1,1826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rogue Racer — Multiplayer</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface2: #1a1a26;
+    --border: #2a2a40;
+    --accent: #7c3aed;
+    --accent2: #a855f7;
+    --neon: #c084fc;
+    --red: #ef4444;
+    --gold: #fbbf24;
+    --green: #22c55e;
+    --cyan: #06b6d4;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  #app { display: flex; flex-direction: column; height: 100vh; }
+
+  /* LOBBY */
+  #lobby {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    gap: 0;
+    background: radial-gradient(ellipse at 50% 30%, #1a0a2e 0%, #0a0a0f 70%);
+  }
+  .game-title {
+    font-size: clamp(2.5rem, 8vw, 5rem);
+    font-weight: 900;
+    letter-spacing: -2px;
+    background: linear-gradient(135deg, #c084fc, #7c3aed, #06b6d4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+  .game-sub {
+    color: var(--muted);
+    font-size: 1rem;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    margin-bottom: 40px;
+  }
+  .lobby-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    width: 380px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .lobby-card h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--neon);
+    margin-bottom: 4px;
+  }
+  input[type=text] {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 10px 14px;
+    font-size: 1rem;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input[type=text]:focus { border-color: var(--accent2); }
+  .btn {
+    padding: 12px 20px;
+    border-radius: var(--radius);
+    border: none;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    width: 100%;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
+  .btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--accent2); color: var(--neon); }
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  .room-code-display {
+    background: var(--surface2);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 16px;
+    text-align: center;
+    font-family: monospace;
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: 8px;
+    color: var(--neon);
+    cursor: pointer;
+    user-select: all;
+  }
+  .room-code-display small {
+    display: block;
+    font-size: 0.7rem;
+    letter-spacing: 2px;
+    color: var(--muted);
+    margin-top: 4px;
+    font-family: system-ui;
+    font-weight: 400;
+  }
+  .player-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 160px;
+    overflow-y: auto;
+  }
+  .player-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--surface2);
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+  }
+  .player-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .kick-btn {
+    margin-left: auto;
+    background: rgba(248,113,113,0.14);
+    border: 1px solid rgba(248,113,113,0.5);
+    color: #fca5a5;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    padding: 3px 9px;
+    cursor: pointer;
+  }
+  .kick-btn:hover { background: rgba(248,113,113,0.28); color: #fff; }
+  .status-msg {
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--muted);
+    min-height: 20px;
+  }
+  .status-msg.ok { color: var(--green); }
+  .status-msg.err { color: var(--red); }
+
+  .car-type-wrap {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .car-type-label {
+    color: var(--muted);
+    font-size: 0.78rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .car-type-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .car-type-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 8px 10px;
+    cursor: pointer;
+    text-align: left;
+    font-size: 0.78rem;
+    line-height: 1.2;
+  }
+  .car-type-btn strong { display: block; font-size: 0.86rem; }
+  .car-type-btn.active {
+    border-color: var(--accent2);
+    box-shadow: 0 0 0 1px rgba(168,85,247,0.35) inset;
+    color: var(--neon);
+  }
+  .car-type-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .lobby-side-tab { align-self: stretch; }
+  .cz-label {
+    color: var(--muted);
+    font-size: 0.78rem;
+    margin-bottom: 3px;
+    display: block;
+  }
+  #lobby-c-paint-canvas {
+    width: 64px;
+    height: 64px;
+    image-rendering: pixelated;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: crosshair;
+    touch-action: none;
+  }
+  .lobby-inline-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .lobby-inline-grid label {
+    color: var(--muted);
+    font-size: 0.78rem;
+    margin-bottom: 3px;
+    display: block;
+  }
+  .lobby-inline-grid input,
+  .lobby-inline-grid select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 8px 10px;
+    width: 100%;
+    font-size: 0.9rem;
+  }
+  .paint-tag-wrap { display: flex; flex-direction: column; gap: 4px; }
+  #paint-tag-canvas {
+    width: 84px;
+    height: 84px;
+    image-rendering: pixelated;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background:
+      linear-gradient(45deg, #202030 25%, transparent 25%),
+      linear-gradient(-45deg, #202030 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #202030 75%),
+      linear-gradient(-45deg, transparent 75%, #202030 75%);
+    background-size: 12px 12px;
+    background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+    cursor: crosshair;
+  }
+  .paint-tag-tools { display: flex; gap: 6px; align-items: center; }
+  .paint-tag-tools button {
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 4px 7px;
+    font-size: 0.72rem;
+    cursor: pointer;
+  }
+  .queue-list {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--surface2);
+  }
+  .queue-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-size: 0.82rem;
+    cursor: grab;
+  }
+  .queue-item:last-child { border-bottom: none; }
+  .queue-item.dragging { opacity: 0.55; }
+  .queue-item .meta { color: var(--muted); font-size: 0.72rem; }
+  .queue-item button {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    font-size: 0.72rem;
+    padding: 4px 6px;
+    cursor: pointer;
+  }
+  .queue-item button:hover { border-color: var(--accent2); color: var(--neon); }
+  .lib-hdr { font-size:.66rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:8px 0 3px; }
+  .lib-list { border:1px solid var(--border); border-radius:10px; background:var(--surface2); max-height:150px; overflow-y:auto; padding:3px; }
+  .lib-item { display:flex; align-items:center; gap:5px; padding:5px 7px; border-radius:7px; cursor:grab; font-size:.8rem; }
+  .lib-item:hover { background:rgba(168,85,247,.12); }
+  .lib-item.dragging { opacity:.5; }
+  .lib-item .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); }
+  .lib-item button { background:transparent; border:1px solid var(--border); color:var(--text); border-radius:6px; font-size:.8rem; line-height:1; padding:3px 7px; cursor:pointer; }
+  .lib-item button:hover { border-color:var(--accent2); color:var(--neon); }
+  .lib-empty { color:var(--muted); padding:6px 8px; font-size:.74rem; }
+  #host-map-queue.lib-drop-hover { outline:2px dashed var(--accent2); outline-offset:2px; }
+  .pending-list { max-height: 150px; overflow-y: auto; }
+  .pending-item {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 6px;
+    align-items: center;
+    padding: 7px 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    background: rgba(0,0,0,0.2);
+    font-size: 0.78rem;
+  }
+  .tiny-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 4px 7px;
+    font-size: 0.72rem;
+    cursor: pointer;
+  }
+  .tiny-btn.ok { border-color: rgba(34,197,94,0.5); color: #4ade80; }
+  .tiny-btn.bad { border-color: rgba(239,68,68,0.5); color: #f87171; }
+
+  /* GAME */
+  #game { display: none; flex-direction: column; height: 100vh; }
+  #hud {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+    height: 52px;
+  }
+  .hud-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+  }
+  .hud-label { color: var(--muted); }
+  .hud-val { font-weight: 700; color: var(--text); }
+  .hud-sep { color: var(--border); }
+  #engine-mode-display { font-size: 0.78rem; color: var(--muted); }
+  .engine-load-btn {
+    margin-left: 6px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    font-size: 0.7rem;
+    cursor: pointer;
+  }
+  .engine-load-btn:hover { border-color: var(--accent2); color: var(--neon); }
+  #lap-display { font-size: 1.1rem; font-weight: 800; color: var(--neon); }
+  #pos-display { font-size: 1rem; font-weight: 700; color: var(--gold); }
+  #powerup-slot {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .powerup-badge {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 4px 12px;
+    font-size: 0.85rem;
+    min-width: 90px;
+    text-align: center;
+  }
+  .powerup-badge.active { border-color: var(--gold); color: var(--gold); }
+  #canvas-wrap { flex: 1; position: relative; overflow: hidden; }
+  #gameCanvas { display: block; width: 100%; height: 100%; transform: translateZ(0); will-change: transform; backface-visibility: hidden; }
+  #checkpoint-strip {
+    position: absolute;
+    left: 50%;
+    bottom: 14px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 12px;
+    background: rgba(2, 6, 23, 0.46);
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    backdrop-filter: blur(4px);
+    pointer-events: none;
+    z-index: 12;
+  }
+  .checkpoint-arch {
+    width: 22px;
+    height: 13px;
+    border: 3px solid #fbbf24;
+    border-bottom: 0;
+    border-radius: 13px 13px 0 0;
+    box-shadow: 0 0 0 1px rgba(251,191,36,0.2), 0 0 9px rgba(251,191,36,0.25);
+    opacity: 0.28;
+    transition: opacity 140ms ease, transform 140ms ease, filter 140ms ease;
+  }
+  .checkpoint-arch.done {
+    opacity: 1;
+    transform: translateY(-1px);
+    filter: drop-shadow(0 0 6px rgba(251,191,36,0.65));
+  }
+
+  /* UPGRADE SCREEN */
+  #upgrade-screen {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 24px;
+  }
+  #upgrade-screen h2 {
+    font-size: 2rem;
+    font-weight: 900;
+    color: var(--neon);
+    text-align: center;
+  }
+  #upgrade-screen p { color: var(--muted); text-align: center; }
+  .upgrade-cards {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 760px;
+  }
+  .upgrade-card {
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    width: 200px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .upgrade-card:hover {
+    border-color: var(--accent2);
+    transform: translateY(-3px);
+  }
+  .upgrade-icon { font-size: 2rem; }
+  .upgrade-name { font-weight: 700; font-size: 1rem; }
+  .upgrade-desc { font-size: 0.8rem; color: var(--muted); line-height: 1.4; }
+
+  #upgrade-pause-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.55);
+    z-index: 90;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 14px;
+    backdrop-filter: blur(2px);
+    pointer-events: none;
+  }
+  #upgrade-pause-overlay .up-title {
+    font-size: 1.7rem;
+    font-weight: 900;
+    color: var(--neon);
+    text-align: center;
+    text-shadow: 0 2px 18px rgba(168,85,247,0.5);
+    padding: 0 24px;
+  }
+  #upgrade-pause-overlay .up-timer {
+    font-size: 3.2rem;
+    font-weight: 900;
+    color: #fbbf24;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 2px 18px rgba(251,191,36,0.45);
+  }
+  #upgrade-pause-overlay .up-sub {
+    font-size: 0.9rem;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+  }
+
+  /* RESULTS */
+  #results-screen {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.9);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+    padding: 24px 0;
+  }
+  #results-screen h2 {
+    font-size: 2.5rem;
+    font-weight: 900;
+  }
+  .results-list {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    min-width: 320px;
+  }
+  .results-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    font-size: 1rem;
+  }
+  .results-row:last-child { border-bottom: none; }
+  .results-pos { font-weight: 900; font-size: 1.2rem; width: 30px; }
+  .results-name { flex: 1; font-weight: 600; }
+  .results-time { color: var(--muted); font-size: 0.85rem; font-family: monospace; }
+
+  /* Cinematic podium */
+  #results-podium {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 14px;
+    min-height: 150px;
+    margin-bottom: 4px;
+  }
+  .podium-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    animation: podiumRise 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+  }
+  .podium-col .pc-medal { font-size: 1.8rem; }
+  .podium-col .pc-name { font-weight: 800; font-size: 0.9rem; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .podium-col .pc-time { font-family: monospace; font-size: 0.78rem; color: #fbbf24; }
+  .podium-col .pc-stand {
+    width: 84px;
+    border-radius: 8px 8px 0 0;
+    border: 1px solid rgba(255,255,255,0.18);
+    border-bottom: none;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 6px;
+    font-weight: 900;
+    font-size: 1.3rem;
+    color: rgba(0,0,0,0.55);
+  }
+  .podium-col .pc-dot { width: 12px; height: 12px; border-radius: 50%; }
+  .podium-col.p1 .pc-stand { height: 92px; background: linear-gradient(#fde68a, #f59e0b); }
+  .podium-col.p2 .pc-stand { height: 64px; background: linear-gradient(#e5e7eb, #9ca3af); }
+  .podium-col.p3 .pc-stand { height: 44px; background: linear-gradient(#fdba74, #c2783c); }
+  .podium-col.p1 { order: 2; } .podium-col.p2 { order: 1; } .podium-col.p3 { order: 3; }
+  .podium-col.p2 { animation-delay: 0.12s; } .podium-col.p1 { animation-delay: 0.26s; } .podium-col.p3 { animation-delay: 0.40s; }
+  @keyframes podiumRise { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
+  .results-row .results-time.dnf { color: #f87171; }
+  .rs-label { font-size: 0.86rem; color: var(--muted); font-weight: 600; }
+  .rs-settings-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  .rs-settings-row label { display: flex; flex-direction: column; gap: 3px; font-size: 0.72rem; color: var(--muted); }
+  .rs-settings-row select, .rs-settings-row input {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 5px 8px; font-size: 0.82rem;
+  }
+  #results-ship-grid .car-type-btn { padding: 6px 9px; font-size: 0.72rem; }
+  #results-ship-grid .car-type-btn strong { font-size: 0.78rem; }
+
+  /* Spectate bar */
+  #spectate-bar {
+    display: none;
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    align-items: center;
+    gap: 10px;
+    background: rgba(2, 6, 23, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 10px;
+    padding: 7px 14px;
+    z-index: 14;
+    backdrop-filter: blur(4px);
+    font-size: 0.85rem;
+  }
+  #spectate-bar .sp-eye { color: #c084fc; font-weight: 700; }
+  #spectate-bar b { color: #fbbf24; min-width: 60px; text-align: center; }
+  #spectate-bar .sp-btn {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); cursor: pointer; padding: 3px 9px; font-size: 0.82rem;
+  }
+  #spectate-bar .sp-btn:hover { border-color: var(--accent2); }
+  #spectate-bar .sp-btn.active { border-color: var(--accent2); background: rgba(192, 132, 252, 0.25); color: #fff; }
+  #spectate-bar .sp-free { font-size: 0.75rem; }
+
+  /* Mini map */
+  #minimap {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 140px;
+    height: 140px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: rgba(10,10,15,0.8);
+    overflow: hidden;
+  }
+
+  /* Race event feed (kills, hits, finishes) — stacks under the minimap */
+  #event-feed {
+    position: absolute;
+    top: 160px;
+    right: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-end;
+    z-index: 13;
+    pointer-events: none;
+    max-width: 240px;
+  }
+  .feed-item {
+    background: rgba(2,6,23,0.55);
+    border: 1px solid rgba(148,163,184,0.22);
+    border-radius: 8px;
+    padding: 3px 10px;
+    font-size: 0.72rem;
+    color: #cbd5e1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    backdrop-filter: blur(3px);
+    animation: feedIn 0.25s ease;
+  }
+  .feed-item.out { opacity: 0; transform: translateX(12px); transition: all 0.35s; }
+  @keyframes feedIn { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+
+  /* Post-race stats strip */
+  #results-stats {
+    display: none;
+    gap: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+    font-size: 0.78rem;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 14px;
+    max-width: 560px;
+  }
+  #results-stats b { color: var(--text); }
+
+  /* Victory confetti on the results screen */
+  .rr-confetti {
+    position: absolute;
+    top: -16px;
+    border-radius: 2px;
+    pointer-events: none;
+    z-index: 5;
+    animation: rrConfettiFall linear forwards;
+  }
+  @keyframes rrConfettiFall {
+    to { transform: translateY(110vh) rotate(720deg); opacity: 0.65; }
+  }
+
+  /* Map-maker header warning (folder not connected etc.) */
+  #me-header-warn {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.7rem;
+    color: #facc15;
+    background: rgba(250,204,21,0.08);
+    border: 1px solid rgba(250,204,21,0.4);
+    border-radius: 7px;
+    padding: 3px 9px;
+    max-width: 40%;
+    line-height: 1.25;
+  }
+  #me-header-warn svg { width: 13px; height: 13px; flex-shrink: 0; fill: none; stroke: #facc15; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* Ships showcase window */
+  .ships-wrap { display: flex; flex-direction: column; gap: 10px; height: 100%; }
+  .ships-row {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 12px 4px 8px;
+    flex: 0 0 auto;
+  }
+  .ship-card {
+    flex: 0 0 108px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 6px 7px;
+    border: 1px solid #1f7a45;
+    border-radius: 10px;
+    background: rgba(6,40,21,0.55);
+    cursor: pointer;
+    transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s;
+    user-select: none;
+  }
+  .ship-card:hover {
+    transform: translateY(-5px);
+    border-color: #5dffa0;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.5), 0 0 14px rgba(47,174,90,0.35);
+  }
+  .ship-card.sel { border-color: #5dffa0; box-shadow: 0 0 0 1px #5dffa0 inset, 0 0 16px rgba(93,255,160,0.3); }
+  .ship-card canvas { width: 84px; height: 84px; }
+  .ship-card .sc-name { font-size: 0.78rem; font-weight: 700; color: #c9ffd8; letter-spacing: 0.03em; }
+  .ship-detail {
+    flex: 1 1 auto;
+    min-height: 150px;
+    border: 1px solid #1f7a45;
+    border-radius: 10px;
+    background: rgba(2,17,10,0.6);
+    padding: 10px 14px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    overflow-y: auto;
+  }
+  .ship-detail h3 { margin: 0 0 2px; color: #eafff2; font-size: 1rem; letter-spacing: 0.04em; text-shadow: 0 0 8px rgba(180,255,210,0.6); }
+  .ship-detail .sd-lore { color: #6fdc95; font-size: 0.68rem; letter-spacing: 0.04em; margin-bottom: 7px; }
+  .ship-detail .sd-bars { display: grid; grid-template-columns: 72px 1fr; gap: 3px 8px; margin: 6px 0; max-width: 330px; }
+  .ship-detail .sd-bars span { color: #8fe6ad; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+  .ship-detail .sd-bar { height: 7px; border-radius: 4px; background: rgba(31,122,69,0.35); overflow: hidden; align-self: center; }
+  .ship-detail .sd-bar i { display: block; height: 100%; background: linear-gradient(90deg, #2fae5a, #5dffa0); border-radius: 4px; }
+  .ship-detail .sd-special { color: #ffd166; }
+  .ship-detail .sd-item { color: #9dffc6; }
+
+  /* Live leaderboard + race timer (top-left) */
+  #race-status-panel {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 13;
+    pointer-events: none;
+    max-width: 280px;
+  }
+  #race-timer {
+    align-self: flex-start;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    font-size: 1.05rem;
+    letter-spacing: 0.5px;
+    color: #e2e8f0;
+    background: rgba(2, 6, 23, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.26);
+    border-radius: 8px;
+    padding: 4px 12px;
+    backdrop-filter: blur(4px);
+  }
+  #leaderboard {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: rgba(2, 6, 23, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 8px;
+    padding: 6px 8px;
+    backdrop-filter: blur(4px);
+  }
+  .lb-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  .lb-row.me .lb-name { color: #fbbf24; font-weight: 700; }
+  .lb-row.finished { opacity: 0.6; }
+  .lb-pos { width: 16px; color: var(--muted); text-align: right; font-weight: 700; }
+  .lb-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .lb-name { min-width: 52px; max-width: 84px; overflow: hidden; text-overflow: ellipsis; color: #e2e8f0; }
+  .lb-stat { font-variant-numeric: tabular-nums; color: #94a3b8; font-size: 0.68rem; letter-spacing: 0.2px; }
+
+  /* Controls hint */
+  #controls-hint {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    font-size: 0.72rem;
+    color: var(--muted);
+    background: rgba(10,10,15,0.7);
+    padding: 6px 10px;
+    border-radius: 6px;
+    line-height: 1.8;
+  }
+  /* Map Editor */
+  #screen-map-editor {
+    display:none; position:fixed; inset:0; background:var(--bg);
+    flex-direction:column; z-index:200;
+  }
+  .me-header {
+    display:flex; align-items:center; gap:10px; padding:10px 16px;
+    background:var(--surface); border-bottom:1px solid var(--border); flex-shrink:0;
+  }
+  .me-header h2 { flex:1; margin:0; font-size:1rem; }
+  .me-body { display:flex; flex:1; overflow:hidden; min-height:0; }
+  .me-sidebar {
+    width:230px; flex-shrink:0; background:var(--surface);
+    border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden;
+  }
+  .me-config {
+    padding:10px; border-bottom:1px solid var(--border);
+    display:flex; flex-direction:column; gap:5px;
+  }
+  .me-config label { font-size:.72rem; color:var(--muted); }
+  .me-config input {
+    width:100%; padding:5px 8px; font-size:.8rem; background:var(--bg);
+    border:1px solid var(--border); border-radius:6px; color:var(--text); box-sizing:border-box;
+  }
+  .me-list-hdr { padding:8px 10px 3px; font-size:.7rem; color:var(--muted); font-weight:700;
+    letter-spacing:.06em; text-transform:uppercase; }
+  #me-map-list { flex:1; overflow-y:auto; padding:3px; }
+  .me-map-item {
+    display:block; width:100%; text-align:left; padding:7px 10px;
+    background:transparent; border:1px solid transparent; border-radius:6px;
+    color:var(--text); font-size:.83rem; cursor:pointer; margin-bottom:2px; transition:.15s;
+  }
+  .me-map-item:hover { background:rgba(168,85,247,.12); border-color:rgba(168,85,247,.35); }
+  .me-track-list { flex:1 1 0; min-height:46px; overflow-y:auto; padding:3px; }
+  .me-track-row { display:flex; align-items:center; gap:4px; padding:4px 6px; border:1px solid transparent; border-radius:6px; margin-bottom:2px; }
+  .me-track-row:hover { background:rgba(168,85,247,.10); }
+  .me-track-row .nm { flex:1; font-size:.8rem; color:var(--text); cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .me-track-row button { padding:2px 6px; font-size:.66rem; background:var(--bg); border:1px solid var(--border); border-radius:5px; color:var(--text); cursor:pointer; }
+  .me-track-row button:hover { border-color:rgba(168,85,247,.55); }
+  .me-track-row button.danger:hover { border-color:#ef4444; color:#ef4444; }
+  .me-track-empty { color:var(--muted); padding:6px 10px; font-size:.76rem; }
+  .me-editor { flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; }
+  .me-toolbar {
+    display:flex; align-items:center; gap:10px; padding:7px 12px;
+    background:var(--surface); border-bottom:1px solid var(--border); flex-shrink:0;
+  }
+  #me-map-name {
+    padding:5px 9px; background:var(--bg); border:1px solid var(--border);
+    border-radius:6px; color:var(--text); font-size:.88rem; width:190px;
+  }
+  .me-hint { font-size:.7rem; color:var(--muted); flex:1; }
+  .me-canvas-wrap { flex:1; overflow:hidden; display:flex; }
+  #me-canvas { flex:1; display:block; cursor:crosshair; }
+  .me-node-settings {
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    padding:4px 8px; border:1px solid var(--border); border-radius:6px;
+    background:var(--surface2);
+  }
+  .me-node-settings label { font-size:.72rem; color:var(--muted); }
+  #me-selected-node { font-size:.72rem; color:var(--muted); min-width:84px; }
+  #me-node-width-range { width:110px; accent-color:#a855f7; }
+  #me-node-width {
+    width:68px; padding:4px 6px; font-size:.78rem; background:var(--bg);
+    border:1px solid var(--border); border-radius:4px; color:var(--text);
+  }
+  .me-type-btns { display:flex; gap:4px; flex-shrink:0; }
+  .me-type-btn {
+    padding:4px 9px; border-radius:5px; border:2px solid transparent;
+    font-size:.75rem; font-weight:700; cursor:pointer; background:var(--surface2);
+    color:var(--muted); transition:.12s;
+  }
+  .me-type-btn:hover { color:var(--text); }
+  .me-type-btn.active { color:#fff; }
+  .me-type-btn[data-type=road].active    { border-color:#a855f7; background:rgba(168,85,247,.18); color:#a855f7; }
+  .me-type-btn[data-type=bridge].active  { border-color:#06b6d4; background:rgba(6,182,212,.18); color:#06b6d4; }
+  .me-type-btn[data-type=bridge3].active { border-color:#f97316; background:rgba(249,115,22,.18); color:#f97316; }
+  .me-type-btn[data-type=void].active    { border-color:#ef4444; background:rgba(239,68,68,.18); color:#ef4444; }
+  .me-type-btn[data-type=ice].active     { border-color:#7dd3fc; background:rgba(125,211,252,.18); color:#7dd3fc; }
+  .me-type-btn[data-type=river].active   { border-color:#38bdf8; background:rgba(56,189,248,.18); color:#38bdf8; }
+  .me-check-btn {
+    padding:4px 9px; border-radius:5px; border:2px solid transparent;
+    font-size:.75rem; font-weight:700; cursor:pointer; background:var(--surface2);
+    color:var(--muted); transition:.12s;
+  }
+  .me-check-btn.active { border-color:#fbbf24; background:rgba(251,191,36,.2); color:#fbbf24; }
+
+  /* ===== Map Maker UI overhaul: compact fields, real sliders, mode groups ===== */
+  .me-type-btn svg, .me-check-btn svg, .me-header .btn svg, .me-config .btn svg {
+    width: 13px; height: 13px; vertical-align: -2px; margin-right: 4px;
+    fill: none; stroke: currentColor; stroke-width: 1.7;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .me-toolbar { flex-wrap: wrap; row-gap: 6px; }
+  #me-map-name { width: 132px; flex: 0 0 auto; }
+  .me-grp {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 4px 8px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface2);
+  }
+  .me-grp[hidden] { display: none; }
+  .me-field { display: inline-flex; align-items: center; gap: 6px; }
+  .me-field > label {
+    font-size: .68rem; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .04em; white-space: nowrap;
+  }
+  .me-field input[type=number] {
+    width: 46px; padding: 3px 4px; font-size: .74rem; text-align: center;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
+    color: var(--text); -moz-appearance: textfield; appearance: textfield;
+  }
+  .me-field input[type=number]::-webkit-outer-spin-button,
+  .me-field input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .me-field select {
+    height: 26px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); padding: 0 6px; font-size: .74rem;
+  }
+  /* Custom range styling: slim track, chunky glowing thumb. */
+  .me-toolbar input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 96px; height: 18px; background: transparent; cursor: pointer; margin: 0;
+  }
+  .me-toolbar input[type=range]::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent2), var(--border));
+  }
+  .me-toolbar input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 13px; height: 13px; margin-top: -4.5px; border-radius: 50%;
+    background: var(--neon); border: 2px solid var(--bg);
+    box-shadow: 0 0 6px var(--accent2);
+    transition: transform .1s;
+  }
+  .me-toolbar input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+  .me-toolbar input[type=range]::-moz-range-track {
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent2), var(--border));
+  }
+  .me-toolbar input[type=range]::-moz-range-thumb {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: var(--neon); border: 2px solid var(--bg);
+    box-shadow: 0 0 6px var(--accent2);
+  }
+  .me-grp-title {
+    font-size: .64rem; font-weight: 700; letter-spacing: .08em;
+    color: var(--muted); text-transform: uppercase; padding-right: 2px;
+    border-right: 1px solid var(--border); margin-right: 2px;
+    align-self: stretch; display: flex; align-items: center;
+  }
+  #me-mode-hint { font-size: .68rem; color: var(--muted); flex-basis: 100%; padding: 0 2px; }
+
+  /* Map editor embedded inside a CRT window: green phosphor theme + fills the
+     window body. Redefining the theme variables recolors all the editor chrome. */
+  #screen-map-editor.me-windowed {
+    --bg: #02110a;
+    --surface: #062815;
+    --surface2: #0a3d20;
+    --border: #1f7a45;
+    --accent: #14532b;
+    --accent2: #2fae5a;
+    --neon: #5dffa0;
+    --text: #c9ffd8;
+    --muted: #6fdc95;
+    position: static; inset: auto; z-index: auto;
+    width: 100%; height: 100%;
+    background: transparent;
+  }
+  .me-windowed, .me-windowed * {
+    font-family: 'Cascadia Mono','Consolas','Courier New',monospace;
+  }
+  .me-windowed .me-header h2 {
+    color: #eafff2; font-size: .9rem; letter-spacing: .04em;
+    text-shadow: 0 0 8px rgba(180,255,210,0.6);
+  }
+  /* New + Test Track remain in the header; Back and dev tests are hidden. */
+  .me-windowed #me-back-btn,
+  .me-windowed #me-run-regression-btn { display: none; }
+  .me-windowed .btn-secondary {
+    background: rgba(11,58,31,0.6); color: #c9ffd8; border: 1px solid #1f7a45;
+  }
+  .me-windowed .btn-secondary:hover { border-color: #5dffa0; color: #eafff2; }
+  .me-windowed .btn-primary { background: #14532b; color: #eafff2; border: 1px solid #2fae5a; }
+  .me-windowed .btn-primary:hover { background: #1c6e39; }
+  .me-windowed .me-type-btn,
+  .me-windowed .me-check-btn { background: #0a3d20; color: #8fe6ad; }
+  .me-windowed .me-type-btn:hover { color: #eafff2; }
+  .me-windowed .me-type-btn[data-type=road].active {
+    border-color: #5dffa0; background: rgba(93,255,160,.18); color: #5dffa0;
+  }
+  .me-windowed select {
+    background: #0a3d20 !important; color: #c9ffd8 !important; border-color: #1f7a45 !important;
+  }
+  .me-windowed input[type=range] { accent-color: #5dffa0; }
+  #me-node-width-range { accent-color: #5dffa0; }
+  .me-windowed .me-map-item:hover,
+  .me-windowed .me-track-row:hover {
+    background: rgba(47,174,90,.14); border-color: rgba(47,174,90,.4);
+  }
+  .me-windowed .me-track-row button:hover { border-color: #5dffa0; }
+
+  #global-settings-anchor {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 380;
+    pointer-events: none;
+  }
+  #hud-settings-anchor {
+    display: none;
+    align-items: center;
+    margin-left: auto;
+    margin-right: 8px;
+  }
+  #settings-gear-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 1.05rem;
+    pointer-events: auto;
+  }
+  #settings-gear-btn:hover { border-color: var(--accent2); color: var(--neon); }
+  #settings-panel {
+    position: fixed;
+    top: 56px;
+    left: 12px;
+    width: 270px;
+    background: rgba(18,18,26,0.96);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    z-index: 390;
+    display: none;
+    gap: 10px;
+    flex-direction: column;
+  }
+  #settings-panel.open { display: flex; }
+  #settings-panel h3 {
+    margin: 0;
+    font-size: 0.92rem;
+    color: var(--neon);
+  }
+  .set-row {
+    display: grid;
+    grid-template-columns: 62px 1fr 38px;
+    gap: 8px;
+    align-items: center;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .set-row input[type=range] { width: 100%; }
+  .set-row .val { text-align: right; color: var(--text); font-size: 0.75rem; }
+  .set-check {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--text);
+    padding-top: 3px;
+  }
+  #open-keybinds-btn {
+    margin-top: 4px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.82rem;
+  }
+  #open-keybinds-btn:hover { border-color: var(--accent2); color: var(--neon); }
+  /* Keybind / controls menu */
+  #keybind-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 4000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(6,6,12,0.7);
+    backdrop-filter: blur(2px);
+  }
+  #keybind-modal.open { display: flex; }
+  #keybind-box {
+    width: min(560px, 94vw);
+    max-height: 88vh;
+    overflow: auto;
+    background: rgba(18,18,26,0.98);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 18px 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+  }
+  #keybind-head { display: flex; align-items: center; justify-content: space-between; }
+  #keybind-head h3 { margin: 0; color: var(--neon); font-size: 1.05rem; }
+  #keybind-close {
+    width: 30px; height: 30px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface2);
+    color: var(--text); cursor: pointer; font-size: 0.9rem;
+  }
+  #keybind-close:hover { border-color: var(--accent2); color: var(--neon); }
+  #keybind-hint { color: var(--muted); font-size: 0.74rem; margin: 8px 0 12px; }
+  #keybind-grid-head, .keybind-row {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1fr 1fr;
+    gap: 8px;
+    align-items: center;
+  }
+  #keybind-grid-head {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    padding: 0 2px 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .keybind-row { padding: 5px 2px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .keybind-row .kb-label { font-size: 0.82rem; color: var(--text); }
+  .kb-slot {
+    padding: 7px 6px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.76rem;
+    text-align: center;
+    min-height: 32px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .kb-slot:hover { border-color: var(--accent2); color: var(--neon); }
+  .kb-slot.listening { border-color: var(--neon); color: var(--neon); animation: kbPulse 0.8s ease-in-out infinite; }
+  .kb-slot.empty { color: var(--muted); font-style: italic; }
+  @keyframes kbPulse { 0%,100% { box-shadow: 0 0 0 rgba(57,255,20,0); } 50% { box-shadow: 0 0 10px rgba(57,255,20,0.5); } }
+  #keybind-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 14px; }
+  #keybind-foot button {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.82rem;
+  }
+  #keybind-foot button:hover { border-color: var(--accent2); color: var(--neon); }
+  #keybind-foot .kb-primary { background: var(--accent2); color: #08080f; border-color: var(--accent2); font-weight: 600; }
+  /* Gamepad focus highlight */
+  .gp-focus {
+    outline: 3px solid #38bdf8 !important;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 3px rgba(56,189,248,0.45), 0 0 14px rgba(56,189,248,0.6) !important;
+    border-radius: 8px;
+  }
+
+  /* =========================================================
+     CRT TERMINAL OS  (menus rendered as an old CRT terminal)
+     ========================================================= */
+  /* Full-screen CRT filter: scanlines + vignette + flicker. Only shown over
+     menu/results/upgrade contexts (toggled by body.crt-active). */
+  #crt-fx { position: fixed; inset: 0; z-index: 350; pointer-events: none; display: none; }
+  body.crt-active #crt-fx { display: block; }
+  #crt-fx::before {
+    content: ""; position: absolute; inset: 0;
+    background: repeating-linear-gradient(to bottom,
+      rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.22) 3px, rgba(0,0,0,0.22) 4px);
+    background-size: 100% 4px;
+    animation: crtRoll 8s linear infinite;
+  }
+  #crt-fx::after {
+    content: ""; position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 130% 120% at 50% 50%, transparent 52%, rgba(0,0,0,0.55) 100%),
+      linear-gradient(90deg, rgba(255,0,60,0.05), rgba(0,255,120,0.03) 50%, rgba(0,80,255,0.05));
+    box-shadow: inset 0 0 160px rgba(0,0,0,0.85), inset 0 0 60px rgba(0,20,8,0.5);
+    animation: crtFlicker 4.5s steps(60) infinite;
+  }
+  @keyframes crtRoll { from { background-position: 0 0; } to { background-position: 0 8px; } }
+  @keyframes crtFlicker { 0%,100%{opacity:1} 3%{opacity:.86} 6%{opacity:1} 47%{opacity:.94} 48%{opacity:.99} 92%{opacity:.9} }
+
+  /* Terminal screen */
+  #crt-terminal {
+    position: fixed; inset: 0; z-index: 300; display: none;
+    flex-direction: column; box-sizing: border-box;
+    padding: 30px clamp(20px, 5vw, 90px);
+    background: radial-gradient(ellipse 120% 120% at 50% 45%, #041a0c 0%, #010a04 70%, #000 100%);
+    color: #5dffa0; font-family: 'Cascadia Mono','Consolas','Courier New',monospace;
+    font-size: clamp(13px, 1.5vw, 16px); line-height: 1.5;
+    text-shadow: 0 0 5px rgba(93,255,160,0.55), 0 0 2px rgba(93,255,160,0.9);
+    overflow: hidden; cursor: text;
+  }
+  #crt-terminal.on { display: flex; }
+  #term-version {
+    position: absolute; right: clamp(18px, 4vw, 70px); bottom: 12px;
+    font-size: clamp(10px, 1.1vw, 12px); color: #2f9e63; opacity: 0.65;
+    pointer-events: none; user-select: none; letter-spacing: 0.5px;
+    text-shadow: 0 0 4px rgba(47,158,99,0.5); z-index: 2;
+  }
+  #crt-terminal::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 30px/48px;
+    box-shadow: inset 0 0 180px rgba(0,0,0,0.92), inset 0 0 40px rgba(0,40,15,0.55);
+  }
+  .term-scroll { flex: 0 1 auto; min-height: 0; overflow-y: auto; white-space: pre-wrap; word-break: break-word; padding-right: 6px; }
+  .term-scroll::-webkit-scrollbar { width: 6px; }
+  .term-scroll::-webkit-scrollbar-thumb { background: rgba(93,255,160,0.35); border-radius: 3px; }
+  .term-line { min-height: 1.1em; }
+  .term-line.dim { color: #2f9e63; text-shadow: 0 0 4px rgba(47,158,99,0.5); }
+  .term-line.warn { color: #ffd166; text-shadow: 0 0 6px rgba(255,209,102,0.6); }
+  .term-line.err { color: #ff6b6b; text-shadow: 0 0 6px rgba(255,107,107,0.6); }
+  .term-line.hi { color: #eafff2; text-shadow: 0 0 8px rgba(180,255,210,0.9); }
+  .term-line.clickable { cursor: pointer; text-decoration: underline; }
+  .term-line.clickable:hover { color: #eafff2; text-shadow: 0 0 8px rgba(180,255,210,0.95); }
+  .term-input-line { display: flex; align-items: center; position: relative; margin-top: 0; }
+  .term-prompt { color: #39e07f; margin-right: 8px; white-space: pre; flex: 0 0 auto; }
+  .term-typed { white-space: pre; }
+  .term-cursor {
+    display: inline-block; width: 0.62em; height: 1.05em; margin-left: 1px;
+    background: #eafff2; box-shadow: 0 0 8px rgba(180,255,210,0.9);
+    vertical-align: text-bottom; animation: termBlink 1.05s steps(1) infinite;
+  }
+  @keyframes termBlink { 50% { opacity: 0; } }
+  #term-input {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; border: none; background: transparent; color: transparent;
+    font: inherit; caret-color: transparent; outline: none;
+  }
+
+  /* ============================================================
+     CRT WINDOW MANAGER — draggable / resizable phosphor windows.
+     Each menu opens as a floating window over the persistent terminal.
+     ============================================================ */
+  .crt-window {
+    position: fixed; z-index: 320;
+    display: none; flex-direction: column; overflow: hidden;
+    min-width: 220px; min-height: 120px;
+    background: radial-gradient(ellipse 130% 130% at 50% 0%, #062012 0%, #041a0c 72%, #02110a 100%);
+    color: #9dffc6;
+    font-family: 'Cascadia Mono','Consolas','Courier New',monospace;
+    font-size: 0.9rem;
+    border: 1px solid #1f7a45;
+    box-shadow: 0 0 0 1px rgba(93,255,160,0.15), 0 10px 40px rgba(0,0,0,0.6),
+                0 0 30px rgba(20,140,70,0.28), inset 0 0 60px rgba(0,40,18,0.5);
+    text-shadow: 0 0 4px rgba(93,255,160,0.35);
+    animation: crtWinPop .14s ease-out;
+  }
+  .crt-window.open { display: flex; }
+  .crt-window.focused {
+    box-shadow: 0 0 0 1px rgba(93,255,160,0.3), 0 12px 46px rgba(0,0,0,0.7),
+                0 0 42px rgba(30,200,100,0.42), inset 0 0 60px rgba(0,40,18,0.5);
+  }
+  @keyframes crtWinPop { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .crt-win-bar {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px 6px 10px; cursor: move; user-select: none;
+    background: linear-gradient(180deg, #0a3d20, #062815);
+    border-bottom: 1px solid #1f7a45;
+    color: #eafff2; text-shadow: 0 0 8px rgba(180,255,210,0.7);
+    font-size: 0.82rem; letter-spacing: 0.05em;
+  }
+  .crt-win-title { flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .crt-win-title::before { content: "\25AE "; color: #5dffa0; }
+  .crt-win-close {
+    flex: 0 0 auto; width: 22px; height: 18px; line-height: 15px; text-align: center;
+    background: transparent; color: #9dffc6; border: 1px solid #1f7a45; border-radius: 3px;
+    font-family: inherit; font-size: 0.85rem; cursor: pointer; padding: 0;
+  }
+  .crt-win-close:hover { background: #ff6b6b; color: #0a0402; border-color: #ff6b6b; box-shadow: 0 0 10px rgba(255,107,107,0.6); }
+  .crt-win-body {
+    flex: 1 1 auto; min-height: 0; overflow: auto; position: relative;
+    padding: 12px 14px;
+  }
+  .crt-win-body::-webkit-scrollbar { width: 7px; height: 7px; }
+  .crt-win-body::-webkit-scrollbar-thumb { background: rgba(93,255,160,0.3); border-radius: 3px; }
+  .crt-win-resize {
+    position: absolute; right: 0; bottom: 0; width: 16px; height: 16px;
+    cursor: nwse-resize; z-index: 3;
+    background: linear-gradient(135deg, transparent 45%, #1f7a45 45%, #1f7a45 55%, transparent 55%, transparent 68%, #1f7a45 68%, #1f7a45 78%, transparent 78%);
+  }
+  /* White "boot" screen shown while a window is launching, then it snaps to content. */
+  .crt-win-launch {
+    position: absolute; inset: 0; z-index: 6;
+    background: #f4fff8;
+    box-shadow: 0 0 42px rgba(255,255,255,0.85), inset 0 0 70px rgba(150,255,200,0.45);
+    opacity: 1; pointer-events: none;
+  }
+  .crt-window:not(.launching) .crt-win-launch { display: none; }
+</style>
+</head>
+<body>
+<!-- Startup gate: pick the game folder once so audio + saves work from a double-clicked file:// page. -->
+<div id="game-folder-gate" style="display:none;position:fixed;inset:0;z-index:100000;background:rgba(5,8,15,0.94);backdrop-filter:blur(3px);align-items:center;justify-content:center;font-family:system-ui,sans-serif;color:#e5e7eb">
+  <div style="max-width:460px;width:calc(100% - 40px);background:#0f1725;border:1px solid #26334d;border-radius:14px;padding:26px 28px;box-shadow:0 20px 60px rgba(0,0,0,0.5)">
+    <div style="font-size:1.35rem;font-weight:700;letter-spacing:0.5px;margin-bottom:6px">ROGUE RACER</div>
+    <div style="font-size:0.9rem;color:#94a3b8;line-height:1.55;margin-bottom:18px">
+      Select your <b>Racing Game</b> folder to enable engine audio and track saving.
+      The browser remembers it, so you only pick it once.
+    </div>
+    <button id="gate-connect" style="width:100%;background:#c084fc;color:#0b0f17;border:none;border-radius:9px;padding:12px;font-size:0.95rem;font-weight:600;cursor:pointer">📂 Select game folder</button>
+    <button id="gate-skip" style="width:100%;margin-top:10px;background:#1e293b;color:#e5e7eb;border:1px solid #26334d;border-radius:9px;padding:10px;font-size:0.85rem;cursor:pointer">Skip — play with limited audio / saves</button>
+    <div id="gate-status" style="font-size:0.78rem;color:#94a3b8;margin-top:14px;line-height:1.4"></div>
+  </div>
+</div>
+<div id="app">
+
+<div id="global-settings-anchor"></div>
+
+<div id="settings-panel">
+  <h3>Settings</h3>
+  <div class="set-row">
+    <span>Master</span>
+    <input id="set-master" type="range" min="0" max="100" step="1" value="100">
+    <span class="val" id="set-master-val">100</span>
+  </div>
+  <div class="set-row">
+    <span>Music</span>
+    <input id="set-music" type="range" min="0" max="100" step="1" value="70">
+    <span class="val" id="set-music-val">70</span>
+  </div>
+  <div class="set-row">
+    <span>FX</span>
+    <input id="set-fx" type="range" min="0" max="100" step="1" value="85">
+    <span class="val" id="set-fx-val">85</span>
+  </div>
+  <label class="set-check">
+    <span>Touch Controls</span>
+    <input id="set-touch-controls" type="checkbox" checked>
+  </label>
+  <button id="open-keybinds-btn" type="button">⌨ Controls</button>
+</div>
+
+<!-- KEYBIND / CONTROLS MENU -->
+<div id="keybind-modal">
+  <div id="keybind-box">
+    <div id="keybind-head">
+      <h3>Controls</h3>
+      <button id="keybind-close" type="button">✕</button>
+    </div>
+    <div id="keybind-hint">Click a slot, then press a key or controller button. Press Esc to cancel.</div>
+    <div id="keybind-grid-head">
+      <span>Action</span><span>Key</span><span>Alt Key</span><span>Controller</span>
+    </div>
+    <div id="keybind-rows"></div>
+    <div id="keybind-foot">
+      <button id="keybind-reset" type="button">Reset to defaults</button>
+      <button id="keybind-done" type="button" class="kb-primary">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOBBY -->
+<div id="lobby">
+  <div class="game-title">ROGUE RACER</div>
+  <div class="game-sub">Multiplayer · Roguelike · Racing</div>
+
+  <div class="lobby-card" id="lobby-main">
+    <h2>Choose your name</h2>
+    <input type="text" id="player-name" placeholder="Your racer name" maxlength="16" value="Racer" />
+    <div class="lobby-inline-grid">
+      <div>
+        <label for="car-color">Car Color</label>
+        <input type="color" id="car-color" value="#a855f7" />
+      </div>
+      <div>
+        <label>Paint Tag</label>
+        <div class="paint-tag-wrap">
+          <canvas id="paint-tag-canvas" width="48" height="48"></canvas>
+          <div class="paint-tag-tools">
+            <input type="color" id="paint-tag-color" value="#ffffff" style="width:26px;height:22px;padding:0;border:none;background:transparent">
+            <button id="paint-tag-clear" type="button">Clear</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider">start or join</div>
+
+    <button class="btn btn-primary" id="host-btn">🏁 Host a Race</button>
+    <button class="btn btn-secondary" id="join-btn-open">🔗 Join a Race</button>
+    <button class="btn btn-secondary" id="map-editor-btn" style="opacity:.8;font-size:.88rem">🗺️ Map Editor</button>
+
+    <div id="status-msg" class="status-msg"></div>
+  </div>
+
+  <div id="lobby-room-wrap" style="display:none;flex-direction:row;gap:16px;align-items:flex-start;justify-content:center;flex-wrap:wrap;max-width:96vw;">
+
+  <div class="lobby-card lobby-side-tab" id="lobby-customize" style="display:none;width:250px;">
+    <h2>🛠 Customize Racer</h2>
+    <div>
+      <label class="cz-label">Name</label>
+      <input type="text" id="lobby-c-name" placeholder="Your racer name" maxlength="16" value="Racer" />
+    </div>
+    <div class="lobby-inline-grid">
+      <div>
+        <label for="lobby-c-color">Color</label>
+        <input type="color" id="lobby-c-color" value="#a855f7" />
+      </div>
+      <div>
+        <label>Paint Tag</label>
+        <div class="paint-tag-wrap">
+          <canvas id="lobby-c-paint-canvas" width="48" height="48"></canvas>
+          <div class="paint-tag-tools">
+            <input type="color" id="lobby-c-paint-color" value="#ffffff" style="width:26px;height:22px;padding:0;border:none;background:transparent">
+            <button id="lobby-c-paint-clear" type="button">Clear</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="car-type-wrap">
+      <div class="car-type-label">Ship</div>
+      <div class="car-type-grid" id="lobby-c-ship-grid">
+        <button class="car-type-btn ship-type-btn active" data-car-type="drifter"><strong>Drifter</strong>Balanced all-round</button>
+        <button class="car-type-btn ship-type-btn" data-car-type="dragger"><strong>Dragger</strong>Shift specialist</button>
+        <button class="car-type-btn ship-type-btn" data-car-type="puncher"><strong>Puncher</strong>Crash-resistant</button>
+        <button class="car-type-btn ship-type-btn" data-car-type="needle"><strong>Needle</strong>Endless top-end</button>
+        <button class="car-type-btn ship-type-btn" data-car-type="baller"><strong>Baller</strong>Bouncy bruiser</button>
+        <button class="car-type-btn ship-type-btn" data-car-type="rotor"><strong>Rotor</strong>Propeller drafter</button>
+        <button class="car-type-btn ship-type-btn" data-car-type="coil"><strong>Coil</strong>Wall-arc battery</button>
+        <button class="car-type-btn ship-type-btn" data-car-type="screamer"><strong>Screamer</strong>Tunnel-vision honk</button>
+        <button class="car-type-btn ship-type-btn" data-car-type="holo"><strong>Holo</strong>Phase &amp; flip</button>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="lobby-c-apply" style="font-size:.9rem">Apply</button>
+    <div id="lobby-c-status" class="status-msg"></div>
+  </div>
+
+  <div class="lobby-card" id="lobby-host" style="display:none">
+    <h2>Your Room Code</h2>
+    <div class="room-code-display" id="room-code-display">......<small>click to copy</small></div>
+    <div class="lobby-inline-grid">
+      <div>
+        <label for="speed-class">Speed Class</label>
+        <select id="speed-class">
+          <option value="junkyard">Junkyard (0.7x)</option>
+          <option value="neighborhood" selected>Neighborhood (1x)</option>
+          <option value="city">City (1.3x)</option>
+          <option value="freeway">Freeway (2x)</option>
+          <option value="highway">Highway (2.5x)</option>
+          <option value="speedway">Speedway (4x)</option>
+          <option value="umbra">Umbra (9x)</option>
+        </select>
+      </div>
+      <div>
+        <label for="host-mode-indicator">Round Mode</label>
+        <input id="host-mode-indicator" type="text" value="Owner" readonly />
+      </div>
+      <div>
+        <label for="host-laps-input">Laps (1–20)</label>
+        <input id="host-laps-input" type="number" min="1" max="20" step="1" value="3" />
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-secondary" id="host-upload-map-btn" style="font-size:.86rem">📂 Upload Map to Queue</button>
+      <button class="btn btn-secondary" id="host-cycle-mode-btn" style="font-size:.86rem">Toggle Owner/Vote</button>
+    </div>
+    <input type="file" id="host-map-file" accept=".json" style="display:none" multiple>
+    <div>
+      <div style="font-size:.74rem;color:var(--muted);margin-bottom:4px">Map Queue (drag to reorder)</div>
+      <div id="host-map-queue" class="queue-list"></div>
+    </div>
+    <div>
+      <div style="font-size:.74rem;color:var(--muted);margin-bottom:4px">Pending Uploaded Maps</div>
+      <div id="host-pending-maps" class="pending-list"></div>
+    </div>
+    <div id="host-player-list" class="player-list"></div>
+    <div>
+      <div style="font-size:.74rem;color:var(--muted);margin-bottom:4px">Allowed Ships (click to toggle)</div>
+      <div class="car-type-grid" id="host-allowed-ships"></div>
+    </div>
+    <select id="host-map-pick" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px"></select>
+    <button class="btn btn-primary" id="start-race-btn" disabled>Waiting for players...</button>
+    <button class="btn btn-secondary" id="back-lobby-btn">← Back</button>
+    <div id="host-status" class="status-msg"></div>
+  </div>
+
+  <div class="lobby-card" id="lobby-join" style="display:none">
+    <h2>Enter Room Code</h2>
+    <input type="text" id="join-code" placeholder="room code" maxlength="48" style="text-transform:uppercase;letter-spacing:2px;font-family:monospace;font-size:1.2rem;text-align:center" />
+    <button class="btn btn-primary" id="join-confirm-btn">Join Race</button>
+    <div id="join-room-panel" style="display:none;gap:8px;flex-direction:column">
+      <button class="btn btn-secondary" id="ready-toggle-btn">Ready: No</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" id="guest-upload-map-btn" style="font-size:.86rem">⬆ Send Map for Queue</button>
+      </div>
+      <input type="file" id="guest-map-file" accept=".json" style="display:none" multiple>
+      <select id="guest-map-vote" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px"></select>
+    </div>
+    <button class="btn btn-secondary" id="back-lobby-btn2">← Back</button>
+    <div id="join-status" class="status-msg"></div>
+  </div>
+
+  <div class="lobby-card lobby-side-tab" id="lobby-tracks" style="display:none;width:250px;">
+    <h2>🗂 Track Library</h2>
+    <div style="font-size:.72rem;color:var(--muted);margin-bottom:2px">Drag a track into the Map Queue → or click ＋ to add.</div>
+    <div class="lib-hdr">📁 Local</div>
+    <div id="lib-local-list" class="lib-list"></div>
+    <div class="lib-hdr">🕒 History</div>
+    <div id="lib-history-list" class="lib-list"></div>
+    <button class="btn btn-secondary" id="lib-connect-folder-btn" style="font-size:.78rem;padding:6px 9px;margin-top:6px">📂 Connect folder…</button>
+    <div id="lib-folder-status" style="font-size:.66rem;color:var(--muted);line-height:1.3"></div>
+  </div>
+  </div>
+</div>
+
+<!-- MAP EDITOR -->
+<div id="screen-map-editor">
+  <div class="me-header">
+    <button class="btn btn-secondary" id="me-back-btn" style="padding:6px 13px;font-size:.8rem">← Back</button>
+    <h2>Map Editor</h2>
+    <span id="me-header-warn"></span>
+    <button class="btn btn-secondary" id="me-new-btn" style="font-size:.8rem">New</button>
+    <button class="btn btn-secondary" id="me-run-regression-btn" style="font-size:.8rem">🧪 Run Layer Tests</button>
+    <button class="btn btn-primary" id="me-test-btn" style="font-size:.8rem">🚗 Test Track</button>
+  </div>
+  <div class="me-body">
+    <div class="me-sidebar">
+      <div class="me-config">
+        <label style="font-size:.66rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Track Name</label>
+        <input id="me-map-name" placeholder="Map name" value="My Track" style="width:100%">
+        <select id="me-track-model" title="Track engine. V1 = classic single loop. V2 = branching splits (a section can fork into two full tracks that rejoin, recursively)." style="height:28px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);padding:0 8px;width:100%">
+          <option value="v1">Track Model: V1 (Loop)</option>
+          <option value="v2">Track Model: V2 (Splits)</option>
+        </select>
+        <button class="btn btn-secondary" id="me-save-to-local-btn" style="padding:6px 9px;font-size:.78rem">💾 Save to Local</button>
+        <button class="btn btn-secondary" id="me-import-track-btn" style="padding:6px 9px;font-size:.78rem">📥 Import .json</button>
+        <input type="file" id="me-import-input" accept=".json" style="display:none">
+        <button class="btn btn-secondary" id="me-connect-folder-btn" style="padding:6px 9px;font-size:.78rem">📂 Connect folder…</button>
+        <div id="me-folder-status" style="font-size:.68rem;color:var(--muted);line-height:1.3"></div>
+      </div>
+      <div class="me-list-hdr">📁 Local</div>
+      <div id="me-local-list" class="me-track-list"></div>
+      <div class="me-list-hdr">🕒 History · last 10</div>
+      <div id="me-history-list" class="me-track-list"></div>
+      <details class="me-config" style="border-top:1px solid var(--border)">
+        <summary style="font-size:.72rem;color:var(--muted);cursor:pointer">GitHub (legacy)</summary>
+        <label>GitHub Repo (owner/repo)</label>
+        <input id="me-repo" placeholder="user/rogue-racer-maps">
+        <label>Token (for saving to GitHub)</label>
+        <input type="password" id="me-token" placeholder="ghp_…">
+        <button class="btn btn-secondary" id="me-fetch-btn" style="padding:5px 9px;font-size:.78rem">Load Map List</button>
+        <div id="me-map-list"></div>
+      </details>
+    </div>
+    <div class="me-editor">
+      <div class="me-toolbar">
+        <div class="me-node-settings" style="border:none;background:transparent;padding:0;gap:6px;flex:1">
+          <div class="me-grp" id="me-grp-modes">
+            <span class="me-grp-title">Mode</span>
+            <button class="me-type-btn" id="me-mode-waypoint" title="Edit track nodes">Nodes</button>
+            <button class="me-type-btn" id="me-mode-wall" title="Paint wall behavior on track edges">Walls</button>
+            <button class="me-type-btn" id="me-mode-obstacle" title="Place obstacles">Obstacles</button>
+            <button class="me-type-btn" id="me-mode-powerup" title="Place item boxes">Items</button>
+            <button class="me-type-btn" id="me-mode-erase" title="Remove placed objects">Erase</button>
+          </div>
+          <div class="me-grp" id="me-grp-node">
+            <span id="me-selected-node" style="font-size:.7rem;color:var(--muted);min-width:74px">Node: none</span>
+            <button class="me-type-btn" data-type="road" title="Normal road">Road</button>
+            <button class="me-type-btn" data-type="ice" title="Ice track">Ice</button>
+            <button class="me-type-btn" data-type="river" title="River track">River</button>
+            <button class="me-type-btn" data-type="void" title="Void (fall gap)">Void</button>
+            <button class="me-check-btn" id="me-node-checkpoint" title="Checkpoint gate on this node">Checkpoint</button>
+            <button class="me-check-btn" id="me-node-slope" title="Layer slope threshold on this node">Slope</button>
+            <button class="me-type-btn" id="me-node-slope-rot-left" title="Rotate slope up-direction left">↺</button>
+            <span id="me-node-slope-angle" style="font-size:.7rem;color:var(--muted);min-width:34px;text-align:center">0°</span>
+            <button class="me-type-btn" id="me-node-slope-rot-right" title="Rotate slope up-direction right">↻</button>
+            <button class="me-check-btn" id="me-node-split" title="V2: fork this node into a second path that rejoins the next node">Split</button>
+            <span class="me-field" title="Support layer this node belongs to">
+              <label for="me-node-support-layer">Layer</label>
+              <input id="me-node-support-layer" type="number" step="1" value="0">
+            </span>
+            <span class="me-field">
+              <label for="me-node-width-range">Width</label>
+              <input id="me-node-width-range" type="range" min="40" max="180" step="2" value="80">
+              <input id="me-node-width" type="number" min="40" max="180" step="2" value="80">
+            </span>
+          </div>
+          <div class="me-grp" id="me-grp-wall" hidden>
+            <span class="me-grp-title">Wall</span>
+            <span class="me-field">
+              <select id="me-wall-mode">
+                <option value="solid">Solid</option>
+                <option value="bouncy">Bouncy</option>
+                <option value="open">Open</option>
+              </select>
+            </span>
+            <span class="me-field">
+              <label for="me-wall-side">Side</label>
+              <select id="me-wall-side">
+                <option value="both">Both</option>
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+              </select>
+            </span>
+            <span class="me-field">
+              <label for="me-wall-force">Force</label>
+              <input id="me-wall-force" type="number" min="20" max="300" step="5" value="120">
+            </span>
+            <span class="me-field">
+              <label for="me-wall-bounce">Bounce</label>
+              <input id="me-wall-bounce" type="number" min="0.2" max="2.0" step="0.05" value="1.0">
+            </span>
+          </div>
+          <div class="me-grp" id="me-grp-obstacle" hidden>
+            <span class="me-grp-title">Object</span>
+            <span class="me-field">
+              <select id="me-obstacle-type">
+                <option value="wall">Wall</option>
+                <option value="cone">Cone</option>
+                <option value="moving_platform">Moving Platform</option>
+                <option value="flowing_water">Flowing Water</option>
+                <option value="ice_track">Ice Track</option>
+                <option value="snow_pile">Snow Pile</option>
+                <option value="punch_glove">Punching Glove</option>
+                <option value="brick_wall">Brick Wall</option>
+                <option value="boost_pad">Boost Pad</option>
+                <option value="repair_pad">Repair Pad</option>
+              </select>
+            </span>
+            <span class="me-field" title="Auto-detected from the nearest track node when you place">
+              <label for="me-obstacle-layer">Layer·auto</label>
+              <input id="me-obstacle-layer" type="number" step="1" value="0">
+            </span>
+            <span class="me-field">
+              <label for="me-obstacle-rot-range">Rotate</label>
+              <input id="me-obstacle-rot-range" type="range" min="-180" max="180" step="1" value="0">
+              <input id="me-obstacle-rot" type="number" min="-180" max="180" step="1" value="0">
+            </span>
+            <span class="me-field">
+              <label for="me-obstacle-scale-range">Scale</label>
+              <input id="me-obstacle-scale-range" type="range" min="40" max="220" step="1" value="100">
+              <input id="me-obstacle-scale" type="number" min="40" max="220" step="1" value="100">
+            </span>
+          </div>
+          <span id="me-mode-hint"></span>
+        </div>
+      </div>
+      <div class="me-canvas-wrap"><canvas id="me-canvas"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- GAME -->
+<div id="game">
+  <div id="hud">
+    <div class="hud-item">
+      <span class="hud-label">LAP</span>
+      <span id="lap-display" class="hud-val">1/3</span>
+    </div>
+    <span class="hud-sep">|</span>
+    <div class="hud-item">
+      <span class="hud-label">POS</span>
+      <span id="pos-display" class="hud-val">1st</span>
+    </div>
+    <span class="hud-sep">|</span>
+    <div class="hud-item">
+      <span class="hud-label">SPEED</span>
+      <span id="speed-display" class="hud-val">0</span>
+    </div>
+    <span class="hud-sep">|</span>
+    <div class="hud-item">
+      <span class="hud-label">HEALTH</span>
+      <span id="health-display" class="hud-val">100%</span>
+    </div>
+    <span class="hud-sep" id="special-sep" style="display:none">|</span>
+    <div class="hud-item" id="special-item" style="display:none">
+      <span class="hud-label" id="special-label">BATTERY</span>
+      <span id="special-display" class="hud-val">0%</span>
+    </div>
+    <span class="hud-sep">|</span>
+    <div class="hud-item">
+      <span class="hud-label">UPGRADES</span>
+      <span id="upgrades-display" class="hud-val">—</span>
+    </div>
+    <span class="hud-sep">|</span>
+    <div class="hud-item">
+      <span class="hud-label">ENGINE</span>
+      <span id="engine-mode-display" class="hud-val">INIT</span>
+      <button id="engine-load-btn" class="engine-load-btn" style="display:none">LOAD FILE</button>
+      <input id="engine-file-input" type="file" accept=".ogg,.wav,audio/ogg,audio/wav" style="display:none">
+    </div>
+    <div id="hud-settings-anchor"></div>
+    <div id="powerup-slot">
+      <span class="hud-label">ITEM:</span>
+      <div class="powerup-badge" id="powerup-badge">none</div>
+      <span style="font-size:0.75rem;color:var(--muted)">[E]</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;padding-left:12px;border-left:1px solid var(--border)">
+      <span class="hud-label" style="font-size:0.75rem">ZOOM</span>
+      <input type="range" id="zoom-slider" min="0.15" max="1.4" step="0.05" value="0.55"
+             style="width:80px;accent-color:#a855f7;cursor:pointer;background:transparent">
+    </div>
+  </div>
+  <div id="canvas-wrap">
+    <canvas id="gameCanvas"></canvas>
+    <canvas id="minimap" width="140" height="140"></canvas>
+    <div id="race-status-panel" aria-hidden="true">
+      <div id="race-timer">00:00</div>
+      <div id="leaderboard"></div>
+    </div>
+    <div id="event-feed" aria-hidden="true"></div>
+    <div id="checkpoint-strip" aria-hidden="true"></div>
+    <div id="controls-hint">
+      W/↑ Accelerate &nbsp; S/↓ Brake<br>
+      A/← Turn left &nbsp; D/→ Turn right<br>
+      E Use item &nbsp;·&nbsp; SPACE Drift &nbsp;·&nbsp; SHIFT Velocity Lock<br>
+      Hold R Reset (self-destruct)<br>
+      🎮 Stick steer · RT gas · LT brake · A drift · X item · LB lock · hold Y reset
+    </div>
+    <div id="spectate-bar">
+      <span class="sp-eye">👁 Spectating</span>
+      <button class="sp-btn" id="spectate-prev">◀</button>
+      <b id="spectate-name">—</b>
+      <button class="sp-btn" id="spectate-next">▶</button>
+      <button class="sp-btn sp-free" id="spectate-self">Free cam</button>
+    </div>
+  </div>
+</div>
+
+<!-- UPGRADE SCREEN -->
+<div id="upgrade-screen">
+  <h2>⚡ Choose an Upgrade</h2>
+  <p>Complete lap — pick one power-up to keep</p>
+  <div class="upgrade-cards" id="upgrade-cards"></div>
+</div>
+
+<!-- UPGRADE PAUSE OVERLAY (others choosing) -->
+<div id="upgrade-pause-overlay">
+  <div class="up-title" id="up-pause-title">Choosing an upgrade!</div>
+  <div class="up-timer" id="up-pause-timer">5s</div>
+  <div class="up-sub">Game resumes when the timer ends</div>
+</div>
+
+<!-- RESULTS SCREEN -->
+<div id="results-screen">
+  <h2 id="results-title">Race Over!</h2>
+  <div id="results-podium"></div>
+  <div class="results-list" id="results-list"></div>
+  <div id="results-stats"></div>
+  <div id="results-next" style="display:none;color:var(--text);font-size:.95rem;margin-top:4px"></div>
+  <div id="results-ship-pick" style="display:none;flex-direction:column;gap:6px;align-items:center;margin-top:2px">
+    <div class="rs-label">🚀 Choose your ship for the next race</div>
+    <div class="car-type-grid" id="results-ship-grid"></div>
+  </div>
+  <div id="results-host-settings" style="display:none;flex-direction:column;gap:8px;align-items:center;margin-top:2px">
+    <div class="rs-label">⚙ Host match settings</div>
+    <div class="rs-settings-row">
+      <label>Speed
+        <select id="results-speed-class">
+          <option value="junkyard">Junkyard (0.7x)</option>
+          <option value="neighborhood">Neighborhood (1x)</option>
+          <option value="city">City (1.3x)</option>
+          <option value="freeway">Freeway (2x)</option>
+          <option value="highway">Highway (2.5x)</option>
+          <option value="speedway">Speedway (4x)</option>
+          <option value="umbra">Umbra (9x)</option>
+        </select>
+      </label>
+      <label>Laps
+        <input id="results-laps" type="number" min="1" max="20" step="1" value="3" style="width:64px">
+      </label>
+      <button class="btn btn-secondary" id="results-mode-btn" style="font-size:.8rem;width:auto;padding:6px 10px">Mode: Owner</button>
+    </div>
+  </div>
+  <div id="results-ready-row" style="display:none;gap:10px;justify-content:center;align-items:center;margin-top:4px">
+    <button class="btn btn-secondary" id="results-ready-btn" style="width:160px">Ready</button>
+    <span id="results-ready-count" style="color:var(--muted);font-size:.82rem"></span>
+  </div>
+  <div id="results-host-row" style="display:none;gap:10px;justify-content:center;margin-top:2px">
+    <button class="btn btn-primary" id="results-next-btn" style="width:160px">Next Track ▶</button>
+    <button class="btn btn-secondary" id="results-menu-btn" style="width:160px">← Back to Menu</button>
+  </div>
+  <button class="btn btn-primary" style="width:200px;margin-top:8px" id="play-again-btn">Play Again</button>
+  <button class="btn btn-secondary" style="width:200px;margin-top:8px;display:none" id="results-editor-btn">← Back to Map Maker</button>
+</div>
+
+<!-- CRT TERMINAL OS -->
+<div id="crt-terminal">
+  <div class="term-scroll" id="term-scroll"></div>
+  <div class="term-input-line" id="term-input-line">
+    <span class="term-prompt" id="term-prompt">&gt;</span><span class="term-typed" id="term-typed"></span><span class="term-cursor"></span>
+    <input id="term-input" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
+  </div>
+  <div id="term-version"></div>
+</div>
+<div id="crt-fx"></div>
+
+</div>
+
+<script>
+// @@BUNDLE@@
+</script>
+</body>
+</html>
