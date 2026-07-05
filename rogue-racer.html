@@ -16789,6 +16789,101 @@ function runLayerSystemRegressionTests() {
     }});
   }
 
+  // ---------- full ship customization window (decals, tag toggle, exhaust colors) ----------
+  // Commits the extended customization by writing the G.selected* fields and calling
+  // getLobbyProfileInput(), which persists locally and syncs to the room.
+  function commitShipCustomize(){
+    if (typeof getLobbyProfileInput === 'function') getLobbyProfileInput();
+  }
+  function openShipCustomize(){
+    return openWindow('shipcustomize', 'SHIP CUSTOMIZE', { width: 300, height: 430, minW: 272, minH: 360, onOpen: (w) => {
+      const body = w.body; body.innerHTML = '';
+      const me = G.players[G.myId];
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:flex;flex-direction:column;gap:12px;';
+      const label = (t) => { const d = document.createElement('div'); d.textContent = t; d.style.cssText = 'font-size:0.66rem;color:#6fdc95;letter-spacing:0.05em;text-transform:uppercase;opacity:0.85;'; return d; };
+      const row = () => { const d = document.createElement('div'); d.style.cssText = 'display:flex;gap:8px;align-items:center;'; return d; };
+
+      // --- exhaust smoke color ---
+      const smokeCur = (me && me.smokeColor) || G.selectedSmokeColor || '';
+      const smokeChk = document.createElement('input'); smokeChk.type = 'checkbox'; smokeChk.checked = !!smokeCur;
+      const smokeInp = document.createElement('input'); smokeInp.type = 'color'; smokeInp.value = smokeCur || '#9aa0a6';
+      smokeInp.style.cssText = 'width:40px;height:26px;padding:0;border:1px solid #1f7a45;background:transparent;cursor:pointer;';
+      const smokeTxt = document.createElement('span'); smokeTxt.textContent = 'custom exhaust smoke'; smokeTxt.style.cssText = 'font-size:0.72rem;color:#c9ffd8;';
+      const smokeRow = row(); smokeRow.appendChild(smokeChk); smokeRow.appendChild(smokeInp); smokeRow.appendChild(smokeTxt);
+
+      // --- boost trail color ---
+      const trailCur = (me && me.trailColor) || G.selectedTrailColor || '';
+      const trailChk = document.createElement('input'); trailChk.type = 'checkbox'; trailChk.checked = !!trailCur;
+      const trailInp = document.createElement('input'); trailInp.type = 'color'; trailInp.value = trailCur || '#ff8a1e';
+      trailInp.style.cssText = 'width:40px;height:26px;padding:0;border:1px solid #1f7a45;background:transparent;cursor:pointer;';
+      const trailTxt = document.createElement('span'); trailTxt.textContent = 'custom boost trail'; trailTxt.style.cssText = 'font-size:0.72rem;color:#c9ffd8;';
+      const trailRow = row(); trailRow.appendChild(trailChk); trailRow.appendChild(trailInp); trailRow.appendChild(trailTxt);
+
+      // --- tag toggle ---
+      const tagChk = document.createElement('input'); tagChk.type = 'checkbox';
+      tagChk.checked = (me ? me.showTag !== false : G.selectedShowTag !== false);
+      const tagTxt = document.createElement('span'); tagTxt.textContent = 'show tag beside my name'; tagTxt.style.cssText = 'font-size:0.72rem;color:#c9ffd8;';
+      const tagRow = row(); tagRow.appendChild(tagChk); tagRow.appendChild(tagTxt);
+
+      // --- decal ---
+      let decalData = (me && me.decal) || G.selectedDecal || '';
+      const decalPreview = document.createElement('div');
+      decalPreview.style.cssText = 'width:72px;height:72px;border:1px solid #1f7a45;border-radius:4px;background:#04170c center/contain no-repeat;box-shadow:inset 0 0 14px rgba(0,0,0,0.6);flex:0 0 auto;';
+      function refreshDecalPreview(){ decalPreview.style.backgroundImage = decalData ? ('url(' + decalData + ')') : 'none'; }
+      refreshDecalPreview();
+      const fileInp = document.createElement('input'); fileInp.type = 'file'; fileInp.accept = 'image/*'; fileInp.style.display = 'none';
+      const uploadBtn = tagWinBtn('Upload'); const removeBtn = tagWinBtn('Remove');
+      uploadBtn.onclick = () => fileInp.click();
+      removeBtn.onclick = () => { decalData = ''; refreshDecalPreview(); };
+      fileInp.onchange = () => {
+        const f = fileInp.files && fileInp.files[0]; if (!f) return;
+        const rd = new FileReader();
+        rd.onload = () => {
+          const img = new Image();
+          img.onload = () => {
+            // Downscale to bound the synced payload; decals are clipped to the hull.
+            const S = 256, cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+            cv.getContext('2d').drawImage(img, 0, 0, S, S);
+            decalData = cv.toDataURL('image/png');
+            refreshDecalPreview();
+          };
+          img.src = rd.result;
+        };
+        rd.readAsDataURL(f);
+      };
+      const decalBtns = document.createElement('div'); decalBtns.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
+      decalBtns.appendChild(uploadBtn); decalBtns.appendChild(removeBtn);
+      const decalRow = row(); decalRow.appendChild(decalPreview); decalRow.appendChild(decalBtns); decalRow.appendChild(fileInp);
+      const decalHint = document.createElement('div'); decalHint.textContent = 'decal shows only over the ship hull'; decalHint.style.cssText = 'font-size:0.62rem;color:#6fdc95;opacity:0.7;';
+
+      // --- shortcuts to the other windows ---
+      const links = document.createElement('div'); links.style.cssText = 'display:flex;gap:8px;';
+      const colorBtn = tagWinBtn('Color'); colorBtn.onclick = () => openColorPicker();
+      const tagDrawBtn = tagWinBtn('Tag'); tagDrawBtn.onclick = () => openTagDraw();
+      links.appendChild(colorBtn); links.appendChild(tagDrawBtn);
+
+      const applyBtn = tagWinBtn('Apply'); applyBtn.style.color = '#eafff0'; applyBtn.style.borderColor = '#39ff14';
+      applyBtn.onclick = () => {
+        G.selectedSmokeColor = smokeChk.checked ? smokeInp.value : '';
+        G.selectedTrailColor = trailChk.checked ? trailInp.value : '';
+        G.selectedDecal = decalData || '';
+        G.selectedShowTag = !!tagChk.checked;
+        commitShipCustomize();
+        print('ship customization applied', 'hi');
+        closeWindow('shipcustomize');
+      };
+
+      wrap.appendChild(label('Exhaust'));
+      wrap.appendChild(smokeRow); wrap.appendChild(trailRow);
+      wrap.appendChild(label('Tag')); wrap.appendChild(tagRow);
+      wrap.appendChild(label('Decal')); wrap.appendChild(decalRow); wrap.appendChild(decalHint);
+      wrap.appendChild(label('More')); wrap.appendChild(links);
+      wrap.appendChild(applyBtn);
+      body.appendChild(wrap);
+    }});
+  }
+
   // ---------- car color (command + picker window) ----------
   function applyColor(hex){
     const v = String(hex).toLowerCase();
