@@ -56,7 +56,7 @@ function claimUsername(name, cb) {
 function sendToUsername(username, message, onFail) {
   const u = sanitizeUsername(username);
   if (u.length < 3) { if (onFail) onFail('invalid username'); return; }
-  if (!socialPeer || !socialReady) { if (onFail) onFail('social layer not ready yet — try again in a moment'); return; }
+  if (!socialPeer || !socialReady) { resetSocialLayer(); if (onFail) onFail('social layer not ready — resetting it, try again in a moment'); return; }
   let done = false, conn;
   try { conn = socialPeer.connect(usernamePeerId(u), { reliable: true }); }
   catch (e) { if (onFail) onFail('could not reach that user'); return; }

@@ -5154,6 +5154,24 @@ function initSocialPeerAnonymous() {
   _attachSocialPeerHandlers(p, false);
 }
 
+// Force a full teardown + relaunch of the social layer. Called when an action finds
+// the layer unready — instead of just failing forever, we destroy the dead peer and
+// spin up a fresh one so the next attempt has a working connection. Debounced so a
+// burst of failed actions can't thrash the broker with new peers.
+let socialResetAt = 0;
+function resetSocialLayer() {
+  const now = Date.now();
+  if (now - socialResetAt < 5000) return;
+  socialResetAt = now;
+  socialReady = false;
+  socialOnCanonicalId = false;
+  if (socialReclaimTimer) { clearInterval(socialReclaimTimer); socialReclaimTimer = null; }
+  try { if (socialPeer) socialPeer.destroy(); } catch (_) {}
+  socialPeer = null;
+  socialInConns = [];
+  initSocialPeer();
+}
+
 // While on the anonymous fallback, periodically probe whether the canonical id
 // has freed up (stale broker claims expire in ~a minute). When it has, swap over.
 function scheduleCanonicalIdReclaim() {
@@ -5265,7 +5283,7 @@ function handleSocialData(d, conn) {
 
 // One-shot message to a friend's social peer (friend requests / removals / invites).
 function friendSend(targetFriendId, message, onFail) {
-  if (!socialPeer || !socialReady) { if (onFail) onFail('social layer not ready yet \u2014 try again in a moment'); return; }
+  if (!socialPeer || !socialReady) { resetSocialLayer(); if (onFail) onFail('social layer not ready \u2014 resetting it, try again in a moment'); return; }
   let done = false, conn;
   try { conn = socialPeer.connect(friendPeerId(targetFriendId), { reliable: true }); }
   catch (e) { if (onFail) onFail('could not reach friend'); return; }
@@ -5338,7 +5356,7 @@ function claimUsername(name, cb) {
 function sendToUsername(username, message, onFail) {
   const u = sanitizeUsername(username);
   if (u.length < 3) { if (onFail) onFail('invalid username'); return; }
-  if (!socialPeer || !socialReady) { if (onFail) onFail('social layer not ready yet — try again in a moment'); return; }
+  if (!socialPeer || !socialReady) { resetSocialLayer(); if (onFail) onFail('social layer not ready — resetting it, try again in a moment'); return; }
   let done = false, conn;
   try { conn = socialPeer.connect(usernamePeerId(u), { reliable: true }); }
   catch (e) { if (onFail) onFail('could not reach that user'); return; }
