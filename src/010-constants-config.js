@@ -513,24 +513,24 @@ function mkShip(name, shape, r, items, extra) {
 }
 
 Object.assign(CAR_TYPES, {
-  tez:       mkShip('Tez', 'drifter', { accel: 7, handling: 7, top: 6, armor: 6, fire: 7 },
+  tez:       mkShip('Tez', 'tez', { accel: 7, handling: 7, top: 6, armor: 6, fire: 7 },
                { missile: 5, machinegun: 10, mine: 8, ghoul: 3, boost: 5, repair: 3, shield: 5 }),
-  kiph:      mkShip('Kiph', 'dragger', { accel: 5, handling: 7, top: 9, armor: 3, fire: 5 },
+  kiph:      mkShip('Kiph', 'kiph', { accel: 5, handling: 7, top: 9, armor: 3, fire: 5 },
                { emp: 3, mine: 5, machinegun: 8, boost: 5, shield: 5, ball: 3, repair: 5 }),
-  huntlen:   mkShip('Huntlen', 'puncher', { accel: 6, handling: 8, top: 4, armor: 10, fire: 8 },
+  huntlen:   mkShip('Huntlen', 'huntlen', { accel: 6, handling: 8, top: 4, armor: 10, fire: 8 },
                { missile: 8, emp: 2, mine: 8, machinegun: 8, boost: 3, shield: 7, shell: 7 }),
-  gleenixus: mkShip('Gleen Ixus', 'needle', { accel: 7, handling: 4, top: 7, armor: 8, fire: 3 },
+  gleenixus: mkShip('Gleen Ixus', 'gleenixus', { accel: 7, handling: 4, top: 7, armor: 8, fire: 3 },
                { deathray: 2, drain: 5, oil: 5, ghoul: 2, machinegun: 4, boost: 9, shield: 4, missile: 7, repair: 1 }),
-  scrynell:  mkShip('Scrynell', 'baller', { accel: 3, handling: 7, top: 10, armor: 5, fire: 7 },
+  scrynell:  mkShip('Scrynell', 'scrynell', { accel: 3, handling: 7, top: 10, armor: 5, fire: 7 },
                { ball: 7, drain: 6, mine: 6, machinegun: 10, repair: 4, boost: 3, missile: 4 }),
-  exendios:  mkShip('Exen Dios', 'rotor', { accel: 6, handling: 5, top: 7, armor: 5, fire: 10 },
+  exendios:  mkShip('Exen Dios', 'exendios', { accel: 6, handling: 5, top: 7, armor: 5, fire: 10 },
                { machinegun: 10, missile: 7, drain: 4, ghoul: 7, flipper: 3, deathray: 2 },
                { missileCount: 2 }),
-  vurn:      mkShip('Vurn', 'coil', { accel: 5, handling: 6, top: 5, armor: 9, fire: 6 },
+  vurn:      mkShip('Vurn', 'vurn', { accel: 5, handling: 6, top: 5, armor: 9, fire: 6 },
                { mine: 8, shield: 8, emp: 6, machinegun: 5, repair: 6, missile: 4, boost: 3 }),
-  kessa:     mkShip('Kessa', 'screamer', { accel: 6, handling: 10, top: 6, armor: 3, fire: 5 },
+  kessa:     mkShip('Kessa', 'kessa', { accel: 6, handling: 10, top: 6, armor: 3, fire: 5 },
                { boost: 8, flipper: 7, ghoul: 5, oil: 6, repair: 5, mine: 4, emp: 4 }),
-  draxil:    mkShip('Draxil', 'holo', { accel: 8, handling: 5, top: 8, armor: 4, fire: 9 },
+  draxil:    mkShip('Draxil', 'draxil', { accel: 8, handling: 5, top: 8, armor: 4, fire: 9 },
                { machinegun: 9, missile: 8, deathray: 3, drain: 5, mine: 5, boost: 6, shield: 3 }),
 });
 

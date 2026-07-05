@@ -1610,6 +1610,125 @@ function drawCarSilhouette(ctx, shape, w, h) {
     ctx.fill();
     return;
   }
+  // ── Regular roster silhouettes (nose points up / -y; all symmetric on x). ──
+  if (shape === 'tez') {
+    // Forward-opening "catcher" bracket: two prongs reaching ahead off a solid tail.
+    ctx.beginPath();
+    ctx.moveTo(-w*0.5, -h*0.5);
+    ctx.lineTo(-w*0.5, h*0.5);
+    ctx.lineTo(w*0.5, h*0.5);
+    ctx.lineTo(w*0.5, -h*0.5);
+    ctx.lineTo(w*0.22, -h*0.5);
+    ctx.lineTo(w*0.22, -h*0.05);
+    ctx.lineTo(-w*0.22, -h*0.05);
+    ctx.lineTo(-w*0.22, -h*0.5);
+    ctx.closePath();
+    ctx.fill();
+    return;
+  }
+  if (shape === 'kiph') {
+    // Slim swept dart with a shallow rear notch.
+    ctx.beginPath();
+    ctx.moveTo(0, -h/2 - 5);
+    ctx.lineTo(w*0.42, h/2);
+    ctx.lineTo(0, h*0.22);
+    ctx.lineTo(-w*0.42, h/2);
+    ctx.closePath();
+    ctx.fill();
+    return;
+  }
+  if (shape === 'huntlen') {
+    // Beefy fortress hexagon (front + rear bevels).
+    ctx.beginPath();
+    ctx.moveTo(-w*0.28, -h*0.5);
+    ctx.lineTo(w*0.28, -h*0.5);
+    ctx.lineTo(w*0.5, -h*0.16);
+    ctx.lineTo(w*0.5, h*0.28);
+    ctx.lineTo(w*0.28, h*0.5);
+    ctx.lineTo(-w*0.28, h*0.5);
+    ctx.lineTo(-w*0.5, h*0.28);
+    ctx.lineTo(-w*0.5, -h*0.16);
+    ctx.closePath();
+    ctx.fill();
+    return;
+  }
+  if (shape === 'gleenixus') {
+    // Arrowhead with a central spine tail (an "→" glyph).
+    ctx.beginPath();
+    ctx.moveTo(0, -h/2 - 3);
+    ctx.lineTo(w*0.48, h*0.02);
+    ctx.lineTo(w*0.16, h*0.02);
+    ctx.lineTo(w*0.13, h*0.5);
+    ctx.lineTo(-w*0.13, h*0.5);
+    ctx.lineTo(-w*0.16, h*0.02);
+    ctx.lineTo(-w*0.48, h*0.02);
+    ctx.closePath();
+    ctx.fill();
+    return;
+  }
+  if (shape === 'scrynell') {
+    // Smooth teardrop wisp.
+    ctx.beginPath();
+    ctx.moveTo(0, -h/2 - 5);
+    ctx.quadraticCurveTo(w*0.52, -h*0.1, w*0.3, h*0.5);
+    ctx.lineTo(-w*0.3, h*0.5);
+    ctx.quadraticCurveTo(-w*0.52, -h*0.1, 0, -h/2 - 5);
+    ctx.closePath();
+    ctx.fill();
+    return;
+  }
+  if (shape === 'exendios') {
+    // Swept-wing starfighter with a rear V-notch.
+    ctx.beginPath();
+    ctx.moveTo(0, -h/2 - 5);
+    ctx.lineTo(w*0.5, h*0.45);
+    ctx.lineTo(w*0.16, h*0.24);
+    ctx.lineTo(0, h*0.5);
+    ctx.lineTo(-w*0.16, h*0.24);
+    ctx.lineTo(-w*0.5, h*0.45);
+    ctx.closePath();
+    ctx.fill();
+    return;
+  }
+  if (shape === 'vurn') {
+    // Sturdy rounded lozenge hull.
+    ctx.beginPath();
+    ctx.moveTo(0, -h/2 - 2);
+    ctx.quadraticCurveTo(w*0.56, -h*0.28, w*0.5, h*0.18);
+    ctx.quadraticCurveTo(w*0.45, h*0.5, 0, h*0.5);
+    ctx.quadraticCurveTo(-w*0.45, h*0.5, -w*0.5, h*0.18);
+    ctx.quadraticCurveTo(-w*0.56, -h*0.28, 0, -h/2 - 2);
+    ctx.closePath();
+    ctx.fill();
+    return;
+  }
+  if (shape === 'kessa') {
+    // Nimble deep-delta with a sharp needle nose.
+    ctx.beginPath();
+    ctx.moveTo(0, -h/2 - 6);
+    ctx.lineTo(w*0.26, -h*0.04);
+    ctx.lineTo(w*0.5, h*0.5);
+    ctx.lineTo(w*0.12, h*0.26);
+    ctx.lineTo(-w*0.12, h*0.26);
+    ctx.lineTo(-w*0.5, h*0.5);
+    ctx.lineTo(-w*0.26, -h*0.04);
+    ctx.closePath();
+    ctx.fill();
+    return;
+  }
+  if (shape === 'draxil') {
+    // Aggressive barbed dagger (glass cannon).
+    ctx.beginPath();
+    ctx.moveTo(0, -h/2 - 7);
+    ctx.lineTo(w*0.3, h*0.08);
+    ctx.lineTo(w*0.5, h*0.5);
+    ctx.lineTo(0, h*0.28);
+    ctx.lineTo(-w*0.5, h*0.5);
+    ctx.lineTo(-w*0.3, h*0.08);
+    ctx.closePath();
+    ctx.fill();
+    return;
+  }
   // drifter default
   ctx.beginPath();
   ctx.roundRect(-w/2, -h/2, w, h, 3);
