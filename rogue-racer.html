@@ -5117,6 +5117,15 @@ function _attachSocialPeerHandlers(peerObj, isCanonical) {
       }, 4000);
     }
   });
+  // If the social peer fully closes (a crash, or the broker destroying it), relaunch
+  // the whole social layer instead of silently staying dead — otherwise friends,
+  // presence and invites never come back until a page reload.
+  peerObj.on('close', () => {
+    if (socialPeer !== peerObj) return; // a newer peer already replaced this one
+    socialReady = false;
+    socialPeer = null;
+    setTimeout(() => { if (!socialPeer) initSocialPeer(); }, 1500);
+  });
   peerObj.on('connection', (conn) => {
     socialInConns.push(conn);
     conn.on('open', () => { try { conn.send(myPresence()); } catch (_) {} });
