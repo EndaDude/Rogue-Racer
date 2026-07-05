@@ -28,11 +28,11 @@ The game and the native app ship on **separate tracks**:
 `desktop/sync-dist.ps1` assembles the Tauri `dist/`: `bootstrap.html`→`index.html` (entry point), `rogue-racer.html`→`game.html` (offline fallback), plus `Audio/`. Run it before `cargo tauri build`.
 
 ### Version numbers
-`GAME_VERSION` is a `const` near the top of the `<script>` in `rogue-racer.html` (~line 1829), shown on the CRT terminal. Bump it on every game change you ship — it's how players confirm the self-updating loader pulled the new copy. Keep it in sync with `version` in `desktop/src-tauri/tauri.conf.json` when doing a real *app* release, but note the game version ships independently of the app version. Current: `0.1.6`.
+`GAME_VERSION` is a `const` at the top of [src/010-constants-config.js](src/010-constants-config.js), shown on the CRT terminal. Bump it on every game change you ship (then rebuild) — it's how players confirm the self-updating loader pulled the new copy. Keep it in sync with `version` in `desktop/src-tauri/tauri.conf.json` when doing a real *app* release, but note the game version ships independently of the app version. Current: `0.1.6`.
 
 ## Collaboration & branching strategy (READ THIS — `main` has been clobbered before)
 
-This repo has **no branch protection** and contributors have historically pushed straight to `main`. Because the whole game is one ~17.5k-line file, two people editing in parallel and pushing don't merge cleanly — **whoever pushes last silently overwrites the other's work.** A batch of features has already been lost this way (see the "lost in a merge" note in [docs/features/troy-feature.md](docs/features/troy-feature.md)). Treat `main` as shared, breakable state.
+This repo has **no branch protection** and contributors have historically pushed straight to `main`. When the whole game was one ~17.5k-line file, two people editing in parallel and pushing didn't merge cleanly — **whoever pushed last silently overwrote the other's work.** A batch of features was already lost this way (see the "lost in a merge" note in [docs/features/troy-feature.md](docs/features/troy-feature.md)). The `src/` split (below) removes most of that conflict surface, but the discipline still matters: the generated `rogue-racer.html` is one file, and `main` is shared, breakable state.
 
 **Branching model (lightweight, GitHub-flow):**
 - `main` = what ships to players (the loader pulls `rogue-racer.html` from it). Keep it working.
@@ -46,29 +46,34 @@ This repo has **no branch protection** and contributors have historically pushed
 
 **If work goes missing:** check `git reflog`, other remote branches (`git branch -a`), and any `docs/*.html` backup copies before rebuilding by hand.
 
-## Planned: split the monolith into a bundled `src/`
+## Source layout: `src/` → bundled `rogue-racer.html`
 
-The single-file layout is the *root cause* of the `main` clobbering — one file means parallel edits always conflict. The plan is to split the inline `<script>` into per-subsystem `.js` files and **concatenate them back into a single `rogue-racer.html`** with a tiny `bun build.ts` (Bun runtime, no ES-module refactor), so the ship model is unchanged. **Not yet implemented — until then the game is still the one file and all single-file rules above apply.**
+The single-file layout was the *root cause* of the `main` clobbering — one file means parallel edits always conflict. That's now fixed: the game code is split into per-subsystem files under [src/](src/) and **concatenated back into the single `rogue-racer.html`** by `bun build.ts` (plain concatenation, one shared global scope — deliberately **not** ES modules, so no `import`/`export` refactor). The built file is byte-for-byte what the old inline `<script>` was, so the ship model is unchanged.
 
-Full plan, file layout, and phases: **[docs/features/rebuild-plan.md](docs/features/rebuild-plan.md)**.
+- **Edit `src/`, never `rogue-racer.html`** (it's generated). Sections are `src/NNN-*.js`, numbered in load order (config/state first, render/terminal last); the DOM/CSS/`<head>` live in `src/index.html`.
+- `bun run dev` (hot reload) or `bun run build` (one-shot) regenerate the artifact; `bun run hooks` installs the stale-artifact guard.
+- Two people editing different `src/` files no longer conflict — this is the whole point.
 
-## Architecture of rogue-racer.html
+Full context, file map, and phases: **[docs/features/rebuild-plan.md](docs/features/rebuild-plan.md)** and **[src/README.md](src/README.md)**.
 
-Everything lives in one inline script, organized into `// ====` banner sections. Key ones, roughly in file order:
+## Architecture
 
-- **CONSTANTS & CONFIG** — `GAME_VERSION`, car types, track/tunable constants.
-- **PROCEDURAL TRACK GENERATION** — `generateTrack(seed)` builds tracks from a seed via a `mulberry32` PRNG + Catmull-Rom splines. Includes bridge detection, walls, forks/branching. Seed-driven so the same seed = the same track across peers.
-- **GAME STATE** — one global object `G` holds all mutable state (`G.isHost`, `G.pad`, players, race phase, etc.).
-- **NETWORKING** — PeerJS-based, **no dedicated server**. One player is the **host** (`G.isHost`); guests connect to the host. `hostConn` = a guest's link to the host; `guestConns` = the host's links to all guests. `broadcast()` / `sendToAll()` relay through the host (star topology — host re-forwards guest messages to other guests). Messages are `{type, ...}` dispatched by `type`. Host setup (`initHostPeer` → `_makePeerOnce`) is resilient: it destroys any stale peer first, retries fresh room codes, then falls back to an anonymous broker-assigned id so any machine that can *join* can also *host*. **Note:** despite older changelog claims, `new Peer(...)` is currently constructed with **no explicit STUN/ICE config** (relies on PeerJS defaults) — if cross-network peers can't connect, wiring in a `config.iceServers` STUN list is the first thing to try.
-- **LOBBY UI**, **FRIENDS** — a persistent social layer on a **separate** PeerJS "presence" peer, distinct from the game peer. Your `FRIEND_ID` is random and cached in `localStorage`; the social peer claims the **deterministic** id `rogueracer-fr-<FRIEND_ID>` so friends can reach you by it. Because it's deterministic, a reload/unclean-close leaves the broker still holding the old claim → `unavailable-id`. `initSocialPeer` handles this by falling back to an **anonymous** social peer (so outbound requests/invites work immediately — `socialReady`) while a 15s background timer (`scheduleCanonicalIdReclaim`) reclaims the canonical id once the stale claim expires. Real friend requests (`friend_request_v2`) go to a pending list; legacy `friend_request` is auto-accepted for back-compat. Auto-join subscriptions ride on presence broadcasts.
-- **GAME ENGINE / RENDER** — canvas 2D loop, physics, camera/visual layering (for bridges/elevation).
-- **TRACK STORAGE** — persists maps to a real OS folder when possible (File System Access API in browser; **Tauri real-file storage** on desktop), falling back to `localStorage`. Note the `file://` double-click case can't silently touch OS folders.
-- **GAMEPAD / CONTROLLER SUPPORT** — rebindable keyboard + controller bindings (`GP` button map), hold-Y/hold-R self-destruct reset.
-- **PROCEDURAL SOUND / JUICE ENGINE** — Web Audio engine sounds, equal-power crossfade music looper, particle pool, skid marks, on-canvas toasts, procedural jingles.
-- **AI BOT RACERS** — kinematic racing-line followers for solo play (`BOT_ROSTER`).
-- **UPGRADE SCREEN / RESULTS** — synchronized upgrade pause between races; post-race queue flow.
-- **MAP EDITOR** (`ME`) + Local/History track browser.
-- **CRT TERMINAL OS** — the whole menu system is styled as a retro CRT command line (`initCrtTerminal`); commands are registered in a table (e.g. `version`).
+The game code is split across `src/NNN-*.js` (each a former `// ====` banner section), concatenated in load order into the one shipped `rogue-racer.html`. They share one global scope, so any file can call functions/read state defined in another. Key subsystems, in load order (file → what it does):
+
+- **`010-constants-config.js`** — `GAME_VERSION`, car types, track/tunable constants. Every other file reads this, so it loads first.
+- **`020-procedural-track-generation.js`** — `generateTrack(seed)` builds tracks from a seed via a `mulberry32` PRNG + Catmull-Rom splines. Bridge detection, walls, forks/branching. Seed-driven so the same seed = the same track across peers.
+- **`030-game-state.js`** — one global object `G` holds all mutable state (`G.isHost`, `G.pad`, players, race phase, etc.).
+- **`040-networking-peerjs.js`** — PeerJS-based, **no dedicated server**. One player is the **host** (`G.isHost`); guests connect to the host. `hostConn` = a guest's link to the host; `guestConns` = the host's links to all guests. `broadcast()` / `sendToAll()` relay through the host (star topology — host re-forwards guest messages to other guests). Messages are `{type, ...}` dispatched by `type`. Host setup (`initHostPeer` → `_makePeerOnce`) is resilient: destroys any stale peer first, retries fresh room codes, then falls back to an anonymous broker-assigned id so any machine that can *join* can also *host*. **Note:** despite older changelog claims, `new Peer(...)` is currently constructed with **no explicit STUN/ICE config** (relies on PeerJS defaults) — if cross-network peers can't connect, wiring in a `config.iceServers` STUN list is the first thing to try.
+- **`050-lobby-ui.js`** — lobby/room DOM flow, room codes, join/host UI.
+- **`070-friends.js`, `080-unique-usernames.js`** — a persistent social layer on a **separate** PeerJS "presence" peer, distinct from the game peer. Your `FRIEND_ID` is random and cached in `localStorage`; the social peer claims the **deterministic** id `rogueracer-fr-<FRIEND_ID>` so friends can reach you by it. Because it's deterministic, a reload/unclean-close leaves the broker still holding the old claim → `unavailable-id`. `initSocialPeer` handles this by falling back to an **anonymous** social peer (so outbound requests/invites work immediately — `socialReady`) while a 15s background timer (`scheduleCanonicalIdReclaim`) reclaims the canonical id once the stale claim expires. Real friend requests (`friend_request_v2`) go to a pending list; legacy `friend_request` is auto-accepted for back-compat. Auto-join subscriptions ride on presence broadcasts.
+- **`060-game-engine.js`, `190-render.js`** — canvas 2D loop, physics, camera/visual layering (for bridges/elevation). Render is the most-coupled file (reads nearly everything) and loads late.
+- **`090-track-storage.js`** — persists maps to a real OS folder when possible (File System Access API in browser; **Tauri real-file storage** on desktop), falling back to `localStorage`. The `file://` double-click case can't silently touch OS folders.
+- **`100-gamepad-controller-support.js`, `110-hold-r-self-destruct-reset.js`** — rebindable keyboard + controller bindings (`GP` button map), hold-Y/hold-R self-destruct reset.
+- **`120-procedural-sound-effects.js`, `130-juice-engine.js`, `140-best-lap-ghost.js`, `150-jank-retro-tts.js`, `160-missile-lock-on-warning.js`, `180-icon-system.js`** — Web Audio engine sounds, equal-power crossfade music looper, particle pool, skid marks, on-canvas toasts, procedural jingles, best-lap ghost, chat TTS, missile-lock RWR, inline SVG icons.
+- **`170-ai-bot-racers.js`** — kinematic racing-line followers for solo play (`BOT_ROSTER`).
+- **`200-upgrade-screen.js`, `210-results.js`** — synchronized upgrade pause between races; post-race queue/podium flow.
+- **`220-map-editor.js`** — map editor (`ME`) + Local/History track browser.
+- **`230-crt-terminal-os.js`** — the whole menu system styled as a retro CRT command line (`initCrtTerminal`); commands registered in a table (e.g. `version`). Loads last since it calls into everything.
 
 ### Networking mental model
 Peer-to-peer, host-authoritative-ish relay. When editing multiplayer code, mind which side runs the branch: guards like `if (G.isHost)` gate host-only logic (re-broadcasting, accepting `player_profile` / `player_ready` / `map_vote` / `map_submit`), while guests act on host-sent state. Track state stays consistent across peers because it's regenerated from a shared seed, not streamed.
