@@ -160,7 +160,7 @@ function persistCustomization(profile) {
       carType: CAR_TYPES[m.carType] ? m.carType : 'drifter',
       smokeColor: m.smokeColor || '',
       trailColor: m.trailColor || '',
-      decal: m.decal || '',
+      decals: Array.isArray(m.decals) ? m.decals : (m.decal ? [{ src: m.decal, x: 0, y: 0, scale: 1, rot: 0 }] : []),
       showTag: m.showTag !== false,
     }));
   } catch(_) {}
@@ -187,7 +187,8 @@ function loadCustomization() {
     if (typeof s.carType === 'string' && CAR_TYPES[s.carType]) G.selectedCarType = s.carType;
     if (typeof s.smokeColor === 'string') G.selectedSmokeColor = s.smokeColor;
     if (typeof s.trailColor === 'string') G.selectedTrailColor = s.trailColor;
-    if (typeof s.decal === 'string') G.selectedDecal = s.decal;
+    if (Array.isArray(s.decals)) G.selectedDecals = s.decals;
+    else if (typeof s.decal === 'string' && s.decal) G.selectedDecals = [{ src: s.decal, x: 0, y: 0, scale: 1, rot: 0 }];
     if (typeof s.showTag === 'boolean') G.selectedShowTag = s.showTag;
   } catch(_) {}
 }

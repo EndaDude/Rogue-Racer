@@ -290,7 +290,7 @@
     if (typeof getLobbyProfileInput === 'function') getLobbyProfileInput();
   }
   function openShipCustomize(){
-    return openWindow('shipcustomize', 'SHIP CUSTOMIZE', { width: 300, height: 430, minW: 272, minH: 360, onOpen: (w) => {
+    return openWindow('shipcustomize', 'SHIP CUSTOMIZE', { width: 320, height: 600, minW: 288, minH: 420, onOpen: (w) => {
       const body = w.body; body.innerHTML = '';
       const me = G.players[G.myId];
       const wrap = document.createElement('div');
@@ -311,7 +311,7 @@
       const trailChk = document.createElement('input'); trailChk.type = 'checkbox'; trailChk.checked = !!trailCur;
       const trailInp = document.createElement('input'); trailInp.type = 'color'; trailInp.value = trailCur || '#ff8a1e';
       trailInp.style.cssText = 'width:40px;height:26px;padding:0;border:1px solid #1f7a45;background:transparent;cursor:pointer;';
-      const trailTxt = document.createElement('span'); trailTxt.textContent = 'custom boost trail'; trailTxt.style.cssText = 'font-size:0.72rem;color:#c9ffd8;';
+      const trailTxt = document.createElement('span'); trailTxt.textContent = 'custom trail (always on)'; trailTxt.style.cssText = 'font-size:0.72rem;color:#c9ffd8;';
       const trailRow = row(); trailRow.appendChild(trailChk); trailRow.appendChild(trailInp); trailRow.appendChild(trailTxt);
 
       // --- tag toggle ---
@@ -320,16 +320,104 @@
       const tagTxt = document.createElement('span'); tagTxt.textContent = 'show tag beside my name'; tagTxt.style.cssText = 'font-size:0.72rem;color:#c9ffd8;';
       const tagRow = row(); tagRow.appendChild(tagChk); tagRow.appendChild(tagTxt);
 
-      // --- decal ---
-      let decalData = (me && me.decal) || G.selectedDecal || '';
-      const decalPreview = document.createElement('div');
-      decalPreview.style.cssText = 'width:72px;height:72px;border:1px solid #1f7a45;border-radius:4px;background:#04170c center/contain no-repeat;box-shadow:inset 0 0 14px rgba(0,0,0,0.6);flex:0 0 auto;';
-      function refreshDecalPreview(){ decalPreview.style.backgroundImage = decalData ? ('url(' + decalData + ')') : 'none'; }
-      refreshDecalPreview();
+      // --- decal placer (visual: add, drag to move, rotate + scale multiple decals) ---
+      const DISP = 232;
+      const carType = (me && me.carType) || G.selectedCarType || 'tez';
+      const shape = getCarTypeCfg(carType).shape;
+      const drawW = shape === 'puncher' ? CAR_H : CAR_W;
+      const drawH = CAR_H;
+      const sf = (DISP * 0.72) / Math.max(drawW, drawH);
+      const shipColor = (me && me.color) || G.selectedColor || ((document.getElementById('car-color') || {}).value) || '#a855f7';
+      const srcDecals = Array.isArray(me && me.decals) ? me.decals : (Array.isArray(G.selectedDecals) ? G.selectedDecals : []);
+      let decals = srcDecals.map(d => ({ src: d.src, x: d.x || 0, y: d.y || 0, scale: (d.scale == null ? 0.5 : d.scale), rot: d.rot || 0 }));
+      let sel = decals.length ? 0 : -1;
+      const imgCache = {};
+      const dcv = document.createElement('canvas'); dcv.width = DISP; dcv.height = DISP;
+      dcv.style.cssText = 'width:100%;max-width:' + DISP + 'px;aspect-ratio:1;align-self:center;background:#04170c;border:1px solid #1f7a45;border-radius:4px;box-shadow:inset 0 0 20px rgba(0,0,0,0.65);cursor:grab;touch-action:none;';
+      const dcx = dcv.getContext('2d');
+      function ensureImg(src){ if (!src || imgCache[src]) return; const im = new Image(); im.onload = redraw; im.src = src; imgCache[src] = im; }
+      function redraw(){
+        dcx.setTransform(1,0,0,1,0,0);
+        dcx.clearRect(0,0,DISP,DISP);
+        // ship body, nose up, filled with the ship color
+        dcx.save(); dcx.translate(DISP/2, DISP/2); dcx.scale(sf, sf);
+        dcx.fillStyle = shipColor; drawCarSilhouette(dcx, shape, drawW, drawH);
+        dcx.restore();
+        // decals composited then clipped to the hull (destination-in), matching the game
+        const layer = document.createElement('canvas'); layer.width = DISP; layer.height = DISP;
+        const lc = layer.getContext('2d');
+        lc.save(); lc.translate(DISP/2, DISP/2); lc.scale(sf, sf);
+        let any = false;
+        decals.forEach(d => {
+          const im = imgCache[d.src]; if (!im || !im.complete || !im.naturalWidth) return; any = true;
+          const ar = im.naturalHeight / im.naturalWidth || 1;
+          const size = Math.max(0.02, d.scale) * drawW;
+          lc.save(); lc.translate(d.x * drawW, d.y * drawH); lc.rotate(d.rot || 0);
+          lc.drawImage(im, -size/2, -(size*ar)/2, size, size*ar); lc.restore();
+        });
+        lc.globalCompositeOperation = 'destination-in'; lc.fillStyle = '#fff';
+        drawCarSilhouette(lc, shape, drawW, drawH); lc.restore();
+        if (any) dcx.drawImage(layer, 0, 0);
+        // selection box, drawn unclipped so it stays visible at the hull edge
+        if (sel >= 0 && decals[sel]) {
+          const d = decals[sel]; const im = imgCache[d.src];
+          const ar = (im && im.naturalWidth) ? im.naturalHeight / im.naturalWidth : 1;
+          const size = Math.max(0.02, d.scale) * drawW;
+          dcx.save(); dcx.translate(DISP/2, DISP/2); dcx.scale(sf, sf);
+          dcx.translate(d.x * drawW, d.y * drawH); dcx.rotate(d.rot || 0);
+          dcx.strokeStyle = '#39ff14'; dcx.lineWidth = 1.4 / sf; dcx.setLineDash([4/sf, 3/sf]);
+          dcx.strokeRect(-size/2, -(size*ar)/2, size, size*ar); dcx.restore();
+        }
+      }
+      decals.forEach(d => ensureImg(d.src));
+      // convert a pointer event to hull-unit coordinates (origin = hull center)
+      function toHull(e){ const r = dcv.getBoundingClientRect(); const px = (e.clientX - r.left) / r.width * DISP; const py = (e.clientY - r.top) / r.height * DISP; return { x: (px - DISP/2) / sf, y: (py - DISP/2) / sf }; }
+      function hitTest(hx, hy){
+        for (let i = decals.length - 1; i >= 0; i--) {
+          const d = decals[i]; const im = imgCache[d.src];
+          const ar = (im && im.naturalWidth) ? im.naturalHeight / im.naturalWidth : 1;
+          const size = Math.max(0.02, d.scale) * drawW;
+          const lx = hx - d.x * drawW, ly = hy - d.y * drawH;
+          const c = Math.cos(-(d.rot||0)), s = Math.sin(-(d.rot||0));
+          const rx = lx * c - ly * s, ry = lx * s + ly * c;
+          if (Math.abs(rx) <= size/2 && Math.abs(ry) <= (size*ar)/2) return i;
+        }
+        return -1;
+      }
+      let dragging = false, dragOff = { x: 0, y: 0 };
+      dcv.addEventListener('pointerdown', (e) => {
+        e.preventDefault(); try { dcv.setPointerCapture(e.pointerId); } catch(_){}
+        const h = toHull(e); const hit = hitTest(h.x, h.y);
+        if (hit >= 0) { sel = hit; dragging = true; const d = decals[sel]; dragOff = { x: h.x - d.x * drawW, y: h.y - d.y * drawH }; dcv.style.cursor = 'grabbing'; }
+        else { sel = -1; }
+        syncSliders(); redraw();
+      });
+      dcv.addEventListener('pointermove', (e) => {
+        if (!dragging || sel < 0) return; e.preventDefault();
+        const h = toHull(e); const d = decals[sel];
+        d.x = Math.max(-0.7, Math.min(0.7, (h.x - dragOff.x) / drawW));
+        d.y = Math.max(-0.7, Math.min(0.7, (h.y - dragOff.y) / drawH));
+        redraw();
+      });
+      function endDrag(){ dragging = false; dcv.style.cursor = 'grab'; }
+      dcv.addEventListener('pointerup', endDrag);
+      dcv.addEventListener('pointercancel', endDrag);
+
+      // --- size / spin sliders (applied to the selected decal) ---
+      const scaleRange = document.createElement('input'); scaleRange.type = 'range'; scaleRange.min = '5'; scaleRange.max = '120'; scaleRange.value = '50'; scaleRange.style.flex = '1';
+      const rotRange = document.createElement('input'); rotRange.type = 'range'; rotRange.min = '0'; rotRange.max = '360'; rotRange.value = '0'; rotRange.style.flex = '1';
+      scaleRange.oninput = () => { if (sel < 0) return; decals[sel].scale = parseInt(scaleRange.value, 10) / 100; redraw(); };
+      rotRange.oninput = () => { if (sel < 0) return; decals[sel].rot = parseInt(rotRange.value, 10) * Math.PI / 180; redraw(); };
+      function syncSliders(){ const on = sel >= 0 && !!decals[sel]; scaleRange.disabled = !on; rotRange.disabled = !on; if (on) { scaleRange.value = String(Math.round(decals[sel].scale * 100)); rotRange.value = String(Math.round((decals[sel].rot || 0) * 180 / Math.PI)); } }
+      const scaleLbl = document.createElement('span'); scaleLbl.textContent = 'size'; scaleLbl.style.cssText = 'font-size:0.66rem;color:#c9ffd8;width:34px;flex:0 0 auto;';
+      const rotLbl = document.createElement('span'); rotLbl.textContent = 'spin'; rotLbl.style.cssText = 'font-size:0.66rem;color:#c9ffd8;width:34px;flex:0 0 auto;';
+      const scaleRow = row(); scaleRow.appendChild(scaleLbl); scaleRow.appendChild(scaleRange);
+      const rotRow = row(); rotRow.appendChild(rotLbl); rotRow.appendChild(rotRange);
+
+      // --- add / delete / clear ---
       const fileInp = document.createElement('input'); fileInp.type = 'file'; fileInp.accept = 'image/*'; fileInp.style.display = 'none';
-      const uploadBtn = tagWinBtn('Upload'); const removeBtn = tagWinBtn('Remove');
-      uploadBtn.onclick = () => fileInp.click();
-      removeBtn.onclick = () => { decalData = ''; refreshDecalPreview(); };
+      const addBtn = tagWinBtn('Add'); const delBtn = tagWinBtn('Delete'); const clrBtn = tagWinBtn('Clear');
+      addBtn.onclick = () => fileInp.click();
       fileInp.onchange = () => {
         const f = fileInp.files && fileInp.files[0]; if (!f) return;
         const rd = new FileReader();
@@ -339,17 +427,21 @@
             // Downscale to bound the synced payload; decals are clipped to the hull.
             const S = 256, cv = document.createElement('canvas'); cv.width = S; cv.height = S;
             cv.getContext('2d').drawImage(img, 0, 0, S, S);
-            decalData = cv.toDataURL('image/png');
-            refreshDecalPreview();
+            const src = cv.toDataURL('image/png');
+            ensureImg(src);
+            decals.push({ src, x: 0, y: 0, scale: 0.5, rot: 0 });
+            sel = decals.length - 1; syncSliders(); redraw();
           };
           img.src = rd.result;
         };
         rd.readAsDataURL(f);
+        fileInp.value = '';
       };
-      const decalBtns = document.createElement('div'); decalBtns.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
-      decalBtns.appendChild(uploadBtn); decalBtns.appendChild(removeBtn);
-      const decalRow = row(); decalRow.appendChild(decalPreview); decalRow.appendChild(decalBtns); decalRow.appendChild(fileInp);
-      const decalHint = document.createElement('div'); decalHint.textContent = 'decal shows only over the ship hull'; decalHint.style.cssText = 'font-size:0.62rem;color:#6fdc95;opacity:0.7;';
+      delBtn.onclick = () => { if (sel < 0) return; decals.splice(sel, 1); sel = decals.length ? Math.min(sel, decals.length - 1) : -1; syncSliders(); redraw(); };
+      clrBtn.onclick = () => { decals = []; sel = -1; syncSliders(); redraw(); };
+      const decalBtns = row(); decalBtns.style.justifyContent = 'center'; decalBtns.appendChild(addBtn); decalBtns.appendChild(delBtn); decalBtns.appendChild(clrBtn); decalBtns.appendChild(fileInp);
+      const decalHint = document.createElement('div'); decalHint.textContent = 'add images, tap to select, drag to place \u2014 clipped to the hull'; decalHint.style.cssText = 'font-size:0.62rem;color:#6fdc95;opacity:0.7;text-align:center;';
+      syncSliders(); redraw();
 
       // --- shortcuts to the other windows ---
       const links = document.createElement('div'); links.style.cssText = 'display:flex;gap:8px;';
@@ -361,7 +453,7 @@
       applyBtn.onclick = () => {
         G.selectedSmokeColor = smokeChk.checked ? smokeInp.value : '';
         G.selectedTrailColor = trailChk.checked ? trailInp.value : '';
-        G.selectedDecal = decalData || '';
+        G.selectedDecals = decals.map(d => ({ src: d.src, x: d.x, y: d.y, scale: d.scale, rot: d.rot }));
         G.selectedShowTag = !!tagChk.checked;
         commitShipCustomize();
         print('ship customization applied', 'hi');
@@ -371,7 +463,7 @@
       wrap.appendChild(label('Exhaust'));
       wrap.appendChild(smokeRow); wrap.appendChild(trailRow);
       wrap.appendChild(label('Tag')); wrap.appendChild(tagRow);
-      wrap.appendChild(label('Decal')); wrap.appendChild(decalRow); wrap.appendChild(decalHint);
+      wrap.appendChild(label('Decals')); wrap.appendChild(dcv); wrap.appendChild(scaleRow); wrap.appendChild(rotRow); wrap.appendChild(decalBtns); wrap.appendChild(decalHint);
       wrap.appendChild(label('More')); wrap.appendChild(links);
       wrap.appendChild(applyBtn);
       body.appendChild(wrap);

@@ -107,7 +107,7 @@ function getLobbyProfileInput() {
   const paintTag = paintTagCv ? paintTagCv.toDataURL('image/png') : DEFAULT_PAINT_TAG;
   const profile = { name: name.slice(0, 16), color, paintTag, carType: G.selectedCarType,
     smokeColor: G.selectedSmokeColor || '', trailColor: G.selectedTrailColor || '',
-    decal: G.selectedDecal || '', showTag: G.selectedShowTag !== false };
+    decals: Array.isArray(G.selectedDecals) ? G.selectedDecals : [], showTag: G.selectedShowTag !== false };
   persistCustomization(profile);
   G.selectedColor = profile.color;
   G.selectedPaintTag = profile.paintTag;
@@ -130,13 +130,14 @@ function getLobbyProfileInput() {
   return profile;
 }
 
-// Copy the extended customization (smoke/trail colors, hull decal, tag toggle)
+// Copy the extended customization (smoke/trail colors, placed decals, tag toggle)
 // from a profile onto a player object.
 function applyProfileExtras(p, profile) {
   if (!p || !profile) return;
   if (typeof profile.smokeColor === 'string') p.smokeColor = profile.smokeColor;
   if (typeof profile.trailColor === 'string') p.trailColor = profile.trailColor;
-  if (typeof profile.decal === 'string') p.decal = profile.decal;
+  if (Array.isArray(profile.decals)) p.decals = profile.decals;
+  else if (typeof profile.decal === 'string') p.decals = profile.decal ? [{ src: profile.decal, x: 0, y: 0, scale: 1, rot: 0 }] : [];
   if (typeof profile.showTag === 'boolean') p.showTag = profile.showTag;
 }
 

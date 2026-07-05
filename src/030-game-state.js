@@ -39,8 +39,8 @@ let G = {
   selectedColor: PLAYER_COLORS[0],
   selectedPaintTag: '',
   selectedSmokeColor: '',   // custom exhaust-smoke color ('' = default grey)
-  selectedTrailColor: '',   // custom boost-trail color ('' = default flame)
-  selectedDecal: '',        // data URL of a hull decal ('' = none)
+  selectedTrailColor: '',   // custom always-on trail color ('' = no trail); nitro is independent
+  selectedDecals: [],       // placed hull decals: [{src,x,y,scale,rot}] (x/y/scale are hull fractions)
   selectedShowTag: true,    // show the paint tag beside your name
   allowedCarTypes: Object.keys(CAR_TYPES),
   allowPrototypes: false,  // host lobby toggle; prototypes start LOCKED until `enableprototypes`

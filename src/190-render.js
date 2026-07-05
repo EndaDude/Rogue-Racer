@@ -307,6 +307,7 @@ function render(dt) {
     drawSkidMarks(ctx, layer);
     drawDriftTrails(ctx, layer);
     drawGhost(ctx, layer);
+    drawPlayerTrails(ctx, layer);
     drawPlayers(ctx, layer);
     drawFx(ctx, layer);
     ctx.restore();
@@ -2014,36 +2015,92 @@ function passiveIndicator(p) {
   }
 }
 
-// Build (and cache) a decal image clipped to a player's hull silhouette. Anything
-// outside the hull is masked away via a `source-in` composite so off-edge pixels
-// never render. Cached per player, keyed by shape+size+decal, and rebuilt when the
-// decal image finishes loading or any key part changes.
+// Normalized list of placed decals for a player. Back-compat: an old single-string
+// `p.decal` is treated as one full-hull decal.
+function getPlayerDecals(p) {
+  if (!p) return [];
+  if (Array.isArray(p.decals)) return p.decals;
+  if (typeof p.decal === 'string' && p.decal) return [{ src: p.decal, x: 0, y: 0, scale: 1, rot: 0 }];
+  return [];
+}
+
+// Build (and cache) placed decals composited and clipped to a player's hull
+// silhouette. Anything outside the hull is masked away (destination-in) so off-edge
+// pixels never render in-round. Cached per player, keyed by shape+size+placement,
+// and rebuilt when any decal image finishes loading or a placement changes.
 function getPlayerDecalClip(p, shape, drawW, drawH) {
-  if (!p || !p.decal) return null;
-  const key = shape + '|' + Math.round(drawW) + 'x' + Math.round(drawH) + '|' + p.decal;
+  const decals = getPlayerDecals(p);
+  if (!decals.length) return null;
+  const key = shape + '|' + Math.round(drawW) + 'x' + Math.round(drawH) + '|' + JSON.stringify(decals);
   if (p._decalKey === key && p._decalClip) return p._decalClip;
-  if (!p._decalImg || p._decalImgSrc !== p.decal) {
-    const img = new Image();
-    img.onload = () => { p._decalKey = null; }; // force a rebuild once pixels are ready
-    img.src = p.decal;
-    p._decalImg = img;
-    p._decalImgSrc = p.decal;
+  if (!p._decalImgs) p._decalImgs = {};
+  let allReady = true;
+  for (const d of decals) {
+    if (!d || !d.src) continue;
+    let im = p._decalImgs[d.src];
+    if (!im) {
+      im = new Image();
+      im.onload = () => { p._decalKey = null; }; // force a rebuild once pixels are ready
+      im.src = d.src;
+      p._decalImgs[d.src] = im;
+    }
+    if (!im.complete || !im.naturalWidth) allReady = false;
   }
-  const img = p._decalImg;
-  if (!img.complete || !img.naturalWidth) return null;
+  if (!allReady) return null;
   const w = Math.max(2, Math.ceil(drawW)), h = Math.max(2, Math.ceil(drawH));
   const cv = document.createElement('canvas');
   cv.width = w; cv.height = h;
   const c = cv.getContext('2d');
   c.translate(w / 2, h / 2);
+  c.imageSmoothingEnabled = true;
+  for (const d of decals) {
+    if (!d || !d.src) continue;
+    const im = p._decalImgs[d.src];
+    if (!im || !im.naturalWidth) continue;
+    const ar = im.naturalHeight / im.naturalWidth || 1;
+    const size = Math.max(0.02, d.scale == null ? 0.5 : d.scale) * w;
+    c.save();
+    c.translate((d.x || 0) * w, (d.y || 0) * h);
+    c.rotate(d.rot || 0);
+    c.drawImage(im, -size / 2, -(size * ar) / 2, size, size * ar);
+    c.restore();
+  }
+  // Clip everything to the hull outline: keep only decal pixels over the silhouette.
+  c.globalCompositeOperation = 'destination-in';
   c.fillStyle = '#fff';
   drawCarSilhouette(c, shape, drawW, drawH);
-  c.globalCompositeOperation = 'source-in';
-  c.imageSmoothingEnabled = false;
-  c.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
   p._decalClip = cv;
   p._decalKey = key;
   return cv;
+}
+
+// Draw each player's custom trail as a tapering, fading ribbon streaming from the
+// tail. Points are recorded in updateFxEmitters; the head (nearest the ship) is
+// brightest/thickest and the tail fades to nothing. Independent of the nitro flame.
+function drawPlayerTrails(ctx, layer) {
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  Object.values(G.players).forEach(p => {
+    if (!p || !p.trailColor) return;
+    const pts = p._trail;
+    if (!pts || pts.length < 2) return;
+    const rgb = hexToRgb(p.trailColor);
+    if (!rgb) return;
+    const n = pts.length;
+    for (let i = 1; i < n; i++) {
+      const a = pts[i - 1], b = pts[i];
+      if ((b.l || 0) !== (layer || 0)) continue;
+      const f = i / (n - 1);           // 0 at tail .. 1 at head (near ship)
+      ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(0.55 * f).toFixed(3)})`;
+      ctx.lineWidth = 1.5 + 8 * f;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+  });
+  ctx.restore();
 }
 
 function drawPlayers(ctx, targetLayer) {
