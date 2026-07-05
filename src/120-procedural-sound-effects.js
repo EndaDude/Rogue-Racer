@@ -1201,16 +1201,11 @@ function updateMyPlayer(dt) {
     const iceGrip = me._onIce ? CAR_TUNING.iceGripMult : 1;
     const effectiveGrip = dynamicGrip * gripMult * iceGrip;
     const lateralMult = Math.max(0, 1 - effectiveGrip * dt);
-    const lateralBefore = lateralSpeed;
     lateralSpeed *= lateralMult;
-    // Drift carries your velocity through the turn: momentum scrubbed off the
-    // sideways slide is redirected into forward motion rather than being lost, so
-    // turning keeps your speed instead of bleeding it. This is a carry, never a
-    // boost — the top-speed cap below still holds, so it can't push you faster.
-    if (driftHold && !me._onIce) {
-      const redirected = (Math.abs(lateralBefore) - Math.abs(lateralSpeed)) * CAR_TUNING.driftCarryEfficiency;
-      if (redirected > 0) forwardSpeed += (Math.sign(forwardSpeed) || 1) * redirected;
-    }
+    // Drifting carries your momentum through the turn via reduced lateral grip (you
+    // keep sliding in your current direction) and steers much harder — but it must
+    // NOT add forward speed. There is deliberately no lateral->forward redirect here;
+    // that would accelerate you out of a slide, which is not what a drift should do.
 
     const steerSign = Math.sign(steerInput);
     const lateralSign = Math.sign(lateralSpeed);
