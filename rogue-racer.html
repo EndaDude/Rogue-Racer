@@ -7788,7 +7788,6 @@ function gameLoop(ts) {
   prevTime = ts;
   resizeCanvas();
   pollGamepad(dt);
-  updateCrtActive();
 
   if (!G.track) return;
   // Perfect-start timing: measure how long the throttle has been held during
@@ -18113,6 +18112,13 @@ function runLayerSystemRegressionTests() {
 
   showTerminal();
   boot();
+
+  window.__crtDisabled = true; 
+})();
+
+(function crtActiveLoop(){
+  updateCrtActive();
+  requestAnimationFrame(crtActiveLoop);
 })();
 
 // Startup: prompt for the game folder (audio + saves), remembering it across sessions.

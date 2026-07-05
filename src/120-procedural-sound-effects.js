@@ -789,7 +789,6 @@ function gameLoop(ts) {
   prevTime = ts;
   resizeCanvas();
   pollGamepad(dt);
-  updateCrtActive();
 
   if (!G.track) return;
   // Perfect-start timing: measure how long the throttle has been held during

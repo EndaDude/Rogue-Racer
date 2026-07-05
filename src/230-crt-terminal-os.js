@@ -1717,6 +1717,13 @@
 
   showTerminal();
   boot();
+
+  window.__crtDisabled = true; 
+})();
+
+(function crtActiveLoop(){
+  updateCrtActive();
+  requestAnimationFrame(crtActiveLoop);
 })();
 
 // Startup: prompt for the game folder (audio + saves), remembering it across sessions.
