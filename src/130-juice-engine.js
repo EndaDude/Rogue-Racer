@@ -1,0 +1,279 @@
+// ============================================================
+// JUICE ENGINE — particles, skid marks, toasts, jingles, AI bots
+// ============================================================
+
+// ---- Unified particle pool -------------------------------------------------
+// Entries: {x,y,vx,vy,r,life,maxLife,layer,c0,c1,a0,drag,grow}
+function spawnFxParticle(p) {
+  G.fx.push(p);
+  if (G.fx.length > 900) G.fx.splice(0, G.fx.length - 900);
+}
+
+function spawnFxBurst(x, y, layer, kind, dirX, dirY) {
+  if (kind === 'pickup') {
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2, s = 40 + Math.random() * 130;
+      const L = 0.35 + Math.random() * 0.3;
+      spawnFxParticle({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s, r: 1.6 + Math.random()*1.8,
+        life: L, maxLife: L, layer, c0: [253,224,71], c1: [251,146,60], a0: 0.95, drag: 3.4, grow: 0 });
+    }
+  } else if (kind === 'heal') {
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2, s = 20 + Math.random() * 60;
+      const L = 0.5 + Math.random() * 0.35;
+      spawnFxParticle({ x: x + (Math.random()-0.5)*18, y: y + (Math.random()-0.5)*18,
+        vx: Math.cos(a)*s*0.4, vy: -30 - Math.random()*50, r: 1.8 + Math.random()*1.6,
+        life: L, maxLife: L, layer, c0: [134,239,172], c1: [34,197,94], a0: 0.9, drag: 2.0, grow: 0 });
+    }
+  } else if (kind === 'emp') {
+    for (let i = 0; i < 26; i++) {
+      const a = (i / 26) * Math.PI * 2 + Math.random() * 0.2, s = 180 + Math.random() * 160;
+      const L = 0.3 + Math.random() * 0.25;
+      spawnFxParticle({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s, r: 1.4 + Math.random()*1.6,
+        life: L, maxLife: L, layer, c0: [165,243,252], c1: [56,189,248], a0: 0.95, drag: 2.6, grow: 0 });
+    }
+  } else if (kind === 'sparks') {
+    const bx = dirX || 0, by = dirY || 0;
+    for (let i = 0; i < 5; i++) {
+      const a = Math.atan2(by, bx) + (Math.random() - 0.5) * 1.6;
+      const s = 60 + Math.random() * 170;
+      const L = 0.16 + Math.random() * 0.18;
+      spawnFxParticle({ x: x + (Math.random()-0.5)*4, y: y + (Math.random()-0.5)*4,
+        vx: Math.cos(a)*s, vy: Math.sin(a)*s, r: 1 + Math.random()*1.4,
+        life: L, maxLife: L, layer, c0: [255,240,180], c1: [251,113,36], a0: 1, drag: 4.5, grow: 0 });
+    }
+  }
+}
+
+// Ambient per-car emitters: engine exhaust, boost flame trail, damage smoke.
+function updateFxEmitters(dt) {
+  if (!G.raceStarted || !G.track) return;
+  Object.values(G.players).forEach(p => {
+    if (p.finished || (p.deathRespawn || 0) > 0) return;
+    const spd = Math.abs(p.speed || 0);
+    const boost = (p.boosting || 0) > 0;
+    const rearX = p.x - Math.cos(p.angle) * (CAR_H * 0.62);
+    const rearY = p.y - Math.sin(p.angle) * (CAR_H * 0.62);
+    // Exhaust: faster = denser and hotter; boosting swaps to flame colors.
+    p._exhaustT = (p._exhaustT || 0) + dt;
+    const rate = boost ? 0.016 : (spd > 40 ? Math.max(0.03, 0.11 - spd * 0.00012) : 0.22);
+    while (p._exhaustT >= rate) {
+      p._exhaustT -= rate;
+      const jx = (Math.random() - 0.5) * 6, jy = (Math.random() - 0.5) * 6;
+      const L = boost ? 0.26 + Math.random() * 0.18 : 0.32 + Math.random() * 0.3;
+      spawnFxParticle({
+        x: rearX + jx, y: rearY + jy,
+        vx: -Math.cos(p.angle) * (boost ? 90 : 26) + jx * 4,
+        vy: -Math.sin(p.angle) * (boost ? 90 : 26) + jy * 4,
+        r: boost ? 2.6 + Math.random() * 2.2 : 1.6 + Math.random() * 1.5,
+        life: L, maxLife: L, layer: p.layer || 0,
+        c0: boost ? [255, 214, 120] : [148, 163, 184],
+        c1: boost ? [249, 115, 22] : [71, 85, 105],
+        a0: boost ? 0.85 : 0.3, drag: 1.6, grow: boost ? 2.5 : 4.5,
+      });
+    }
+    // Hull smoke when badly damaged.
+    const hpFrac = (p.health == null ? 1 : p.health / Math.max(1, p.maxHealth || CAR_TUNING.baseHealth));
+    if (hpFrac < 0.38) {
+      p._smokeT = (p._smokeT || 0) + dt;
+      const srate = hpFrac < 0.18 ? 0.05 : 0.1;
+      while (p._smokeT >= srate) {
+        p._smokeT -= srate;
+        const L = 0.7 + Math.random() * 0.5;
+        spawnFxParticle({
+          x: p.x + (Math.random()-0.5)*10, y: p.y + (Math.random()-0.5)*10,
+          vx: (Math.random()-0.5)*24, vy: -22 - Math.random()*26,
+          r: 2.6 + Math.random()*2.4, life: L, maxLife: L, layer: p.layer || 0,
+          c0: [90, 90, 100], c1: [30, 30, 36], a0: 0.5, drag: 1.2, grow: 7,
+        });
+      }
+    }
+  });
+}
+
+function updateFx(dt) {
+  updateFxEmitters(dt);
+  for (let i = G.fx.length - 1; i >= 0; i--) {
+    const p = G.fx[i];
+    p.life -= dt;
+    if (p.life <= 0) { G.fx.splice(i, 1); continue; }
+    const dr = Math.max(0, 1 - (p.drag || 1) * dt);
+    p.vx *= dr; p.vy *= dr;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.grow) p.r += p.grow * dt;
+  }
+}
+
+function drawFx(ctx, layer) {
+  if (!G.fx.length) return;
+  ctx.save();
+  for (const p of G.fx) {
+    if ((p.layer || 0) !== (layer || 0)) continue;
+    const t = 1 - p.life / p.maxLife;
+    const a = Math.max(0, (1 - t) * (p.a0 || 0.8));
+    if (a <= 0.01) continue;
+    const rr = Math.round(lerp(p.c0[0], p.c1[0], t));
+    const gg = Math.round(lerp(p.c0[1], p.c1[1], t));
+    const bb = Math.round(lerp(p.c0[2], p.c1[2], t));
+    ctx.fillStyle = `rgba(${rr},${gg},${bb},${a})`;
+    if (p.text) {
+      // Text particle (e.g. floating damage numbers).
+      ctx.font = `800 ${Math.round(p.r)}px system-ui`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(p.text, p.x, p.y);
+      continue;
+    }
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, Math.max(0.4, p.r), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ---- Persistent skid marks --------------------------------------------------
+function addSkidSegment(x1, y1, x2, y2, layer, w) {
+  const d2 = (x2-x1)*(x2-x1) + (y2-y1)*(y2-y1);
+  if (d2 < 1 || d2 > 3600) return; // skip degenerate / teleport segments
+  const life = 7;
+  G.skidMarks.push({ x1, y1, x2, y2, layer: layer || 0, w: w || 3.4, life, maxLife: life });
+  if (G.skidMarks.length > 700) G.skidMarks.splice(0, G.skidMarks.length - 700);
+}
+
+function updateSkidMarks(dt) {
+  for (let i = G.skidMarks.length - 1; i >= 0; i--) {
+    G.skidMarks[i].life -= dt;
+    if (G.skidMarks[i].life <= 0) G.skidMarks.splice(i, 1);
+  }
+}
+
+function drawSkidMarks(ctx, layer) {
+  if (!G.skidMarks.length) return;
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (const s of G.skidMarks) {
+    if ((s.layer || 0) !== (layer || 0)) continue;
+    const a = Math.min(1, s.life / s.maxLife) * 0.42;
+    ctx.strokeStyle = `rgba(8,8,14,${a})`;
+    ctx.lineWidth = s.w;
+    ctx.beginPath();
+    ctx.moveTo(s.x1, s.y1);
+    ctx.lineTo(s.x2, s.y2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ---- On-canvas race toasts (banners) ----------------------------------------
+function addToast(text, opts) {
+  opts = opts || {};
+  const life = opts.duration || 2.0;
+  G.toasts.push({
+    text, color: opts.color || '#e2e8f0', size: opts.size || 26,
+    glow: opts.glow || opts.color || '#7c3aed',
+    life, maxLife: life,
+  });
+  if (G.toasts.length > 4) G.toasts.splice(0, G.toasts.length - 4);
+}
+
+function updateToasts(dt) {
+  // Hold banners while the race is paused (countdown / upgrade picks) so a lap
+  // toast isn't silently consumed behind a fullscreen overlay.
+  if (!G.raceStarted && !G.raceOver) return;
+  for (let i = G.toasts.length - 1; i >= 0; i--) {
+    G.toasts[i].life -= dt;
+    if (G.toasts[i].life <= 0) G.toasts.splice(i, 1);
+  }
+}
+
+function drawToasts(ctx, W, H) {
+  if (!G.toasts.length) return;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  let y = H * 0.2;
+  for (let i = G.toasts.length - 1; i >= 0; i--) {
+    const t = G.toasts[i];
+    const age = t.maxLife - t.life;
+    // pop in, hold, fade out
+    const inT = Math.min(1, age / 0.18);
+    const outT = Math.min(1, t.life / 0.35);
+    const a = Math.min(inT, outT);
+    const scale = 0.7 + 0.3 * (1 - Math.pow(1 - inT, 3));
+    ctx.save();
+    ctx.translate(W / 2, y - (1 - inT) * 12);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha = a;
+    ctx.font = `900 ${t.size}px system-ui`;
+    ctx.shadowColor = t.glow;
+    ctx.shadowBlur = 22;
+    ctx.fillStyle = t.color;
+    ctx.fillText(t.text, 0, 0);
+    ctx.restore();
+    y += t.size * 1.5;
+  }
+  ctx.restore();
+}
+
+// ---- Race event feed (DOM, under the minimap) --------------------------------
+function addFeed(text) {
+  const feed = document.getElementById('event-feed');
+  if (!feed) return;
+  const div = document.createElement('div');
+  div.className = 'feed-item';
+  div.textContent = text;
+  feed.prepend(div);
+  while (feed.children.length > 5) feed.removeChild(feed.lastChild);
+  setTimeout(() => {
+    div.classList.add('out');
+    setTimeout(() => div.remove(), 400);
+  }, 4200);
+}
+
+// ---- Item pickup roulette: badge flickers like a slot machine, then reveals --
+function startItemRoulette() {
+  const badge = document.getElementById('powerup-badge');
+  if (!badge) { updatePowerupHud(); return; }
+  const pool = POWERUPS_LIST.concat(Object.values(CAR_UNIQUE_POWERUPS));
+  const t0 = performance.now();
+  if (G._rouletteTimer) clearInterval(G._rouletteTimer);
+  G._rouletteTimer = setInterval(() => {
+    if (performance.now() - t0 > 520 || !G.heldItem) {
+      clearInterval(G._rouletteTimer);
+      G._rouletteTimer = null;
+      updatePowerupHud();
+      return;
+    }
+    const p = pool[Math.floor(Math.random() * pool.length)];
+    badge.innerHTML = (iconSvg(p.id, 15) || p.icon) + ' ' + p.name;
+    badge.className = 'powerup-badge active';
+    badge.style.borderColor = p.color;
+    badge.style.color = p.color;
+  }, 55);
+}
+
+// ---- Victory confetti (DOM, on the results screen) ----------------------------
+function spawnWinConfetti(container) {
+  if (!container) return;
+  const colors = ['#fbbf24', '#a855f7', '#06b6d4', '#22c55e', '#ef4444', '#e879f9'];
+  for (let i = 0; i < 60; i++) {
+    const s = document.createElement('span');
+    s.className = 'rr-confetti';
+    s.style.left = Math.random() * 100 + '%';
+    s.style.background = colors[i % colors.length];
+    const sz = (5 + Math.random() * 6) + 'px';
+    s.style.width = sz; s.style.height = sz;
+    s.style.animationDuration = (2.2 + Math.random() * 2.2) + 's';
+    s.style.animationDelay = (Math.random() * 1.2) + 's';
+    container.appendChild(s);
+    setTimeout(() => s.remove(), 6200);
+  }
+}
+
+// ---- Backdrop themes: each race seed picks a palette --------------------------
+const BACKDROP_THEMES = [
+  { nebula: '#11101e', deep: '#06060a', star: '200,210,255', grid: 'rgba(124,58,237,0.05)' },  // violet void
+  { nebula: '#1c1210', deep: '#0a0605', star: '255,220,185', grid: 'rgba(249,115,22,0.05)' },  // ember dusk
+  { nebula: '#0e1620', deep: '#050a0e', star: '190,235,255', grid: 'rgba(56,189,248,0.055)' }, // arctic night
+  { nebula: '#101a12', deep: '#050a06', star: '205,255,215', grid: 'rgba(34,197,94,0.05)' },   // toxic mire
+];

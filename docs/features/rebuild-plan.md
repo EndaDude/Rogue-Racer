@@ -1,7 +1,11 @@
-# Rebuild Plan: Split the monolith into a bundled `src/`  (PLANNED — not yet built)
+# Rebuild Plan: Split the monolith into a bundled `src/`  (✅ BUILT)
 
-Status: **Decided, not yet implemented.** Do this in a dedicated session. Until then, the
-game is still the one file `rogue-racer.html` and all the normal single-file rules apply.
+Status: **Done (Phase 0–2).** The game now lives in `src/` (shell `index.html` +
+`NNN-*.js` per subsystem, plain scripts sharing one global scope — no ES modules) and is
+bundled back into a single root `rogue-racer.html` by `bun build.ts`. The bundled file is
+**byte-for-byte identical** to the pre-split original, so behavior is unchanged. A
+`.githooks/pre-commit` guard (enable with `bun run hooks`) blocks committing a stale
+artifact. Editing workflow and layout: see [../../src/README.md](../../src/README.md).
 
 ## Why
 
@@ -83,22 +87,22 @@ reads them; render/terminal reference nearly everything, so they go late.
 
 ## Phased plan
 
-### Phase 0 — Scaffold + prove equivalence
-- [ ] Create `src/index.html` (shell) + `build.ts`.
-- [ ] Extract ONE low-coupling section (e.g. `50-social.js` or `60-audio.js`) into `src/`,
-      leave the rest inline temporarily, and make the build produce a `rogue-racer.html` that
-      is **byte-identical** (or diff-only-in-that-section) to the current file. Verify by playing.
+### Phase 0 — Scaffold + prove equivalence  ✅
+- [x] Created `src/index.html` (shell) + `build.ts`.
+- [x] Extracted the inline `<script>` into `src/NNN-*.js` and proved the build produces a
+      `rogue-racer.html` that is **byte-identical** to the pre-split file (`diff -q` clean).
 
-### Phase 1 — Extract the rest, section by section
-- [ ] Move each `// ====` banner section into its numbered file. After each extraction, rebuild
-      and play-test before moving on. Small commits / small PRs — one or two sections each.
-- [ ] After the last section, the inline `<script>` in `index.html` is empty except the marker.
+### Phase 1 — Extract the rest, section by section  ✅
+- [x] All 23 `// ====` banner sections split into numbered files (`010-constants-config.js` …
+      `230-crt-terminal-os.js`). `index.html`'s inline `<script>` holds only the `@@BUNDLE@@` marker.
+- [x] Built output passes `node --check`.
 
-### Phase 2 — Guard the artifact
-- [ ] Pre-commit hook (or CI job): run `bun build.ts`, fail if `git diff --exit-code
-      rogue-racer.html` is dirty (i.e. committed output is stale vs `src/`).
+### Phase 2 — Guard the artifact  ✅
+- [x] `.githooks/pre-commit`: runs `bun build.ts` and blocks the commit if the committed
+      `rogue-racer.html` is stale vs `src/`. Enable per-clone with `bun run hooks`.
+      `bun run check` does the same for CI.
 - [ ] Update `desktop/sync-dist.ps1` if needed (it copies `rogue-racer.html` → `game.html`; the
-      built file works unchanged, but confirm the build runs before packaging).
+      built file works unchanged — confirm the build runs before packaging on the next app release).
 
 ### Phase 3 — (Optional, later) graduate to real modules
 - [ ] Once the team is comfortable, convert individual files to ES modules with `bun build`,
