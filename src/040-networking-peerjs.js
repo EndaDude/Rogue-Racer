@@ -202,6 +202,10 @@ function onData(data, fromId) {
       }
       if (typeof data.color === 'string') p.color = data.color;
       if (typeof data.paintTag === 'string' && data.paintTag) p.paintTag = data.paintTag;
+      if (typeof data.smokeColor === 'string') p.smokeColor = data.smokeColor;
+      if (typeof data.trailColor === 'string') p.trailColor = data.trailColor;
+      if (typeof data.decal === 'string') p.decal = data.decal;
+      if (typeof data.showTag === 'boolean') p.showTag = data.showTag;
       updateHostPlayerList();
       sendLobbySync();
     }

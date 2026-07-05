@@ -1255,7 +1255,7 @@ function startTrackTest(){
   G.myId='local-test';
   const profile=getLobbyProfileInput();
   const me=makePlayer(G.myId,profile.name,profile.color,0,0,0,G.selectedCarType);
-  me.paintTag=profile.paintTag; me.clientUid=CLIENT_UID; me.ready=true;
+  me.paintTag=profile.paintTag; applyProfileExtras(me, profile); me.clientUid=CLIENT_UID; me.ready=true;
   G.players={}; G.players[G.myId]=me;
   spawnBots(getBotCount()); // AI opponents for the solo test session
   const seed=Date.now()%100000;

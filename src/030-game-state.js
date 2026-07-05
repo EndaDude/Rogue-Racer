@@ -38,8 +38,12 @@ let G = {
   selectedCarType: 'tez',
   selectedColor: PLAYER_COLORS[0],
   selectedPaintTag: '',
+  selectedSmokeColor: '',   // custom exhaust-smoke color ('' = default grey)
+  selectedTrailColor: '',   // custom boost-trail color ('' = default flame)
+  selectedDecal: '',        // data URL of a hull decal ('' = none)
+  selectedShowTag: true,    // show the paint tag beside your name
   allowedCarTypes: Object.keys(CAR_TYPES),
-  allowPrototypes: true,   // host lobby toggle; prototypes are currently unlocked in all play
+  allowPrototypes: false,  // host lobby toggle; prototypes start LOCKED until `enableprototypes`
   speedClass: 'neighborhood',
   speedScale: 1,
   hostMode: 'owner',
@@ -61,6 +65,7 @@ function makePlayer(id, name, color, x, y, angle, carType) {
   return {
     id, name, color,
     paintTag: '',
+    smokeColor: '', trailColor: '', decal: '', showTag: true,
     ready: false,
     x, y, angle: angle||0,
     carType: carType || 'drifter',

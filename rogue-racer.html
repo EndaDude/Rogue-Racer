@@ -1845,6 +1845,19 @@ const GAME_VERSION = '0.1.9';
 const TOTAL_LAPS = 3;
 const PLAYER_COLORS = ['#a855f7','#06b6d4','#fbbf24','#22c55e','#ef4444','#f97316'];
 const CAR_W = 14, CAR_H = 22;
+
+// Parse a #rrggbb (or #rgb) hex string into [r,g,b]. Returns null on bad input.
+function hexToRgb(hex) {
+  if (typeof hex !== 'string') return null;
+  let h = hex.trim().replace(/^#/, '');
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+// Scale an [r,g,b] toward black by factor f (0..1); f=1 keeps it, f=0.4 = 40% brightness.
+function shadeRgb(rgb, f) {
+  return [Math.round(rgb[0] * f), Math.round(rgb[1] * f), Math.round(rgb[2] * f)];
+}
 const TRACK_W = 80; // track half-width
 // Car handling/speed tuning in one place.
 const CAR_TUNING = {
@@ -3010,8 +3023,12 @@ let G = {
   selectedCarType: 'tez',
   selectedColor: PLAYER_COLORS[0],
   selectedPaintTag: '',
+  selectedSmokeColor: '',   // custom exhaust-smoke color ('' = default grey)
+  selectedTrailColor: '',   // custom boost-trail color ('' = default flame)
+  selectedDecal: '',        // data URL of a hull decal ('' = none)
+  selectedShowTag: true,    // show the paint tag beside your name
   allowedCarTypes: Object.keys(CAR_TYPES),
-  allowPrototypes: true,   // host lobby toggle; prototypes are currently unlocked in all play
+  allowPrototypes: false,  // host lobby toggle; prototypes start LOCKED until `enableprototypes`
   speedClass: 'neighborhood',
   speedScale: 1,
   hostMode: 'owner',
@@ -3033,6 +3050,7 @@ function makePlayer(id, name, color, x, y, angle, carType) {
   return {
     id, name, color,
     paintTag: '',
+    smokeColor: '', trailColor: '', decal: '', showTag: true,
     ready: false,
     x, y, angle: angle||0,
     carType: carType || 'drifter',
@@ -3390,6 +3408,10 @@ function onData(data, fromId) {
       }
       if (typeof data.color === 'string') p.color = data.color;
       if (typeof data.paintTag === 'string' && data.paintTag) p.paintTag = data.paintTag;
+      if (typeof data.smokeColor === 'string') p.smokeColor = data.smokeColor;
+      if (typeof data.trailColor === 'string') p.trailColor = data.trailColor;
+      if (typeof data.decal === 'string') p.decal = data.decal;
+      if (typeof data.showTag === 'boolean') p.showTag = data.showTag;
       updateHostPlayerList();
       sendLobbySync();
     }
@@ -3902,7 +3924,9 @@ function getLobbyProfileInput() {
   const color = document.getElementById('car-color').value || PLAYER_COLORS[0];
   const paintTagCv = document.getElementById('paint-tag-canvas');
   const paintTag = paintTagCv ? paintTagCv.toDataURL('image/png') : DEFAULT_PAINT_TAG;
-  const profile = { name: name.slice(0, 16), color, paintTag, carType: G.selectedCarType };
+  const profile = { name: name.slice(0, 16), color, paintTag, carType: G.selectedCarType,
+    smokeColor: G.selectedSmokeColor || '', trailColor: G.selectedTrailColor || '',
+    decal: G.selectedDecal || '', showTag: G.selectedShowTag !== false };
   persistCustomization(profile);
   G.selectedColor = profile.color;
   G.selectedPaintTag = profile.paintTag;
@@ -3914,6 +3938,7 @@ function getLobbyProfileInput() {
     me.color = profile.color;
     me.paintTag = profile.paintTag;
     me.carType = profile.carType;
+    applyProfileExtras(me, profile);
     if (G.isHost) {
       updateHostPlayerList();
       sendLobbySync();
@@ -3922,6 +3947,16 @@ function getLobbyProfileInput() {
     }
   }
   return profile;
+}
+
+// Copy the extended customization (smoke/trail colors, hull decal, tag toggle)
+// from a profile onto a player object.
+function applyProfileExtras(p, profile) {
+  if (!p || !profile) return;
+  if (typeof profile.smokeColor === 'string') p.smokeColor = profile.smokeColor;
+  if (typeof profile.trailColor === 'string') p.trailColor = profile.trailColor;
+  if (typeof profile.decal === 'string') p.decal = profile.decal;
+  if (typeof profile.showTag === 'boolean') p.showTag = profile.showTag;
 }
 
 function sendLobbySync() {
@@ -4232,7 +4267,9 @@ function readCustomizeProfile() {
   const color = document.getElementById('lobby-c-color').value || PLAYER_COLORS[0];
   const cv = document.getElementById('lobby-c-paint-canvas');
   const paintTag = cv ? cv.toDataURL('image/png') : DEFAULT_PAINT_TAG;
-  return { name: name.slice(0, 16), color, paintTag, carType: G.selectedCarType };
+  return { name: name.slice(0, 16), color, paintTag, carType: G.selectedCarType,
+    smokeColor: G.selectedSmokeColor || '', trailColor: G.selectedTrailColor || '',
+    decal: G.selectedDecal || '', showTag: G.selectedShowTag !== false };
 }
 
 // Push the customize-panel values to the local player and the rest of the room.
@@ -4244,6 +4281,7 @@ function applyCustomize() {
   me.color = profile.color;
   me.paintTag = profile.paintTag;
   me.carType = profile.carType;
+  applyProfileExtras(me, profile);
   G.selectedColor = profile.color;
   G.selectedPaintTag = profile.paintTag;
   G.selectedCarType = profile.carType;
@@ -4348,6 +4386,7 @@ document.getElementById('host-btn').onclick = async () => {
     G.mapVotes = {};
     const p = makePlayer(G.myId, profile.name, profile.color, 0, 0, 0, G.selectedCarType);
     p.paintTag = profile.paintTag;
+    applyProfileExtras(p, profile);
     p.clientUid = CLIENT_UID;
     p.ready = true;
     G.players[G.myId] = p;
@@ -4470,6 +4509,7 @@ document.getElementById('join-confirm-btn').onclick = async () => {
     const colorIdx = Object.keys(G.players).length % PLAYER_COLORS.length;
     const p = makePlayer(myId, profile.name, profile.color || PLAYER_COLORS[colorIdx], 0, 0, 0, G.selectedCarType);
     p.paintTag = profile.paintTag;
+    applyProfileExtras(p, profile);
     p.clientUid = CLIENT_UID;
     p.ready = false;
     G.players[myId] = p;
@@ -5379,11 +5419,20 @@ initSocialPeer();
 function persistCustomization(profile) {
   if (!profile) return;
   try {
+    // Merge onto whatever is already saved so partial updates (e.g. just the
+    // color) never wipe the other customization fields.
+    let cur = {};
+    try { cur = JSON.parse(localStorage.getItem('rr-customization') || '{}') || {}; } catch (_) {}
+    const m = { ...cur, ...profile };
     localStorage.setItem('rr-customization', JSON.stringify({
-      name: (profile.name || 'Racer').slice(0, 16),
-      color: profile.color || PLAYER_COLORS[0],
-      paintTag: profile.paintTag || '',
-      carType: CAR_TYPES[profile.carType] ? profile.carType : 'drifter',
+      name: (m.name || 'Racer').slice(0, 16),
+      color: m.color || PLAYER_COLORS[0],
+      paintTag: m.paintTag || '',
+      carType: CAR_TYPES[m.carType] ? m.carType : 'drifter',
+      smokeColor: m.smokeColor || '',
+      trailColor: m.trailColor || '',
+      decal: m.decal || '',
+      showTag: m.showTag !== false,
     }));
   } catch(_) {}
 }
@@ -5407,6 +5456,10 @@ function loadCustomization() {
     if (typeof s.color === 'string') { G.selectedColor = s.color; const el = document.getElementById('car-color'); if (el) el.value = s.color; }
     if (typeof s.paintTag === 'string' && s.paintTag) { G.selectedPaintTag = s.paintTag; drawDataUrlOnCanvas('paint-tag-canvas', s.paintTag); }
     if (typeof s.carType === 'string' && CAR_TYPES[s.carType]) G.selectedCarType = s.carType;
+    if (typeof s.smokeColor === 'string') G.selectedSmokeColor = s.smokeColor;
+    if (typeof s.trailColor === 'string') G.selectedTrailColor = s.trailColor;
+    if (typeof s.decal === 'string') G.selectedDecal = s.decal;
+    if (typeof s.showTag === 'boolean') G.selectedShowTag = s.showTag;
   } catch(_) {}
 }
 
@@ -9590,6 +9643,9 @@ function updateFxEmitters(dt) {
     const boost = (p.boosting || 0) > 0;
     const rearX = p.x - Math.cos(p.angle) * (CAR_H * 0.62);
     const rearY = p.y - Math.sin(p.angle) * (CAR_H * 0.62);
+    // Custom exhaust-smoke / boost-trail colors (fall back to defaults when unset).
+    const smokeRgb = p.smokeColor ? hexToRgb(p.smokeColor) : null;
+    const trailRgb = p.trailColor ? hexToRgb(p.trailColor) : null;
     // Exhaust: faster = denser and hotter; boosting swaps to flame colors.
     p._exhaustT = (p._exhaustT || 0) + dt;
     const rate = boost ? 0.016 : (spd > 40 ? Math.max(0.03, 0.11 - spd * 0.00012) : 0.22);
@@ -9603,8 +9659,8 @@ function updateFxEmitters(dt) {
         vy: -Math.sin(p.angle) * (boost ? 90 : 26) + jy * 4,
         r: boost ? 2.6 + Math.random() * 2.2 : 1.6 + Math.random() * 1.5,
         life: L, maxLife: L, layer: p.layer || 0,
-        c0: boost ? [255, 214, 120] : [148, 163, 184],
-        c1: boost ? [249, 115, 22] : [71, 85, 105],
+        c0: boost ? (trailRgb || [255, 214, 120]) : (smokeRgb || [148, 163, 184]),
+        c1: boost ? (trailRgb ? shadeRgb(trailRgb, 0.5) : [249, 115, 22]) : (smokeRgb ? shadeRgb(smokeRgb, 0.5) : [71, 85, 105]),
         a0: boost ? 0.85 : 0.3, drag: 1.6, grow: boost ? 2.5 : 4.5,
       });
     }
@@ -10382,11 +10438,15 @@ function botCollideObstacles(b) {
 }
 
 function spawnBots(count) {
-  const types = Object.keys(CAR_TYPES);
+  // Bots mirror the players: they only race ships that are currently unlocked in
+  // the lobby (honors the host allowed-car list and the prototype gate). Prototypes
+  // are off-limits unless `enableprototypes` has unlocked them.
+  const selectable = Object.keys(CAR_TYPES).filter(carTypeSelectable);
+  const pool = selectable.length ? selectable : [firstSelectableCarType()];
   for (let i = 0; i < count; i++) {
     const spec = BOT_ROSTER[i % BOT_ROSTER.length];
     const id = 'bot-' + (i + 1);
-    const b = makePlayer(id, spec.name, spec.color, 0, 0, 0, types[Math.floor(Math.random() * types.length)]);
+    const b = makePlayer(id, spec.name, spec.color, 0, 0, 0, pool[Math.floor(Math.random() * pool.length)]);
     b.isBot = true;
     // Pace multiplier from the selected difficulty band — always ≤ 1, so a bot
     // can never out-run what its ship's stats allow a human to do.
@@ -12742,6 +12802,38 @@ function passiveIndicator(p) {
   }
 }
 
+// Build (and cache) a decal image clipped to a player's hull silhouette. Anything
+// outside the hull is masked away via a `source-in` composite so off-edge pixels
+// never render. Cached per player, keyed by shape+size+decal, and rebuilt when the
+// decal image finishes loading or any key part changes.
+function getPlayerDecalClip(p, shape, drawW, drawH) {
+  if (!p || !p.decal) return null;
+  const key = shape + '|' + Math.round(drawW) + 'x' + Math.round(drawH) + '|' + p.decal;
+  if (p._decalKey === key && p._decalClip) return p._decalClip;
+  if (!p._decalImg || p._decalImgSrc !== p.decal) {
+    const img = new Image();
+    img.onload = () => { p._decalKey = null; }; // force a rebuild once pixels are ready
+    img.src = p.decal;
+    p._decalImg = img;
+    p._decalImgSrc = p.decal;
+  }
+  const img = p._decalImg;
+  if (!img.complete || !img.naturalWidth) return null;
+  const w = Math.max(2, Math.ceil(drawW)), h = Math.max(2, Math.ceil(drawH));
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const c = cv.getContext('2d');
+  c.translate(w / 2, h / 2);
+  c.fillStyle = '#fff';
+  drawCarSilhouette(c, shape, drawW, drawH);
+  c.globalCompositeOperation = 'source-in';
+  c.imageSmoothingEnabled = false;
+  c.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+  p._decalClip = cv;
+  p._decalKey = key;
+  return cv;
+}
+
 function drawPlayers(ctx, targetLayer) {
   const me = G.players[G.myId];
   const myLayer = me ? getPlayerLayer(me) : 0;
@@ -12829,7 +12921,7 @@ function drawPlayers(ctx, targetLayer) {
       const tailY = drawH / 2;
       const tailW = Math.max(4, drawW * 0.35);
       const len = 12 + Math.random() * 9;
-      ctx.fillStyle = '#f97316';
+      ctx.fillStyle = p.trailColor || '#f97316';
       ctx.beginPath();
       ctx.moveTo(-tailW, tailY);
       ctx.lineTo(tailW, tailY);
@@ -12856,6 +12948,18 @@ function drawPlayers(ctx, targetLayer) {
       ctx.fillStyle = sheen;
       drawCarSilhouette(ctx, shape, drawW, drawH);
       ctx.restore();
+    }
+    // Hull decal: clipped to the actual silhouette so anything off the hull edge
+    // never renders (built as a cached source-in mask per player).
+    {
+      const decalClip = getPlayerDecalClip(p, shape, drawW, drawH);
+      if (decalClip) {
+        ctx.save();
+        if (p.id !== G.myId) ctx.globalAlpha *= 0.85;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(decalClip, -decalClip.width / 2, -decalClip.height / 2);
+        ctx.restore();
+      }
     }
     // Windshield
     drawCarGlass(ctx, shape, drawW, drawH);
@@ -12886,14 +12990,6 @@ function drawPlayers(ctx, targetLayer) {
         ctx.fill();
         ctx.stroke();
       }
-      ctx.restore();
-    }
-    const tagImg = getPaintTagImage(p.paintTag || DEFAULT_PAINT_TAG);
-    if (tagImg && tagImg.complete) {
-      const sz = Math.max(8, Math.min(14, drawW * 0.85));
-      ctx.save();
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(tagImg, -sz / 2, -drawH * 0.18 - sz / 2, sz, sz);
       ctx.restore();
     }
     ctx.globalAlpha = 1;
@@ -12935,9 +13031,24 @@ function drawPlayers(ctx, targetLayer) {
       }
       ctx.fillStyle = p.id===G.myId ? '#fff' : 'rgba(255,255,255,0.7)';
       ctx.font = p.id===G.myId ? 'bold 12px system-ui' : '11px system-ui';
-      ctx.textAlign='center';
       ctx.textBaseline='bottom';
-      ctx.fillText(p.name, 0, -drawH/2-4);
+      const nameY = -drawH/2-4;
+      // Paint tag sits beside the name (toggleable via ship customization).
+      const tagImg = (p.showTag !== false) ? getPaintTagImage(p.paintTag || DEFAULT_PAINT_TAG) : null;
+      if (tagImg && tagImg.complete) {
+        const tagSz = 11, gap = 3;
+        const tw = ctx.measureText(p.name).width;
+        const startX = -(tagSz + gap + tw) / 2;
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(tagImg, startX, nameY - tagSz, tagSz, tagSz);
+        ctx.restore();
+        ctx.textAlign = 'left';
+        ctx.fillText(p.name, startX + tagSz + gap, nameY);
+      } else {
+        ctx.textAlign = 'center';
+        ctx.fillText(p.name, 0, nameY);
+      }
     }
     ctx.restore();
   });
@@ -15625,7 +15736,7 @@ function startTrackTest(){
   G.myId='local-test';
   const profile=getLobbyProfileInput();
   const me=makePlayer(G.myId,profile.name,profile.color,0,0,0,G.selectedCarType);
-  me.paintTag=profile.paintTag; me.clientUid=CLIENT_UID; me.ready=true;
+  me.paintTag=profile.paintTag; applyProfileExtras(me, profile); me.clientUid=CLIENT_UID; me.ready=true;
   G.players={}; G.players[G.myId]=me;
   spawnBots(getBotCount()); // AI opponents for the solo test session
   const seed=Date.now()%100000;
@@ -16693,16 +16804,6 @@ function runLayerSystemRegressionTests() {
     const nameEl = document.getElementById('player-name');
     persistCustomization({ name: (me && me.name) || (nameEl && nameEl.value) || 'Racer', color: v, paintTag: (me && me.paintTag) || G.selectedPaintTag || '', carType: (me && me.carType) || G.selectedCarType });
   }
-  function colorPrompt(){
-    ask('Enter a hex color (e.g. #ff3366), or type "picker":', (ans) => {
-      let v = (ans || '').trim();
-      if (!v) { print('color unchanged', 'warn'); return; }
-      if (/^picker$/i.test(v)) { openColorPicker(); return; }
-      if (v[0] !== '#') v = '#' + v;
-      if (!/^#[0-9a-fA-F]{6}$/.test(v)) { print('invalid hex color: ' + v, 'err'); return; }
-      applyColor(v); print('color set to ' + v.toLowerCase(), 'hi');
-    });
-  }
   function openColorPicker(){
     return openWindow('colorpick', 'CAR COLOR', { width: 264, height: 262, minW: 236, minH: 236, onOpen: (w) => {
       const body = w.body; body.innerHTML = '';
@@ -17446,7 +17547,7 @@ function runLayerSystemRegressionTests() {
           'Help - Displays this list',
           'Mapmaker - Opens map maker',
           'Tag - Draw your paint tag in a window',
-          'Color - Set your car color (hex or picker)',
+          'Color - Open the ship color picker',
           'Customize [tag/name/color] - Draw tag / set name / set color',
           'Host [owner/vote] - Hosts a new race room',
           'Join [code] - Joins a race by room code',
@@ -17510,14 +17611,7 @@ function runLayerSystemRegressionTests() {
         else { setName(v); print('name set to "' + v + '" (name service unreachable: ' + msg + ')', 'dim'); }
       });
     } },
-    color: { desc: 'set color', run: (a) => {
-      let v = (a[0] || '').trim(); if (!v) { print('usage: color <#hex>', 'warn'); return; }
-      if (v[0] !== '#') v = '#' + v;
-      if (!/^#[0-9a-fA-F]{6}$/.test(v)) { print('invalid hex color: ' + v, 'err'); return; }
-      const el = document.getElementById('car-color'); if (el) el.value = v.toLowerCase();
-      const cz = document.getElementById('lobby-c-color'); if (cz) cz.value = v.toLowerCase();
-      getLobbyProfileInput(); print('color set to ' + v.toLowerCase(), 'hi');
-    } },
+    color: { desc: 'open the ship color picker', run: () => { openColorPicker(); } },
     ship: { desc: 'set ship  (ship desc for full stats)', run: (a) => {
       const first = (a[0] || '').toLowerCase();
       if (first === 'desc' || first === 'descriptions' || first === 'info' || first === 'stats') { printShipDescriptions(); return; }
@@ -17935,7 +18029,7 @@ function runLayerSystemRegressionTests() {
       if (typeof kickPlayer === 'function') kickPlayer(match.id);
       print('kicked ' + (match.name || 'player'), 'warn');
     } },
-    customize: { desc: 'Opens respective window or asks respective question', run: (a) => {
+    customize: { desc: 'open the ship customization window', win: true, run: (a) => {
       const sub = (a[0] || '').toLowerCase();
       if (sub === 'name') {
         ask('Enter your racer name:', (ans) => {
@@ -17945,15 +18039,14 @@ function runLayerSystemRegressionTests() {
         });
         return;
       }
-      if (sub === 'color') {
-        colorPrompt();
-        return;
-      }
-      // 'tag' or no argument -> open the paint-tag draw window.
-      openTagDraw();
+      if (sub === 'color') { openColorPicker(); return; }
+      if (sub === 'tag') { openTagDraw(); return; }
+      // no argument -> open the full ship customization window.
+      openShipCustomize();
     } },
+    customization: { desc: 'open the ship customization window', win: true, run: () => { openShipCustomize(); } },
     tag: { desc: 'draw your paint tag', win: true, run: () => { openTagDraw(); } },
-    color: { desc: 'set your car color', run: () => { colorPrompt(); } },
+    color: { desc: 'open the car color picker', win: true, run: () => { openColorPicker(); } },
     mapmaker: { desc: 'Opens map maker', win: true, run: () => { openMapMakerWindow(); } },
     editor: { desc: 'Opens map maker', win: true, run: () => { openMapMakerWindow(); } },
     settings: { desc: 'audio settings', run: () => {

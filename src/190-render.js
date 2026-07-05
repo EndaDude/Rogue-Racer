@@ -2014,6 +2014,38 @@ function passiveIndicator(p) {
   }
 }
 
+// Build (and cache) a decal image clipped to a player's hull silhouette. Anything
+// outside the hull is masked away via a `source-in` composite so off-edge pixels
+// never render. Cached per player, keyed by shape+size+decal, and rebuilt when the
+// decal image finishes loading or any key part changes.
+function getPlayerDecalClip(p, shape, drawW, drawH) {
+  if (!p || !p.decal) return null;
+  const key = shape + '|' + Math.round(drawW) + 'x' + Math.round(drawH) + '|' + p.decal;
+  if (p._decalKey === key && p._decalClip) return p._decalClip;
+  if (!p._decalImg || p._decalImgSrc !== p.decal) {
+    const img = new Image();
+    img.onload = () => { p._decalKey = null; }; // force a rebuild once pixels are ready
+    img.src = p.decal;
+    p._decalImg = img;
+    p._decalImgSrc = p.decal;
+  }
+  const img = p._decalImg;
+  if (!img.complete || !img.naturalWidth) return null;
+  const w = Math.max(2, Math.ceil(drawW)), h = Math.max(2, Math.ceil(drawH));
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const c = cv.getContext('2d');
+  c.translate(w / 2, h / 2);
+  c.fillStyle = '#fff';
+  drawCarSilhouette(c, shape, drawW, drawH);
+  c.globalCompositeOperation = 'source-in';
+  c.imageSmoothingEnabled = false;
+  c.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+  p._decalClip = cv;
+  p._decalKey = key;
+  return cv;
+}
+
 function drawPlayers(ctx, targetLayer) {
   const me = G.players[G.myId];
   const myLayer = me ? getPlayerLayer(me) : 0;
@@ -2101,7 +2133,7 @@ function drawPlayers(ctx, targetLayer) {
       const tailY = drawH / 2;
       const tailW = Math.max(4, drawW * 0.35);
       const len = 12 + Math.random() * 9;
-      ctx.fillStyle = '#f97316';
+      ctx.fillStyle = p.trailColor || '#f97316';
       ctx.beginPath();
       ctx.moveTo(-tailW, tailY);
       ctx.lineTo(tailW, tailY);
@@ -2128,6 +2160,18 @@ function drawPlayers(ctx, targetLayer) {
       ctx.fillStyle = sheen;
       drawCarSilhouette(ctx, shape, drawW, drawH);
       ctx.restore();
+    }
+    // Hull decal: clipped to the actual silhouette so anything off the hull edge
+    // never renders (built as a cached source-in mask per player).
+    {
+      const decalClip = getPlayerDecalClip(p, shape, drawW, drawH);
+      if (decalClip) {
+        ctx.save();
+        if (p.id !== G.myId) ctx.globalAlpha *= 0.85;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(decalClip, -decalClip.width / 2, -decalClip.height / 2);
+        ctx.restore();
+      }
     }
     // Windshield
     drawCarGlass(ctx, shape, drawW, drawH);
@@ -2158,14 +2202,6 @@ function drawPlayers(ctx, targetLayer) {
         ctx.fill();
         ctx.stroke();
       }
-      ctx.restore();
-    }
-    const tagImg = getPaintTagImage(p.paintTag || DEFAULT_PAINT_TAG);
-    if (tagImg && tagImg.complete) {
-      const sz = Math.max(8, Math.min(14, drawW * 0.85));
-      ctx.save();
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(tagImg, -sz / 2, -drawH * 0.18 - sz / 2, sz, sz);
       ctx.restore();
     }
     ctx.globalAlpha = 1;
@@ -2207,9 +2243,24 @@ function drawPlayers(ctx, targetLayer) {
       }
       ctx.fillStyle = p.id===G.myId ? '#fff' : 'rgba(255,255,255,0.7)';
       ctx.font = p.id===G.myId ? 'bold 12px system-ui' : '11px system-ui';
-      ctx.textAlign='center';
       ctx.textBaseline='bottom';
-      ctx.fillText(p.name, 0, -drawH/2-4);
+      const nameY = -drawH/2-4;
+      // Paint tag sits beside the name (toggleable via ship customization).
+      const tagImg = (p.showTag !== false) ? getPaintTagImage(p.paintTag || DEFAULT_PAINT_TAG) : null;
+      if (tagImg && tagImg.complete) {
+        const tagSz = 11, gap = 3;
+        const tw = ctx.measureText(p.name).width;
+        const startX = -(tagSz + gap + tw) / 2;
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(tagImg, startX, nameY - tagSz, tagSz, tagSz);
+        ctx.restore();
+        ctx.textAlign = 'left';
+        ctx.fillText(p.name, startX + tagSz + gap, nameY);
+      } else {
+        ctx.textAlign = 'center';
+        ctx.fillText(p.name, 0, nameY);
+      }
     }
     ctx.restore();
   });

@@ -8,6 +8,19 @@ const GAME_VERSION = '0.1.9';
 const TOTAL_LAPS = 3;
 const PLAYER_COLORS = ['#a855f7','#06b6d4','#fbbf24','#22c55e','#ef4444','#f97316'];
 const CAR_W = 14, CAR_H = 22;
+
+// Parse a #rrggbb (or #rgb) hex string into [r,g,b]. Returns null on bad input.
+function hexToRgb(hex) {
+  if (typeof hex !== 'string') return null;
+  let h = hex.trim().replace(/^#/, '');
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+// Scale an [r,g,b] toward black by factor f (0..1); f=1 keeps it, f=0.4 = 40% brightness.
+function shadeRgb(rgb, f) {
+  return [Math.round(rgb[0] * f), Math.round(rgb[1] * f), Math.round(rgb[2] * f)];
+}
 const TRACK_W = 80; // track half-width
 // Car handling/speed tuning in one place.
 const CAR_TUNING = {
