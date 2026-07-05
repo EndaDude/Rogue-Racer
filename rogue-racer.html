@@ -17069,6 +17069,7 @@ function runLayerSystemRegressionTests() {
       const info = INFO[k] || (typeof SHIP_LORE !== 'undefined' && SHIP_LORE[k]) || { special: '\u2014', desc: '' };
       lines.push({ text: (c.name || k), cls: 'hi' });
       lines.push('  speed    ' + bar(c.topSpeedMult, 0.9, 1.15) + '   accel ' + bar(c.accelMult, 0.5, 1.05) + '   handling ' + bar(c.handlingMult, 0.6, 1.2));
+      lines.push('  armor    ' + bar(c.crashResist != null ? c.crashResist : (c.weaponResist != null ? c.weaponResist : 1.0), 0.7, 1.45) + '   fire  ' + bar(c.firePower != null ? c.firePower : 1.0, 0.6, 1.4));
       lines.push('  special  ' + info.special);
       if (info.desc) lines.push({ text: '  ' + info.desc, cls: 'dim' });
       lines.push('');
@@ -17078,8 +17079,11 @@ function runLayerSystemRegressionTests() {
 
   // Ships showcase: a wide CRT window with a spinning 2D asset per ship, hover
   // lift + a live detail panel (stats, ability, unique item, fake future lore).
-  function openShipsWindow() {
-    return openWindow('ships', 'SHIP HANGAR', {
+  // proto=false shows the regular roster; proto=true shows the prototype ships.
+  function openShipsWindow(proto) {
+    const winId = proto ? 'protohangar' : 'ships';
+    const title = proto ? 'PROTOTYPE HANGAR' : 'SHIP HANGAR';
+    return openWindow(winId, title, {
       width: Math.min(720, window.innerWidth - 40), height: 440, minW: 420, minH: 320,
       onOpen: (win) => {
         const wrap = document.createElement('div');
@@ -17092,7 +17096,7 @@ function runLayerSystemRegressionTests() {
         win.body.style.padding = '10px 12px';
         win.body.appendChild(wrap);
 
-        const keys = shipList();
+        const keys = shipList().filter(k => proto ? isPrototypeShip(k) : !isPrototypeShip(k));
         const cards = [];           // { key, canvas, cfg, spin, hover }
         const barPct = (v, lo, hi) => Math.round(Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * 100);
 
@@ -17108,6 +17112,8 @@ function runLayerSystemRegressionTests() {
               '<span>Top Speed</span><div class="sd-bar"><i style="width:' + barPct(c.topSpeedMult, 0.9, 1.15) + '%"></i></div>' +
               '<span>Accel</span><div class="sd-bar"><i style="width:' + barPct(c.accelMult, 0.5, 1.05) + '%"></i></div>' +
               '<span>Handling</span><div class="sd-bar"><i style="width:' + barPct(c.handlingMult, 0.6, 1.2) + '%"></i></div>' +
+              '<span>Armor</span><div class="sd-bar"><i style="width:' + barPct(c.crashResist != null ? c.crashResist : (c.weaponResist != null ? c.weaponResist : 1.0), 0.7, 1.45) + '%"></i></div>' +
+              '<span>Firepower</span><div class="sd-bar"><i style="width:' + barPct(c.firePower != null ? c.firePower : 1.0, 0.6, 1.4) + '%"></i></div>' +
             '</div>' +
             '<div class="sd-special">◆ ' + (lore.special || '—') + '</div>' +
             (uniq ? '<div class="sd-item">✦ Signature item: <b>' + uniq.name + '</b> — ' + uniq.desc + '</div>' : '') +
@@ -17133,6 +17139,10 @@ function runLayerSystemRegressionTests() {
           // Click = select this ship for your next race.
           card.addEventListener('click', () => {
             if (!CAR_TYPES[key]) return;
+            if (typeof carTypeSelectable === 'function' && !carTypeSelectable(key)) {
+              print('"' + (cfg.name || key) + '" is locked — the host has prototype ships disabled', 'err');
+              return;
+            }
             G.selectedCarType = key;
             try { refreshShipGrid(); } catch (_) {}
             getLobbyProfileInput();
@@ -17141,12 +17151,12 @@ function runLayerSystemRegressionTests() {
           });
         });
 
-        showDetail(G.selectedCarType && CAR_TYPES[G.selectedCarType] ? G.selectedCarType : keys[0]);
+        showDetail((G.selectedCarType && CAR_TYPES[G.selectedCarType] && keys.includes(G.selectedCarType)) ? G.selectedCarType : keys[0]);
 
         // One shared animation loop spins every ship; hovered ones lift + speed up.
         let last = performance.now();
         function frame(now) {
-          if (!openWindows['ships']) return; // window closed → stop the loop
+          if (!openWindows[winId]) return; // window closed → stop the loop
           const dt = Math.min(0.05, (now - last) / 1000); last = now;
           for (const rec of cards) {
             rec.spin += dt * (rec.hover ? 1.8 : 0.7);
@@ -17271,7 +17281,8 @@ function runLayerSystemRegressionTests() {
           'Togglechat - Toggle lobby chat mode',
           'Ship [type] - Sets your ship',
           'Ship desc - Shows full stats & descriptions for every ship',
-          'Ships - Lists the available ships',
+          'Ships - Open the ship hangar (spinning showcase)',
+          'Prototypes - Open the prototype hangar (experimental ships)',
           'Whoami - Shows your current profile',
           'Resetplayerdata - Wipe your saved profile, friends & IDs (fresh start)',
           'Myid - Shows your friend ID (share it to be added)',
@@ -17333,7 +17344,8 @@ function runLayerSystemRegressionTests() {
       G.selectedCarType = t; try { refreshShipGrid(); } catch(e){} getLobbyProfileInput();
       print('ship set to ' + (CAR_TYPES[t].name || t), 'hi');
     } },
-    ships: { desc: 'open the ship hangar (spinning showcase)', win: true, run: () => openShipsWindow() },
+    ships: { desc: 'open the ship hangar (spinning showcase)', win: true, run: () => openShipsWindow(false) },
+    prototypes: { desc: 'open the prototype hangar (the experimental ships)', win: true, run: () => openShipsWindow(true) },
     whoami: { desc: 'profile', run: () => {
       const nm = (document.getElementById('player-name') || {}).value || 'Racer';
       const cl = (document.getElementById('car-color') || {}).value || '?';
