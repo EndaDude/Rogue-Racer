@@ -12358,41 +12358,46 @@ function drawCarSilhouette(ctx, shape, w, h) {
     return;
   }
   if (shape === 'huntlen') {
-    // Beefy fortress hexagon (front + rear bevels).
+    // Heavy bracket: two forward walls, open front, plus a rear V-notch.
     ctx.beginPath();
-    ctx.moveTo(-w*0.28, -h*0.5);
-    ctx.lineTo(w*0.28, -h*0.5);
-    ctx.lineTo(w*0.5, -h*0.16);
-    ctx.lineTo(w*0.5, h*0.28);
-    ctx.lineTo(w*0.28, h*0.5);
-    ctx.lineTo(-w*0.28, h*0.5);
-    ctx.lineTo(-w*0.5, h*0.28);
-    ctx.lineTo(-w*0.5, -h*0.16);
+    ctx.moveTo(-w*0.5, -h*0.5);
+    ctx.lineTo(-w*0.5,  h*0.5);
+    ctx.lineTo(-w*0.16, h*0.5);
+    ctx.lineTo(0,       h*0.16);
+    ctx.lineTo(w*0.16,  h*0.5);
+    ctx.lineTo(w*0.5,   h*0.5);
+    ctx.lineTo(w*0.5,  -h*0.5);
+    ctx.lineTo(w*0.24, -h*0.5);
+    ctx.lineTo(w*0.24, -h*0.05);
+    ctx.lineTo(-w*0.24,-h*0.05);
+    ctx.lineTo(-w*0.24,-h*0.5);
     ctx.closePath();
     ctx.fill();
     return;
   }
   if (shape === 'gleenixus') {
-    // Arrowhead with a central spine tail (an "→" glyph).
+    // Arrowhead nose over two rear walls with a channel between them.
     ctx.beginPath();
-    ctx.moveTo(0, -h/2 - 3);
-    ctx.lineTo(w*0.48, h*0.02);
-    ctx.lineTo(w*0.16, h*0.02);
-    ctx.lineTo(w*0.13, h*0.5);
-    ctx.lineTo(-w*0.13, h*0.5);
-    ctx.lineTo(-w*0.16, h*0.02);
-    ctx.lineTo(-w*0.48, h*0.02);
+    ctx.moveTo(0, -h/2 - 4);
+    ctx.lineTo(w*0.5, h*0.04);
+    ctx.lineTo(w*0.5, h*0.5);
+    ctx.lineTo(w*0.2, h*0.5);
+    ctx.lineTo(w*0.2, h*0.1);
+    ctx.lineTo(-w*0.2, h*0.1);
+    ctx.lineTo(-w*0.2, h*0.5);
+    ctx.lineTo(-w*0.5, h*0.5);
+    ctx.lineTo(-w*0.5, h*0.04);
     ctx.closePath();
     ctx.fill();
     return;
   }
   if (shape === 'scrynell') {
-    // Smooth teardrop wisp.
+    // Swept boomerang: wide wingtips with a deep forward rear-notch.
     ctx.beginPath();
     ctx.moveTo(0, -h/2 - 5);
-    ctx.quadraticCurveTo(w*0.52, -h*0.1, w*0.3, h*0.5);
-    ctx.lineTo(-w*0.3, h*0.5);
-    ctx.quadraticCurveTo(-w*0.52, -h*0.1, 0, -h/2 - 5);
+    ctx.lineTo(w*0.5, h*0.5);
+    ctx.lineTo(0, -h*0.02);
+    ctx.lineTo(-w*0.5, h*0.5);
     ctx.closePath();
     ctx.fill();
     return;
@@ -12411,40 +12416,43 @@ function drawCarSilhouette(ctx, shape, w, h) {
     return;
   }
   if (shape === 'vurn') {
-    // Sturdy rounded lozenge hull.
+    // Rounded hull with a triangular notch bitten out of the tail.
     ctx.beginPath();
     ctx.moveTo(0, -h/2 - 2);
-    ctx.quadraticCurveTo(w*0.56, -h*0.28, w*0.5, h*0.18);
-    ctx.quadraticCurveTo(w*0.45, h*0.5, 0, h*0.5);
-    ctx.quadraticCurveTo(-w*0.45, h*0.5, -w*0.5, h*0.18);
+    ctx.quadraticCurveTo(w*0.56, -h*0.28, w*0.5, h*0.2);
+    ctx.quadraticCurveTo(w*0.46, h*0.5, w*0.18, h*0.5);
+    ctx.lineTo(0, h*0.14);
+    ctx.lineTo(-w*0.18, h*0.5);
+    ctx.quadraticCurveTo(-w*0.46, h*0.5, -w*0.5, h*0.2);
     ctx.quadraticCurveTo(-w*0.56, -h*0.28, 0, -h/2 - 2);
     ctx.closePath();
     ctx.fill();
     return;
   }
   if (shape === 'kessa') {
-    // Nimble deep-delta with a sharp needle nose.
+    // Sideways hourglass ">==<": wide wingtips at each corner with triangular
+    // holes bitten into the front and back, joined by a slim center waist.
+    // The rear hole is cut a touch deeper than the front one.
     ctx.beginPath();
-    ctx.moveTo(0, -h/2 - 6);
-    ctx.lineTo(w*0.26, -h*0.04);
-    ctx.lineTo(w*0.5, h*0.5);
-    ctx.lineTo(w*0.12, h*0.26);
-    ctx.lineTo(-w*0.12, h*0.26);
-    ctx.lineTo(-w*0.5, h*0.5);
-    ctx.lineTo(-w*0.26, -h*0.04);
+    ctx.moveTo(-w*0.5, -h*0.44);   // front-left tip
+    ctx.lineTo(0,      -h*0.08);   // front notch base
+    ctx.lineTo(w*0.5,  -h*0.44);   // front-right tip
+    ctx.lineTo(w*0.5,   h*0.44);   // rear-right tip
+    ctx.lineTo(0,       h*0.02);   // rear notch base (deeper = bigger hole)
+    ctx.lineTo(-w*0.5,  h*0.44);   // rear-left tip
     ctx.closePath();
     ctx.fill();
     return;
   }
   if (shape === 'draxil') {
-    // Aggressive barbed dagger (glass cannon).
+    // Wide aggressive barbed dagger (glass cannon).
     ctx.beginPath();
     ctx.moveTo(0, -h/2 - 7);
-    ctx.lineTo(w*0.3, h*0.08);
-    ctx.lineTo(w*0.5, h*0.5);
-    ctx.lineTo(0, h*0.28);
-    ctx.lineTo(-w*0.5, h*0.5);
-    ctx.lineTo(-w*0.3, h*0.08);
+    ctx.lineTo(w*0.42, h*0.04);
+    ctx.lineTo(w*0.62, h*0.5);
+    ctx.lineTo(0, h*0.24);
+    ctx.lineTo(-w*0.62, h*0.5);
+    ctx.lineTo(-w*0.42, h*0.04);
     ctx.closePath();
     ctx.fill();
     return;
@@ -12505,6 +12513,33 @@ function drawCarGlass(ctx, shape, w, h) {
     ctx.moveTo(0, -h*0.32);
     ctx.lineTo(w*0.2, h*0.06);
     ctx.lineTo(-w*0.2, h*0.06);
+    ctx.closePath();
+    ctx.fill();
+    return;
+  }
+  if (shape === 'tez' || shape === 'huntlen') {
+    // Bracket ships: cockpit sits on the solid rear body.
+    ctx.beginPath();
+    ctx.moveTo(0, h*0.02);
+    ctx.lineTo(w*0.14, h*0.26);
+    ctx.lineTo(-w*0.14, h*0.26);
+    ctx.closePath();
+    ctx.fill();
+    return;
+  }
+  if (shape === 'kessa') {
+    // Bowtie waist canopy.
+    ctx.beginPath();
+    ctx.arc(0, 0, h*0.11, 0, Math.PI*2);
+    ctx.fill();
+    return;
+  }
+  if (shape === 'kiph' || shape === 'gleenixus' || shape === 'scrynell' || shape === 'vurn' || shape === 'draxil' || shape === 'exendios') {
+    // Forward-facing dart canopy near the nose.
+    ctx.beginPath();
+    ctx.moveTo(0, -h*0.3);
+    ctx.lineTo(w*0.15, h*0.02);
+    ctx.lineTo(-w*0.15, h*0.02);
     ctx.closePath();
     ctx.fill();
     return;
@@ -13070,12 +13105,31 @@ function updateMissiles(dt) {
   updateLockBeeper(_lockNear, dt);
 }
 
-// Nearest centerline point, outward normal and half-width for a world point (main
-// spline). Used to bounce free projectiles off the track walls.
-function projTrackInfo(x, y) {
+// Nearest centerline point, outward normal and half-width for a world point,
+// restricted to the ribbon on the projectile's OWN layer. Used to bounce free
+// projectiles off the track walls. Filtering by layer stops a projectile from
+// bouncing off (or being blocked by) a bridge that merely passes above/below it
+// where there is no slope connecting the two decks.
+function projTrackInfo(x, y, layer) {
   const t = G.track;
-  if (!t || !t.spline || t.spline.length < 2) return null;
-  const info = pointOnTrackSegments(x, y, t.spline, t.splineWidth);
+  if (!t) return null;
+  const L = Number.isFinite(layer) ? layer : 0;
+  // V2 fork tracks carry a dedicated drive spline with a per-sample floor.
+  if (t.driveSpline && t.driveFloor && t.driveSegs && t.driveSpline.length >= 2) {
+    const sp = t.driveSpline;
+    const near = pointOnDriveSegments(x, y,
+      (i, j) => (t.driveFloor[i] || 0) === L && (t.driveFloor[j] || 0) === L);
+    if (!Number.isFinite(near.dist)) return null;
+    const a = sp[near.idx], b = sp[near.jdx];
+    let tx = b.x - a.x, ty = b.y - a.y; const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
+    const cx = a.x + (b.x - a.x) * near.t, cy = a.y + (b.y - a.y) * near.t;
+    const nx = -ty, ny = tx;
+    const signed = (x - cx) * nx + (y - cy) * ny;
+    return { cx, cy, nx, ny, tx, ty, halfW: near.halfW, signed, idx: near.idx };
+  }
+  if (!t.spline || t.spline.length < 2) return null;
+  const info = pointOnTrackSegments(x, y, t.spline, t.splineWidth,
+    (i, j) => supportFloorAtSplineIdx(i) === L && supportFloorAtSplineIdx(j) === L);
   const sp = t.spline, i0 = info.idx, i1 = (i0 + 1) % sp.length;
   const a = sp[i0], b = sp[i1];
   let tx = b.x - a.x, ty = b.y - a.y; const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
@@ -13087,7 +13141,7 @@ function projTrackInfo(x, y) {
 
 // Reflect a projectile off the track wall and keep it inside the ribbon.
 function bounceProjectileOffWall(proj, radius) {
-  const info = projTrackInfo(proj.x, proj.y);
+  const info = projTrackInfo(proj.x, proj.y, proj.layer || 0);
   if (!info) return;
   const limit = Math.max(4, info.halfW - radius);
   if (Math.abs(info.signed) <= limit) return;
@@ -13281,7 +13335,7 @@ function deathrayBlockDist(owner) {
   // March forward to find where the beam first leaves the track ribbon (a wall).
   const step = 12;
   for (let d = 20; d < best; d += step) {
-    const info = projTrackInfo(owner.x + ax * d, owner.y + ay * d);
+    const info = projTrackInfo(owner.x + ax * d, owner.y + ay * d, ol);
     if (info && Math.abs(info.signed) > info.halfW) { best = d; break; }
   }
   return best;
