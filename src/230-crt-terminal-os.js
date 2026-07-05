@@ -1777,6 +1777,13 @@
     cls: { desc: 'clear', instant: true, run: () => { scroll.innerHTML = ''; } },
     reboot: { desc: 'reboot', instant: true, run: () => { scroll.innerHTML = ''; boot(); } },
     version: { desc: 'version', instant: true, run: () => { print('Rogue Racer v' + GAME_VERSION, 'hi'); } },
+    reload: { desc: 'reload the engine (pulls the latest version)', instant: true, run: () => {
+      print('Reloading engine \u2014 fetching the latest version...', 'hi');
+      print('(currently on v' + GAME_VERSION + ')', 'dim');
+      // The self-updating loader re-fetches rogue-racer.html on load, so a reload
+      // is how you pull a newer build. Delay briefly so this text renders first.
+      setTimeout(() => { try { location.reload(); } catch (_) {} }, 450);
+    } },
     about: { desc: 'about', run: () => printLines([
       { text: 'ROGUE RACER OS', cls: 'hi' },
       'A multiplayer roguelike racer rendered on an imaginary CRT.',
