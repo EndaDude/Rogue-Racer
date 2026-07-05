@@ -90,9 +90,9 @@ function updateFxEmitters(dt) {
       // Continuously retract the tail so the ribbon fades out behind and vanishes
       // when idle; while moving fast the head is refilled faster than it drains.
       p._trailDecay = (p._trailDecay || 0) + dt;
-      while (p._trailDecay >= 0.03) {
-        p._trailDecay -= 0.03;
-        if (p._trail.length > 0 && (spd <= 12 || p._trail.length > 26)) p._trail.shift();
+      while (p._trailDecay >= 0.018) {
+        p._trailDecay -= 0.018;
+        if (p._trail.length > 0 && (spd <= 12 || p._trail.length > 14)) p._trail.shift();
       }
     } else if (p._trail && p._trail.length) {
       p._trail.length = 0;
@@ -230,8 +230,6 @@ function drawToasts(ctx, W, H) {
     ctx.scale(scale, scale);
     ctx.globalAlpha = a;
     ctx.font = `900 ${t.size}px system-ui`;
-    ctx.shadowColor = t.glow;
-    ctx.shadowBlur = 22;
     ctx.fillStyle = t.color;
     ctx.fillText(t.text, 0, 0);
     ctx.restore();

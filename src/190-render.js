@@ -268,6 +268,20 @@ function render(dt) {
     } else {
       drawTrackGround(ctx, layer);
     }
+    // Overpass shadow: the deck one floor above casts a soft drop-shadow onto this
+    // floor. Cheap — re-blit that upper deck's cached road tiles as offset black
+    // silhouettes (filter:brightness(0) keeps the road shape via the tiles' alpha).
+    // The upper deck's own ground is blitted later at its higher scale, covering the
+    // on-road part, so only the offset sliver peeking past the bridge edge remains —
+    // exactly the look of a shadow cast by an overpass. Only runs when a floor is
+    // stacked above this one, so flat tracks pay nothing.
+    if (groundCache && groundCache.layers && groundCache.layers.has(layer + 1)) {
+      ctx.save();
+      ctx.globalAlpha *= 0.34;
+      ctx.filter = 'brightness(0%)';
+      for (const t of groundCache.layers.get(layer + 1)) ctx.drawImage(t.canvas, t.ox + 7, t.oy + 11, t.w, t.h);
+      ctx.restore();
+    }
     ctx.restore();
   }
 
@@ -401,8 +415,6 @@ function render(dt) {
       ctx.font = '900 130px system-ui';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.shadowColor = col;
-      ctx.shadowBlur = 44;
       ctx.fillStyle = col;
       ctx.globalAlpha = 0.35 + 0.65 * Math.min(1, tSec * 4);
       ctx.fillText(String(G.countdownVal), 0, 0);
@@ -427,8 +439,6 @@ function render(dt) {
     ctx.font = '900 130px system-ui';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.shadowColor = '#22c55e';
-    ctx.shadowBlur = 50;
     ctx.fillStyle = '#22c55e';
     ctx.fillText('GO!', 0, 0);
     ctx.restore();
@@ -441,8 +451,6 @@ function render(dt) {
       ctx.font = '900 34px system-ui';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.shadowColor = '#ef4444';
-      ctx.shadowBlur = 24;
       ctx.fillStyle = '#ef4444';
       ctx.fillText('⟲ WRONG WAY', W/2, H * 0.32);
       ctx.restore();
@@ -2278,8 +2286,6 @@ function drawPlayers(ctx, targetLayer) {
         if (pi.active) {
           ctx.strokeStyle = p.color;
           ctx.lineWidth = 1.5;
-          ctx.shadowColor = p.color;
-          ctx.shadowBlur = 8;
           ctx.stroke();
         }
         ctx.globalAlpha = pi.active ? 1 : 0.4;

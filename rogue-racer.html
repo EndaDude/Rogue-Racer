@@ -1841,7 +1841,7 @@
 // Game (HTML) version. This ships independently of the desktop app via the
 // self-updating loader, so bump it whenever you publish a game update; it shows
 // on the terminal so you can confirm which build actually loaded.
-const GAME_VERSION = '0.1.12';
+const GAME_VERSION = '0.1.13';
 const TOTAL_LAPS = 3;
 const PLAYER_COLORS = ['#a855f7','#06b6d4','#fbbf24','#22c55e','#ef4444','#f97316'];
 const CAR_W = 14, CAR_H = 22;
@@ -1867,7 +1867,11 @@ const CAR_TUNING = {
   baseBrake: 50,
   baseFriction: 120,
   baseAirFriction: 30,
-  baseTurnRate: 1,
+  baseTurnRate: 1.15,
+  // How strongly turn rate scales up with the track speed class (used as
+  // speedScale ** trackSpeedHandlingExp). 0 = no scaling; higher = faster classes
+  // corner much harder so they don't turn into wide, floaty arcs.
+  trackSpeedHandlingExp: 1,
   reverseAccelScale: 0.7,
   steerMinSpeedRef: 28,
   steeringGripPenalty: 0.35,
@@ -1892,7 +1896,7 @@ const CAR_TUNING = {
   driftOverspeedBleed: 1.4,
   driftCoastOverspeedBleed: 0.22,
   driftCoastYawMult: 0.06,
-  driftSteerBoost: 1.18,
+  driftSteerBoost: 1.6,
   // Drift carries velocity through a turn: the sideways momentum scrubbed off by
   // the tires is redirected into forward motion instead of being lost (0..1 = how
   // much of it is preserved). This keeps your speed as you turn WITHOUT ever adding
@@ -3281,11 +3285,38 @@ function initGuestPeer() {
   });
 }
 
+// Build a network-safe snapshot of a players map. Player objects accumulate
+// transient, client-only caches (underscore-prefixed) — including the decal
+// Image/canvas caches (_decalImgs/_decalClip) and trail buffers (_trail) added by
+// the customization + FX systems. Those are NOT serializable; sending them crashes
+// PeerJS serialization and tears down every connection (e.g. host changing ship on
+// the results screen). Strip all underscore-prefixed keys before sending.
+function netPlayers(src) {
+  const players = src || G.players || {};
+  const out = {};
+  for (const id in players) {
+    const p = players[id];
+    if (!p) continue;
+    const c = {};
+    for (const k in p) { if (k[0] === '_') continue; c[k] = p[k]; }
+    out[id] = c;
+  }
+  return out;
+}
+// Shallow-copy outgoing data with a sanitized players map when present, so no send
+// path can leak the non-serializable caches described above.
+function sanitizeOutgoing(data) {
+  if (data && data.players) return { ...data, players: netPlayers(data.players) };
+  return data;
+}
+
 function sendToAll(data) {
-  guestConns.forEach(c => { try { c.send(data); } catch(_){} });
+  const d = sanitizeOutgoing(data);
+  guestConns.forEach(c => { try { c.send(d); } catch(_){} });
 }
 function sendToHost(data) {
-  if (hostConn) try { hostConn.send(data); } catch(_){}
+  const d = sanitizeOutgoing(data);
+  if (hostConn) try { hostConn.send(d); } catch(_){}
 }
 function broadcast(data) {
   if (G.isHost) sendToAll(data);
@@ -4416,7 +4447,7 @@ document.getElementById('host-btn').onclick = async () => {
     peer.on('connection', conn => {
       guestConns.push(conn);
       conn.on('open', () => {
-        conn.send({ type: 'players_sync', players: G.players, speedClass: G.speedClass, hostMode: G.hostMode, mapQueue: G.mapQueue, mapVotes: G.mapVotes });
+        conn.send({ type: 'players_sync', players: netPlayers(), speedClass: G.speedClass, hostMode: G.hostMode, mapQueue: G.mapQueue, mapVotes: G.mapVotes });
         sendLobbySync();
       });
       conn.on('data', d => {
@@ -7406,15 +7437,10 @@ function drawResetBar(ctx, W, H) {
   const gC = Math.round(lerp(238, 38, c));
   const bC = Math.round(lerp(242, 38, c));
   const fillW = Math.max(0, barW * c);
-  if (c > 0.62) {
-    ctx.shadowColor = `rgba(255,40,40,${(c - 0.62) / 0.38})`;
-    ctx.shadowBlur = 22;
-  }
   ctx.fillStyle = `rgb(${rC},${gC},${bC})`;
   ctx.beginPath();
   ctx.roundRect(x, y, fillW, barH, 4);
   ctx.fill();
-  ctx.shadowBlur = 0;
 
   // Outline.
   ctx.strokeStyle = 'rgba(255,255,255,0.28)';
@@ -8234,7 +8260,10 @@ function updateMyPlayer(dt) {
     const lowT = 1 - steerSpeedFactor; // 1 at a standstill, 0 once up to speed
     lowSpeedHandlingBoost = 1 + lowT * lowT * 1.8;
   }
-  const turnSpd = CAR_TUNING.baseTurnRate * effHandlingMult * lowSpeedHandlingBoost * (0.25 + 0.75 * steerSpeedFactor) * steerGripScale * (driftHold ? CAR_TUNING.driftSteerBoost * carCfg.driftEffectMult : 1) * (coastingDriftSteer ? CAR_TUNING.driftCoastYawMult : 1) * penaltyTurnScale;
+  // Faster track speed classes turn harder so cornering keeps up with the higher
+  // speeds instead of widening into floaty arcs (speedScale ** trackSpeedHandlingExp).
+  const trackHandlingMult = Math.pow(speedScale, CAR_TUNING.trackSpeedHandlingExp);
+  const turnSpd = CAR_TUNING.baseTurnRate * trackHandlingMult * effHandlingMult * lowSpeedHandlingBoost * (0.25 + 0.75 * steerSpeedFactor) * steerGripScale * (driftHold ? CAR_TUNING.driftSteerBoost * carCfg.driftEffectMult : 1) * (coastingDriftSteer ? CAR_TUNING.driftCoastYawMult : 1) * penaltyTurnScale;
   const shiftActive = shiftHeld && carCfg.shiftEnabled;
   if (!shiftActive && steerInput !== 0) me.angle += steerInput * turnSpd * dt;
 
@@ -9704,9 +9733,9 @@ function updateFxEmitters(dt) {
       // Continuously retract the tail so the ribbon fades out behind and vanishes
       // when idle; while moving fast the head is refilled faster than it drains.
       p._trailDecay = (p._trailDecay || 0) + dt;
-      while (p._trailDecay >= 0.03) {
-        p._trailDecay -= 0.03;
-        if (p._trail.length > 0 && (spd <= 12 || p._trail.length > 26)) p._trail.shift();
+      while (p._trailDecay >= 0.018) {
+        p._trailDecay -= 0.018;
+        if (p._trail.length > 0 && (spd <= 12 || p._trail.length > 14)) p._trail.shift();
       }
     } else if (p._trail && p._trail.length) {
       p._trail.length = 0;
@@ -9844,8 +9873,6 @@ function drawToasts(ctx, W, H) {
     ctx.scale(scale, scale);
     ctx.globalAlpha = a;
     ctx.font = `900 ${t.size}px system-ui`;
-    ctx.shadowColor = t.glow;
-    ctx.shadowBlur = 22;
     ctx.fillStyle = t.color;
     ctx.fillText(t.text, 0, 0);
     ctx.restore();
@@ -11103,6 +11130,20 @@ function render(dt) {
     } else {
       drawTrackGround(ctx, layer);
     }
+    // Overpass shadow: the deck one floor above casts a soft drop-shadow onto this
+    // floor. Cheap — re-blit that upper deck's cached road tiles as offset black
+    // silhouettes (filter:brightness(0) keeps the road shape via the tiles' alpha).
+    // The upper deck's own ground is blitted later at its higher scale, covering the
+    // on-road part, so only the offset sliver peeking past the bridge edge remains —
+    // exactly the look of a shadow cast by an overpass. Only runs when a floor is
+    // stacked above this one, so flat tracks pay nothing.
+    if (groundCache && groundCache.layers && groundCache.layers.has(layer + 1)) {
+      ctx.save();
+      ctx.globalAlpha *= 0.34;
+      ctx.filter = 'brightness(0%)';
+      for (const t of groundCache.layers.get(layer + 1)) ctx.drawImage(t.canvas, t.ox + 7, t.oy + 11, t.w, t.h);
+      ctx.restore();
+    }
     ctx.restore();
   }
 
@@ -11236,8 +11277,6 @@ function render(dt) {
       ctx.font = '900 130px system-ui';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.shadowColor = col;
-      ctx.shadowBlur = 44;
       ctx.fillStyle = col;
       ctx.globalAlpha = 0.35 + 0.65 * Math.min(1, tSec * 4);
       ctx.fillText(String(G.countdownVal), 0, 0);
@@ -11262,8 +11301,6 @@ function render(dt) {
     ctx.font = '900 130px system-ui';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.shadowColor = '#22c55e';
-    ctx.shadowBlur = 50;
     ctx.fillStyle = '#22c55e';
     ctx.fillText('GO!', 0, 0);
     ctx.restore();
@@ -11276,8 +11313,6 @@ function render(dt) {
       ctx.font = '900 34px system-ui';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.shadowColor = '#ef4444';
-      ctx.shadowBlur = 24;
       ctx.fillStyle = '#ef4444';
       ctx.fillText('⟲ WRONG WAY', W/2, H * 0.32);
       ctx.restore();
@@ -13113,8 +13148,6 @@ function drawPlayers(ctx, targetLayer) {
         if (pi.active) {
           ctx.strokeStyle = p.color;
           ctx.lineWidth = 1.5;
-          ctx.shadowColor = p.color;
-          ctx.shadowBlur = 8;
           ctx.stroke();
         }
         ctx.globalAlpha = pi.active ? 1 : 0.4;

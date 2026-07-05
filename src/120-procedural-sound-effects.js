@@ -324,15 +324,10 @@ function drawResetBar(ctx, W, H) {
   const gC = Math.round(lerp(238, 38, c));
   const bC = Math.round(lerp(242, 38, c));
   const fillW = Math.max(0, barW * c);
-  if (c > 0.62) {
-    ctx.shadowColor = `rgba(255,40,40,${(c - 0.62) / 0.38})`;
-    ctx.shadowBlur = 22;
-  }
   ctx.fillStyle = `rgb(${rC},${gC},${bC})`;
   ctx.beginPath();
   ctx.roundRect(x, y, fillW, barH, 4);
   ctx.fill();
-  ctx.shadowBlur = 0;
 
   // Outline.
   ctx.strokeStyle = 'rgba(255,255,255,0.28)';
@@ -1152,7 +1147,10 @@ function updateMyPlayer(dt) {
     const lowT = 1 - steerSpeedFactor; // 1 at a standstill, 0 once up to speed
     lowSpeedHandlingBoost = 1 + lowT * lowT * 1.8;
   }
-  const turnSpd = CAR_TUNING.baseTurnRate * effHandlingMult * lowSpeedHandlingBoost * (0.25 + 0.75 * steerSpeedFactor) * steerGripScale * (driftHold ? CAR_TUNING.driftSteerBoost * carCfg.driftEffectMult : 1) * (coastingDriftSteer ? CAR_TUNING.driftCoastYawMult : 1) * penaltyTurnScale;
+  // Faster track speed classes turn harder so cornering keeps up with the higher
+  // speeds instead of widening into floaty arcs (speedScale ** trackSpeedHandlingExp).
+  const trackHandlingMult = Math.pow(speedScale, CAR_TUNING.trackSpeedHandlingExp);
+  const turnSpd = CAR_TUNING.baseTurnRate * trackHandlingMult * effHandlingMult * lowSpeedHandlingBoost * (0.25 + 0.75 * steerSpeedFactor) * steerGripScale * (driftHold ? CAR_TUNING.driftSteerBoost * carCfg.driftEffectMult : 1) * (coastingDriftSteer ? CAR_TUNING.driftCoastYawMult : 1) * penaltyTurnScale;
   const shiftActive = shiftHeld && carCfg.shiftEnabled;
   if (!shiftActive && steerInput !== 0) me.angle += steerInput * turnSpd * dt;
 

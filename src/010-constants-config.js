@@ -4,7 +4,7 @@
 // Game (HTML) version. This ships independently of the desktop app via the
 // self-updating loader, so bump it whenever you publish a game update; it shows
 // on the terminal so you can confirm which build actually loaded.
-const GAME_VERSION = '0.1.12';
+const GAME_VERSION = '0.1.13';
 const TOTAL_LAPS = 3;
 const PLAYER_COLORS = ['#a855f7','#06b6d4','#fbbf24','#22c55e','#ef4444','#f97316'];
 const CAR_W = 14, CAR_H = 22;
@@ -30,7 +30,11 @@ const CAR_TUNING = {
   baseBrake: 50,
   baseFriction: 120,
   baseAirFriction: 30,
-  baseTurnRate: 1,
+  baseTurnRate: 1.15,
+  // How strongly turn rate scales up with the track speed class (used as
+  // speedScale ** trackSpeedHandlingExp). 0 = no scaling; higher = faster classes
+  // corner much harder so they don't turn into wide, floaty arcs.
+  trackSpeedHandlingExp: 1,
   reverseAccelScale: 0.7,
   steerMinSpeedRef: 28,
   steeringGripPenalty: 0.35,
@@ -55,7 +59,7 @@ const CAR_TUNING = {
   driftOverspeedBleed: 1.4,
   driftCoastOverspeedBleed: 0.22,
   driftCoastYawMult: 0.06,
-  driftSteerBoost: 1.18,
+  driftSteerBoost: 1.6,
   // Drift carries velocity through a turn: the sideways momentum scrubbed off by
   // the tires is redirected into forward motion instead of being lost (0..1 = how
   // much of it is preserved). This keeps your speed as you turn WITHOUT ever adding

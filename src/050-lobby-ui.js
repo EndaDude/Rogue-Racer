@@ -596,7 +596,7 @@ document.getElementById('host-btn').onclick = async () => {
     peer.on('connection', conn => {
       guestConns.push(conn);
       conn.on('open', () => {
-        conn.send({ type: 'players_sync', players: G.players, speedClass: G.speedClass, hostMode: G.hostMode, mapQueue: G.mapQueue, mapVotes: G.mapVotes });
+        conn.send({ type: 'players_sync', players: netPlayers(), speedClass: G.speedClass, hostMode: G.hostMode, mapQueue: G.mapQueue, mapVotes: G.mapVotes });
         sendLobbySync();
       });
       conn.on('data', d => {

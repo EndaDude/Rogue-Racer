@@ -75,11 +75,38 @@ function initGuestPeer() {
   });
 }
 
+// Build a network-safe snapshot of a players map. Player objects accumulate
+// transient, client-only caches (underscore-prefixed) — including the decal
+// Image/canvas caches (_decalImgs/_decalClip) and trail buffers (_trail) added by
+// the customization + FX systems. Those are NOT serializable; sending them crashes
+// PeerJS serialization and tears down every connection (e.g. host changing ship on
+// the results screen). Strip all underscore-prefixed keys before sending.
+function netPlayers(src) {
+  const players = src || G.players || {};
+  const out = {};
+  for (const id in players) {
+    const p = players[id];
+    if (!p) continue;
+    const c = {};
+    for (const k in p) { if (k[0] === '_') continue; c[k] = p[k]; }
+    out[id] = c;
+  }
+  return out;
+}
+// Shallow-copy outgoing data with a sanitized players map when present, so no send
+// path can leak the non-serializable caches described above.
+function sanitizeOutgoing(data) {
+  if (data && data.players) return { ...data, players: netPlayers(data.players) };
+  return data;
+}
+
 function sendToAll(data) {
-  guestConns.forEach(c => { try { c.send(data); } catch(_){} });
+  const d = sanitizeOutgoing(data);
+  guestConns.forEach(c => { try { c.send(d); } catch(_){} });
 }
 function sendToHost(data) {
-  if (hostConn) try { hostConn.send(data); } catch(_){}
+  const d = sanitizeOutgoing(data);
+  if (hostConn) try { hostConn.send(d); } catch(_){}
 }
 function broadcast(data) {
   if (G.isHost) sendToAll(data);
