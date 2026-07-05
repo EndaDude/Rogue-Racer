@@ -417,15 +417,15 @@ function rollWeightedItem(weights, lucky) {
 function spawnBullet(owner) {
   const cfg = getCarTypeCfg(owner.carType);
   const ang = owner.angle + (Math.random() - 0.5) * CAR_TUNING.machinegunSpread;
+  const bSpeed = CAR_TUNING.bulletSpeed * Math.max(0.2, G.speedScale || 1);
   const bullet = {
     id: owner.id + '_b_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
     x: owner.x + Math.cos(owner.angle) * 26,
     y: owner.y + Math.sin(owner.angle) * 26,
-    vx: Math.cos(ang) * CAR_TUNING.bulletSpeed,
-    vy: Math.sin(ang) * CAR_TUNING.bulletSpeed,
+    vx: Math.cos(ang) * bSpeed,
+    vy: Math.sin(ang) * bSpeed,
     ownerId: owner.id,
     layer: owner.layer || 0,
-    life: CAR_TUNING.bulletLife,
     dmg: CAR_TUNING.bulletDamage * (cfg.firePower || 1),
   };
   G.bullets.push(bullet);
@@ -529,7 +529,6 @@ function useItem() {
         lockT: 0,
         locked: false,
         layer: me.layer || 0,
-        life: CAR_TUNING.missileLife,
         dmg: CAR_TUNING.missileDamage * fp,
       };
       G.missiles.push(missile);
@@ -552,7 +551,6 @@ function useItem() {
       vy: Math.sin(me.angle) * CAR_TUNING.shellSpeed,
       ownerId: G.myId,
       layer: me.layer || 0,
-      life: CAR_TUNING.shellLife,
     };
     G.shells.push(shell);
     broadcast({ type: 'shell_spawn', shell });
@@ -568,7 +566,6 @@ function useItem() {
       ownerId: G.myId,
       layer: me.layer || 0,
       phase: Math.random() * Math.PI * 2,
-      life: CAR_TUNING.ballLife,
     };
     G.balls.push(ball);
     broadcast({ type: 'ball_spawn', ball });
@@ -1205,7 +1202,16 @@ function updateMyPlayer(dt) {
     const iceGrip = me._onIce ? CAR_TUNING.iceGripMult : 1;
     const effectiveGrip = dynamicGrip * gripMult * iceGrip;
     const lateralMult = Math.max(0, 1 - effectiveGrip * dt);
+    const lateralBefore = lateralSpeed;
     lateralSpeed *= lateralMult;
+    // Drift carries your velocity through the turn: momentum scrubbed off the
+    // sideways slide is redirected into forward motion rather than being lost, so
+    // turning keeps your speed instead of bleeding it. This is a carry, never a
+    // boost — the top-speed cap below still holds, so it can't push you faster.
+    if (driftHold && !me._onIce) {
+      const redirected = (Math.abs(lateralBefore) - Math.abs(lateralSpeed)) * CAR_TUNING.driftCarryEfficiency;
+      if (redirected > 0) forwardSpeed += (Math.sign(forwardSpeed) || 1) * redirected;
+    }
 
     const steerSign = Math.sign(steerInput);
     const lateralSign = Math.sign(lateralSpeed);
@@ -1270,15 +1276,10 @@ function updateMyPlayer(dt) {
     if (committedDrift && !me._wasCommittedDrift && G.raceStats) G.raceStats.drifts++;
     me._wasCommittedDrift = committedDrift;
 
-    if (committedDrift && forwardSpeed > 15) {
-      me.driftBoostStack = Math.min(CAR_TUNING.driftBoostStackMax, me.driftBoostStack + CAR_TUNING.driftBoostBuildPerSec * slipGate * dt);
-      const chainMult = 1 + me.driftBoostStack * CAR_TUNING.driftSpeedBonusStackScale;
-      const driftCap = maxSpeed * (CAR_TUNING.driftSpeedBonusMaxMult + me.driftBoostStack * CAR_TUNING.driftSpeedCapStackMult);
-      forwardSpeed = Math.min(driftCap, forwardSpeed + CAR_TUNING.driftSpeedBonusPerSec * speedScale * carCfg.driftEffectMult * chainMult * slipGate * dt);
-    } else {
-      const extraDecay = (driftHold && slipGate < CAR_TUNING.driftMinSlipGate) ? CAR_TUNING.driftLowSlipDecayPerSec : 0;
-      me.driftBoostStack = Math.max(0, me.driftBoostStack - (CAR_TUNING.driftBoostDecayPerSec + extraDecay) * dt);
-    }
+    // Drifting no longer boosts you forward — it only carries your existing
+    // momentum through the turn (see the lateral-to-forward redirect above). Keep
+    // the boost stack winding down so any legacy readers see it settle to zero.
+    me.driftBoostStack = Math.max(0, me.driftBoostStack - CAR_TUNING.driftBoostDecayPerSec * dt);
 
     const handlingDeficit = Math.max(0, (CAR_TUNING.driftShakeHandlingSafe - effHandlingMult) / CAR_TUNING.driftShakeHandlingRange);
     const speedOver = Math.max(0, forwardSpeed - CAR_TUNING.driftShakeStartSpeed);
@@ -1292,9 +1293,6 @@ function updateMyPlayer(dt) {
     }
 
     let forwardCap = carCfg.endlessTopSpeed ? Number.POSITIVE_INFINITY : maxSpeed;
-    if (driftHold) {
-      forwardCap = Math.max(forwardCap, maxSpeed * (CAR_TUNING.driftSpeedBonusMaxMult + me.driftBoostStack * CAR_TUNING.driftSpeedCapStackMult));
-    }
     const lateralRatio = coastingDrift ? (CAR_TUNING.driftCoastMaxLateralRatio * carCfg.driftEffectMult) : CAR_TUNING.maxLateralSpeedRatio;
     const maxLateral = maxSpeed * lateralRatio;
     lateralSpeed = Math.max(-maxLateral, Math.min(maxLateral, lateralSpeed));

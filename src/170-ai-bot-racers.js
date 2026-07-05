@@ -173,7 +173,7 @@ function botUseItem(b) {
       vx: Math.cos(b.angle) * CAR_TUNING.missileSpeed, vy: Math.sin(b.angle) * CAR_TUNING.missileSpeed,
       angle: b.angle, speed: CAR_TUNING.missileSpeed, ownerId: b.id,
       targetId: locked ? best.id : null, lockT: 0, locked: !!locked,
-      layer: b.layer || 0, life: CAR_TUNING.missileLife,
+      layer: b.layer || 0,
     };
     G.missiles.push(missile);
     broadcast({ type: 'missile_spawn', missile });
@@ -184,7 +184,7 @@ function botUseItem(b) {
       id: b.id + '_shell_' + Date.now(),
       x: b.x + Math.cos(b.angle) * 24, y: b.y + Math.sin(b.angle) * 24,
       vx: Math.cos(b.angle) * CAR_TUNING.shellSpeed, vy: Math.sin(b.angle) * CAR_TUNING.shellSpeed,
-      ownerId: b.id, layer: b.layer || 0, life: CAR_TUNING.shellLife,
+      ownerId: b.id, layer: b.layer || 0,
     };
     if (!G.shells) G.shells = [];
     G.shells.push(shell);
@@ -196,7 +196,7 @@ function botUseItem(b) {
       id: b.id + '_ball_' + Date.now(),
       x: b.x + Math.cos(b.angle) * 24, y: b.y + Math.sin(b.angle) * 24,
       vx: Math.cos(b.angle) * CAR_TUNING.ballSpeed, vy: Math.sin(b.angle) * CAR_TUNING.ballSpeed,
-      ownerId: b.id, layer: b.layer || 0, phase: Math.random() * Math.PI * 2, life: CAR_TUNING.ballLife,
+      ownerId: b.id, layer: b.layer || 0, phase: Math.random() * Math.PI * 2,
     };
     if (!G.balls) G.balls = [];
     G.balls.push(ball);

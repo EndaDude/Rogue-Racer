@@ -1841,7 +1841,7 @@
 // Game (HTML) version. This ships independently of the desktop app via the
 // self-updating loader, so bump it whenever you publish a game update; it shows
 // on the terminal so you can confirm which build actually loaded.
-const GAME_VERSION = '0.1.8';
+const GAME_VERSION = '0.1.9';
 const TOTAL_LAPS = 3;
 const PLAYER_COLORS = ['#a855f7','#06b6d4','#fbbf24','#22c55e','#ef4444','#f97316'];
 const CAR_W = 14, CAR_H = 22;
@@ -1880,6 +1880,11 @@ const CAR_TUNING = {
   driftCoastOverspeedBleed: 0.22,
   driftCoastYawMult: 0.06,
   driftSteerBoost: 1.18,
+  // Drift carries velocity through a turn: the sideways momentum scrubbed off by
+  // the tires is redirected into forward motion instead of being lost (0..1 = how
+  // much of it is preserved). This keeps your speed as you turn WITHOUT ever adding
+  // speed beyond your top speed — drifting no longer boosts you forward.
+  driftCarryEfficiency: 0.92,
   driftSpeedBonusPerSec: 18,
   driftSpeedBonusMaxMult: 1.16,
   driftBoostBuildPerSec: 0.85,
@@ -2133,6 +2138,12 @@ const CAR_TUNING = {
   machinegunBurst: 8,             // rounds per pickup use
   machinegunInterval: 0.06,       // seconds between rounds
   machinegunSpread: 0.05,         // random aim jitter (radians)
+
+  // Projectiles die after a fixed number of wall bounces instead of a timer.
+  shellBounces: 7,                // Puncher Shell
+  missileBounces: 5,              // Missile
+  ballBounces: 10,                // Baller Ball
+  bulletBounces: 3,               // Machinegun tracer round
 };
 
 
@@ -7405,15 +7416,15 @@ function rollWeightedItem(weights, lucky) {
 function spawnBullet(owner) {
   const cfg = getCarTypeCfg(owner.carType);
   const ang = owner.angle + (Math.random() - 0.5) * CAR_TUNING.machinegunSpread;
+  const bSpeed = CAR_TUNING.bulletSpeed * Math.max(0.2, G.speedScale || 1);
   const bullet = {
     id: owner.id + '_b_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
     x: owner.x + Math.cos(owner.angle) * 26,
     y: owner.y + Math.sin(owner.angle) * 26,
-    vx: Math.cos(ang) * CAR_TUNING.bulletSpeed,
-    vy: Math.sin(ang) * CAR_TUNING.bulletSpeed,
+    vx: Math.cos(ang) * bSpeed,
+    vy: Math.sin(ang) * bSpeed,
     ownerId: owner.id,
     layer: owner.layer || 0,
-    life: CAR_TUNING.bulletLife,
     dmg: CAR_TUNING.bulletDamage * (cfg.firePower || 1),
   };
   G.bullets.push(bullet);
@@ -7517,7 +7528,6 @@ function useItem() {
         lockT: 0,
         locked: false,
         layer: me.layer || 0,
-        life: CAR_TUNING.missileLife,
         dmg: CAR_TUNING.missileDamage * fp,
       };
       G.missiles.push(missile);
@@ -7540,7 +7550,6 @@ function useItem() {
       vy: Math.sin(me.angle) * CAR_TUNING.shellSpeed,
       ownerId: G.myId,
       layer: me.layer || 0,
-      life: CAR_TUNING.shellLife,
     };
     G.shells.push(shell);
     broadcast({ type: 'shell_spawn', shell });
@@ -7556,7 +7565,6 @@ function useItem() {
       ownerId: G.myId,
       layer: me.layer || 0,
       phase: Math.random() * Math.PI * 2,
-      life: CAR_TUNING.ballLife,
     };
     G.balls.push(ball);
     broadcast({ type: 'ball_spawn', ball });
@@ -8193,7 +8201,16 @@ function updateMyPlayer(dt) {
     const iceGrip = me._onIce ? CAR_TUNING.iceGripMult : 1;
     const effectiveGrip = dynamicGrip * gripMult * iceGrip;
     const lateralMult = Math.max(0, 1 - effectiveGrip * dt);
+    const lateralBefore = lateralSpeed;
     lateralSpeed *= lateralMult;
+    // Drift carries your velocity through the turn: momentum scrubbed off the
+    // sideways slide is redirected into forward motion rather than being lost, so
+    // turning keeps your speed instead of bleeding it. This is a carry, never a
+    // boost — the top-speed cap below still holds, so it can't push you faster.
+    if (driftHold && !me._onIce) {
+      const redirected = (Math.abs(lateralBefore) - Math.abs(lateralSpeed)) * CAR_TUNING.driftCarryEfficiency;
+      if (redirected > 0) forwardSpeed += (Math.sign(forwardSpeed) || 1) * redirected;
+    }
 
     const steerSign = Math.sign(steerInput);
     const lateralSign = Math.sign(lateralSpeed);
@@ -8258,15 +8275,10 @@ function updateMyPlayer(dt) {
     if (committedDrift && !me._wasCommittedDrift && G.raceStats) G.raceStats.drifts++;
     me._wasCommittedDrift = committedDrift;
 
-    if (committedDrift && forwardSpeed > 15) {
-      me.driftBoostStack = Math.min(CAR_TUNING.driftBoostStackMax, me.driftBoostStack + CAR_TUNING.driftBoostBuildPerSec * slipGate * dt);
-      const chainMult = 1 + me.driftBoostStack * CAR_TUNING.driftSpeedBonusStackScale;
-      const driftCap = maxSpeed * (CAR_TUNING.driftSpeedBonusMaxMult + me.driftBoostStack * CAR_TUNING.driftSpeedCapStackMult);
-      forwardSpeed = Math.min(driftCap, forwardSpeed + CAR_TUNING.driftSpeedBonusPerSec * speedScale * carCfg.driftEffectMult * chainMult * slipGate * dt);
-    } else {
-      const extraDecay = (driftHold && slipGate < CAR_TUNING.driftMinSlipGate) ? CAR_TUNING.driftLowSlipDecayPerSec : 0;
-      me.driftBoostStack = Math.max(0, me.driftBoostStack - (CAR_TUNING.driftBoostDecayPerSec + extraDecay) * dt);
-    }
+    // Drifting no longer boosts you forward — it only carries your existing
+    // momentum through the turn (see the lateral-to-forward redirect above). Keep
+    // the boost stack winding down so any legacy readers see it settle to zero.
+    me.driftBoostStack = Math.max(0, me.driftBoostStack - CAR_TUNING.driftBoostDecayPerSec * dt);
 
     const handlingDeficit = Math.max(0, (CAR_TUNING.driftShakeHandlingSafe - effHandlingMult) / CAR_TUNING.driftShakeHandlingRange);
     const speedOver = Math.max(0, forwardSpeed - CAR_TUNING.driftShakeStartSpeed);
@@ -8280,9 +8292,6 @@ function updateMyPlayer(dt) {
     }
 
     let forwardCap = carCfg.endlessTopSpeed ? Number.POSITIVE_INFINITY : maxSpeed;
-    if (driftHold) {
-      forwardCap = Math.max(forwardCap, maxSpeed * (CAR_TUNING.driftSpeedBonusMaxMult + me.driftBoostStack * CAR_TUNING.driftSpeedCapStackMult));
-    }
     const lateralRatio = coastingDrift ? (CAR_TUNING.driftCoastMaxLateralRatio * carCfg.driftEffectMult) : CAR_TUNING.maxLateralSpeedRatio;
     const maxLateral = maxSpeed * lateralRatio;
     lateralSpeed = Math.max(-maxLateral, Math.min(maxLateral, lateralSpeed));
@@ -10239,7 +10248,7 @@ function botUseItem(b) {
       vx: Math.cos(b.angle) * CAR_TUNING.missileSpeed, vy: Math.sin(b.angle) * CAR_TUNING.missileSpeed,
       angle: b.angle, speed: CAR_TUNING.missileSpeed, ownerId: b.id,
       targetId: locked ? best.id : null, lockT: 0, locked: !!locked,
-      layer: b.layer || 0, life: CAR_TUNING.missileLife,
+      layer: b.layer || 0,
     };
     G.missiles.push(missile);
     broadcast({ type: 'missile_spawn', missile });
@@ -10250,7 +10259,7 @@ function botUseItem(b) {
       id: b.id + '_shell_' + Date.now(),
       x: b.x + Math.cos(b.angle) * 24, y: b.y + Math.sin(b.angle) * 24,
       vx: Math.cos(b.angle) * CAR_TUNING.shellSpeed, vy: Math.sin(b.angle) * CAR_TUNING.shellSpeed,
-      ownerId: b.id, layer: b.layer || 0, life: CAR_TUNING.shellLife,
+      ownerId: b.id, layer: b.layer || 0,
     };
     if (!G.shells) G.shells = [];
     G.shells.push(shell);
@@ -10262,7 +10271,7 @@ function botUseItem(b) {
       id: b.id + '_ball_' + Date.now(),
       x: b.x + Math.cos(b.angle) * 24, y: b.y + Math.sin(b.angle) * 24,
       vx: Math.cos(b.angle) * CAR_TUNING.ballSpeed, vy: Math.sin(b.angle) * CAR_TUNING.ballSpeed,
-      ownerId: b.id, layer: b.layer || 0, phase: Math.random() * Math.PI * 2, life: CAR_TUNING.ballLife,
+      ownerId: b.id, layer: b.layer || 0, phase: Math.random() * Math.PI * 2,
     };
     if (!G.balls) G.balls = [];
     G.balls.push(ball);
@@ -13037,7 +13046,7 @@ function updateMissiles(dt) {
       const dW = dist(m.x, m.y, _meWarn.x, _meWarn.y);
       if (dW < _lockNear) _lockNear = dW;
     }
-    const speed = T.missileSpeed;
+    const speed = T.missileSpeed * Math.max(0.2, G.speedScale || 1);
     // Back-compat: older spawns only carried angle+speed.
     if (m.vx === undefined) { m.vx = Math.cos(m.angle || 0) * speed; m.vy = Math.sin(m.angle || 0) * speed; }
     if (m.layer === undefined) m.layer = 0;
@@ -13058,7 +13067,7 @@ function updateMissiles(dt) {
           if (nearId === G.myId && !m._warnedMe) { m._warnedMe = true; playLockAcquired(); }
         }
       } else { m.lockT = 0; m._candidate = null; }
-      bounceProjectileOffWall(m, T.missileRadius);
+      if (bounceProjectileOffWall(m, T.missileRadius) && (m.bounceCount = (m.bounceCount || 0) + 1) > T.missileBounces) return false;
     } else {
       // Locked: navigate ALONG the track toward the target instead of beelining
       // (so it can't fly through walls to reach them).
@@ -13081,7 +13090,7 @@ function updateMissiles(dt) {
       }
     }
     const vl = Math.hypot(m.vx, m.vy) || 1; m.vx = m.vx / vl * speed; m.vy = m.vy / vl * speed;
-    m.x += m.vx * dt; m.y += m.vy * dt; m.angle = Math.atan2(m.vy, m.vx); m.life -= dt;
+    m.x += m.vx * dt; m.y += m.vy * dt; m.angle = Math.atan2(m.vy, m.vx);
     // Victim-authoritative impact: hits any rival this client simulates.
     for (const p of Object.values(G.players)) {
       if (p.id === m.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (m.layer || 0)) continue;
@@ -13100,7 +13109,7 @@ function updateMissiles(dt) {
         return false;
       }
     }
-    return m.life > 0;
+    return true;
   });
   updateLockBeeper(_lockNear, dt);
 }
@@ -13140,25 +13149,29 @@ function projTrackInfo(x, y, layer) {
 }
 
 // Reflect a projectile off the track wall and keep it inside the ribbon.
+// Returns true when an actual bounce (reflection) occurs so callers can count it.
 function bounceProjectileOffWall(proj, radius) {
   const info = projTrackInfo(proj.x, proj.y, proj.layer || 0);
-  if (!info) return;
+  if (!info) return false;
   const limit = Math.max(4, info.halfW - radius);
-  if (Math.abs(info.signed) <= limit) return;
+  if (Math.abs(info.signed) <= limit) return false;
   const sgn = Math.sign(info.signed) || 1;
   const vn = proj.vx * info.nx + proj.vy * info.ny;
-  if (vn * sgn > 0) { proj.vx -= 2 * vn * info.nx; proj.vy -= 2 * vn * info.ny; }
+  let bounced = false;
+  if (vn * sgn > 0) { proj.vx -= 2 * vn * info.nx; proj.vy -= 2 * vn * info.ny; bounced = true; }
   const over = Math.abs(info.signed) - limit;
   proj.x -= sgn * info.nx * over;
   proj.y -= sgn * info.ny * over;
+  return bounced;
 }
 
 // Puncher Shell: bounces off walls, homing only toward a rival within range.
 function updateShells(dt) {
   const T = CAR_TUNING;
   if (!G.shells || !G.shells.length) return;
+  const ss = Math.max(0.2, G.speedScale || 1);
   G.shells = G.shells.filter(s => {
-    const speed = T.shellSpeed;
+    const speed = T.shellSpeed * ss;
     let nearId = null, nearD = Infinity;
     Object.values(G.players).forEach(p => {
       if (p.id === s.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (s.layer || 0)) return;
@@ -13172,9 +13185,9 @@ function updateShells(dt) {
       const na = cur + Math.sign(diff) * Math.min(Math.abs(diff), T.shellTurnRate * dt);
       s.vx = Math.cos(na) * speed; s.vy = Math.sin(na) * speed;
     }
-    bounceProjectileOffWall(s, T.shellRadius);
+    if (bounceProjectileOffWall(s, T.shellRadius) && (s.bounceCount = (s.bounceCount || 0) + 1) > T.shellBounces) return false;
     const vl = Math.hypot(s.vx, s.vy) || 1; s.vx = s.vx / vl * speed; s.vy = s.vy / vl * speed;
-    s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt; s.angle = Math.atan2(s.vy, s.vx);
+    s.x += s.vx * dt; s.y += s.vy * dt; s.angle = Math.atan2(s.vy, s.vx);
     for (const p of Object.values(G.players)) {
       if (p.id === s.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (s.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;
@@ -13188,7 +13201,7 @@ function updateShells(dt) {
         return false;
       }
     }
-    return s.life > 0;
+    return true;
   });
 }
 
@@ -13197,14 +13210,15 @@ function updateBalls(dt) {
   const T = CAR_TUNING;
   if (!G.balls || !G.balls.length) return;
   const now = Date.now() * 0.001;
+  const ss = Math.max(0.2, G.speedScale || 1);
   G.balls = G.balls.filter(b => {
-    const speed = T.ballSpeed;
+    const speed = T.ballSpeed * ss;
     // Wander the heading with a per-ball sine so its velocity is never constant.
     const cur = Math.atan2(b.vy, b.vx) + Math.sin(now * T.ballWobble + (b.phase || 0)) * T.ballWobble * dt;
     b.vx = Math.cos(cur) * speed; b.vy = Math.sin(cur) * speed;
-    bounceProjectileOffWall(b, T.ballRadius);
+    if (bounceProjectileOffWall(b, T.ballRadius) && (b.bounceCount = (b.bounceCount || 0) + 1) > T.ballBounces) return false;
     const vl = Math.hypot(b.vx, b.vy) || 1; b.vx = b.vx / vl * speed; b.vy = b.vy / vl * speed;
-    b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+    b.x += b.vx * dt; b.y += b.vy * dt;
     for (const p of Object.values(G.players)) {
       if (p.id === b.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (b.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;
@@ -13219,7 +13233,7 @@ function updateBalls(dt) {
         return false;
       }
     }
-    return b.life > 0;
+    return true;
   });
 }
 
@@ -13230,8 +13244,8 @@ function updateBullets(dt) {
   if (!G.bullets || !G.bullets.length) return;
   G.bullets = G.bullets.filter(b => {
     if (b.layer === undefined) b.layer = 0;
-    b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
-    bounceProjectileOffWall(b, T.bulletRadius);
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    if (bounceProjectileOffWall(b, T.bulletRadius) && (b.bounceCount = (b.bounceCount || 0) + 1) > T.bulletBounces) return false;
     for (const p of Object.values(G.players)) {
       if (p.id === b.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (b.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;   // victim-authoritative
@@ -13245,7 +13259,7 @@ function updateBullets(dt) {
         return false;
       }
     }
-    return b.life > 0;
+    return true;
   });
 }
 

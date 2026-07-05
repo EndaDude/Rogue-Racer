@@ -2317,7 +2317,7 @@ function updateMissiles(dt) {
       const dW = dist(m.x, m.y, _meWarn.x, _meWarn.y);
       if (dW < _lockNear) _lockNear = dW;
     }
-    const speed = T.missileSpeed;
+    const speed = T.missileSpeed * Math.max(0.2, G.speedScale || 1);
     // Back-compat: older spawns only carried angle+speed.
     if (m.vx === undefined) { m.vx = Math.cos(m.angle || 0) * speed; m.vy = Math.sin(m.angle || 0) * speed; }
     if (m.layer === undefined) m.layer = 0;
@@ -2338,7 +2338,7 @@ function updateMissiles(dt) {
           if (nearId === G.myId && !m._warnedMe) { m._warnedMe = true; playLockAcquired(); }
         }
       } else { m.lockT = 0; m._candidate = null; }
-      bounceProjectileOffWall(m, T.missileRadius);
+      if (bounceProjectileOffWall(m, T.missileRadius) && (m.bounceCount = (m.bounceCount || 0) + 1) > T.missileBounces) return false;
     } else {
       // Locked: navigate ALONG the track toward the target instead of beelining
       // (so it can't fly through walls to reach them).
@@ -2361,7 +2361,7 @@ function updateMissiles(dt) {
       }
     }
     const vl = Math.hypot(m.vx, m.vy) || 1; m.vx = m.vx / vl * speed; m.vy = m.vy / vl * speed;
-    m.x += m.vx * dt; m.y += m.vy * dt; m.angle = Math.atan2(m.vy, m.vx); m.life -= dt;
+    m.x += m.vx * dt; m.y += m.vy * dt; m.angle = Math.atan2(m.vy, m.vx);
     // Victim-authoritative impact: hits any rival this client simulates.
     for (const p of Object.values(G.players)) {
       if (p.id === m.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (m.layer || 0)) continue;
@@ -2380,7 +2380,7 @@ function updateMissiles(dt) {
         return false;
       }
     }
-    return m.life > 0;
+    return true;
   });
   updateLockBeeper(_lockNear, dt);
 }
@@ -2420,25 +2420,29 @@ function projTrackInfo(x, y, layer) {
 }
 
 // Reflect a projectile off the track wall and keep it inside the ribbon.
+// Returns true when an actual bounce (reflection) occurs so callers can count it.
 function bounceProjectileOffWall(proj, radius) {
   const info = projTrackInfo(proj.x, proj.y, proj.layer || 0);
-  if (!info) return;
+  if (!info) return false;
   const limit = Math.max(4, info.halfW - radius);
-  if (Math.abs(info.signed) <= limit) return;
+  if (Math.abs(info.signed) <= limit) return false;
   const sgn = Math.sign(info.signed) || 1;
   const vn = proj.vx * info.nx + proj.vy * info.ny;
-  if (vn * sgn > 0) { proj.vx -= 2 * vn * info.nx; proj.vy -= 2 * vn * info.ny; }
+  let bounced = false;
+  if (vn * sgn > 0) { proj.vx -= 2 * vn * info.nx; proj.vy -= 2 * vn * info.ny; bounced = true; }
   const over = Math.abs(info.signed) - limit;
   proj.x -= sgn * info.nx * over;
   proj.y -= sgn * info.ny * over;
+  return bounced;
 }
 
 // Puncher Shell: bounces off walls, homing only toward a rival within range.
 function updateShells(dt) {
   const T = CAR_TUNING;
   if (!G.shells || !G.shells.length) return;
+  const ss = Math.max(0.2, G.speedScale || 1);
   G.shells = G.shells.filter(s => {
-    const speed = T.shellSpeed;
+    const speed = T.shellSpeed * ss;
     let nearId = null, nearD = Infinity;
     Object.values(G.players).forEach(p => {
       if (p.id === s.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (s.layer || 0)) return;
@@ -2452,9 +2456,9 @@ function updateShells(dt) {
       const na = cur + Math.sign(diff) * Math.min(Math.abs(diff), T.shellTurnRate * dt);
       s.vx = Math.cos(na) * speed; s.vy = Math.sin(na) * speed;
     }
-    bounceProjectileOffWall(s, T.shellRadius);
+    if (bounceProjectileOffWall(s, T.shellRadius) && (s.bounceCount = (s.bounceCount || 0) + 1) > T.shellBounces) return false;
     const vl = Math.hypot(s.vx, s.vy) || 1; s.vx = s.vx / vl * speed; s.vy = s.vy / vl * speed;
-    s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt; s.angle = Math.atan2(s.vy, s.vx);
+    s.x += s.vx * dt; s.y += s.vy * dt; s.angle = Math.atan2(s.vy, s.vx);
     for (const p of Object.values(G.players)) {
       if (p.id === s.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (s.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;
@@ -2468,7 +2472,7 @@ function updateShells(dt) {
         return false;
       }
     }
-    return s.life > 0;
+    return true;
   });
 }
 
@@ -2477,14 +2481,15 @@ function updateBalls(dt) {
   const T = CAR_TUNING;
   if (!G.balls || !G.balls.length) return;
   const now = Date.now() * 0.001;
+  const ss = Math.max(0.2, G.speedScale || 1);
   G.balls = G.balls.filter(b => {
-    const speed = T.ballSpeed;
+    const speed = T.ballSpeed * ss;
     // Wander the heading with a per-ball sine so its velocity is never constant.
     const cur = Math.atan2(b.vy, b.vx) + Math.sin(now * T.ballWobble + (b.phase || 0)) * T.ballWobble * dt;
     b.vx = Math.cos(cur) * speed; b.vy = Math.sin(cur) * speed;
-    bounceProjectileOffWall(b, T.ballRadius);
+    if (bounceProjectileOffWall(b, T.ballRadius) && (b.bounceCount = (b.bounceCount || 0) + 1) > T.ballBounces) return false;
     const vl = Math.hypot(b.vx, b.vy) || 1; b.vx = b.vx / vl * speed; b.vy = b.vy / vl * speed;
-    b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+    b.x += b.vx * dt; b.y += b.vy * dt;
     for (const p of Object.values(G.players)) {
       if (p.id === b.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (b.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;
@@ -2499,7 +2504,7 @@ function updateBalls(dt) {
         return false;
       }
     }
-    return b.life > 0;
+    return true;
   });
 }
 
@@ -2510,8 +2515,8 @@ function updateBullets(dt) {
   if (!G.bullets || !G.bullets.length) return;
   G.bullets = G.bullets.filter(b => {
     if (b.layer === undefined) b.layer = 0;
-    b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
-    bounceProjectileOffWall(b, T.bulletRadius);
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    if (bounceProjectileOffWall(b, T.bulletRadius) && (b.bounceCount = (b.bounceCount || 0) + 1) > T.bulletBounces) return false;
     for (const p of Object.values(G.players)) {
       if (p.id === b.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (b.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;   // victim-authoritative
@@ -2525,7 +2530,7 @@ function updateBullets(dt) {
         return false;
       }
     }
-    return b.life > 0;
+    return true;
   });
 }
 

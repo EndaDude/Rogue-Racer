@@ -4,7 +4,7 @@
 // Game (HTML) version. This ships independently of the desktop app via the
 // self-updating loader, so bump it whenever you publish a game update; it shows
 // on the terminal so you can confirm which build actually loaded.
-const GAME_VERSION = '0.1.8';
+const GAME_VERSION = '0.1.9';
 const TOTAL_LAPS = 3;
 const PLAYER_COLORS = ['#a855f7','#06b6d4','#fbbf24','#22c55e','#ef4444','#f97316'];
 const CAR_W = 14, CAR_H = 22;
@@ -43,6 +43,11 @@ const CAR_TUNING = {
   driftCoastOverspeedBleed: 0.22,
   driftCoastYawMult: 0.06,
   driftSteerBoost: 1.18,
+  // Drift carries velocity through a turn: the sideways momentum scrubbed off by
+  // the tires is redirected into forward motion instead of being lost (0..1 = how
+  // much of it is preserved). This keeps your speed as you turn WITHOUT ever adding
+  // speed beyond your top speed — drifting no longer boosts you forward.
+  driftCarryEfficiency: 0.92,
   driftSpeedBonusPerSec: 18,
   driftSpeedBonusMaxMult: 1.16,
   driftBoostBuildPerSec: 0.85,
@@ -296,6 +301,12 @@ const CAR_TUNING = {
   machinegunBurst: 8,             // rounds per pickup use
   machinegunInterval: 0.06,       // seconds between rounds
   machinegunSpread: 0.05,         // random aim jitter (radians)
+
+  // Projectiles die after a fixed number of wall bounces instead of a timer.
+  shellBounces: 7,                // Puncher Shell
+  missileBounces: 5,              // Missile
+  ballBounces: 10,                // Baller Ball
+  bulletBounces: 3,               // Machinegun tracer round
 };
 
 
