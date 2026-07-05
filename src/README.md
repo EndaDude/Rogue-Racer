@@ -21,6 +21,14 @@ Because it's plain concatenation, the built file is byte-for-byte what the singl
 
 ## Workflow
 
+Fastest loop — dev server with hot reload:
+
+```sh
+bun run dev          # http://localhost:8080, rebuilds on save + auto-reloads the browser
+```
+
+Or build manually:
+
 ```sh
 # edit files under src/, then:
 bun run build        # regenerates ../rogue-racer.html

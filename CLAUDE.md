@@ -12,7 +12,8 @@ Rogue Racer is a 2D top-down multiplayer racing game that **ships as one self-co
 
 ## Running & editing the game
 
-- **Develop the game:** edit files under [src/](src/), run `bun run build` to regenerate [rogue-racer.html](rogue-racer.html), then open it in a browser (or serve the repo root) and refresh. The build is plain concatenation via `bun build.ts` — no npm, no module system.
+- **Develop with hot reload (recommended):** `bun run dev` starts a local server on http://localhost:8080 that rebuilds on every `src/` change and live-reloads the browser. The reload snippet is injected only at serve time — it never touches the shipped file. (`PORT=3000 bun run dev` for a custom port.)
+- **Or build manually:** edit files under [src/](src/), run `bun run build` to regenerate [rogue-racer.html](rogue-racer.html), then open it and refresh. The build is plain concatenation via `bun build.ts` — no npm, no module system.
 - **Enable the build guard once per clone:** `bun run hooks` (installs `.githooks/pre-commit`, which blocks committing a stale/hand-edited `rogue-racer.html`). `bun run check` is the same check for CI.
 - There is **no test suite or linter.** Verify changes by playing.
 - Keep the shipped artifact a single self-contained `rogue-racer.html` — that's what the loader `document.write`s. The split is source-time only; it does not change how the game ships. Full context: [docs/features/rebuild-plan.md](docs/features/rebuild-plan.md).

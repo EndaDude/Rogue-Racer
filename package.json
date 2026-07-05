@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "bun dev.ts",
     "build": "bun build.ts",
     "check": "bun build.ts && git diff --exit-code -- rogue-racer.html || (echo '\\nERROR: rogue-racer.html is stale. Run: bun run build && git add rogue-racer.html' && exit 1)",
     "hooks": "git config core.hooksPath .githooks"
