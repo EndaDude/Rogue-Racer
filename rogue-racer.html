@@ -1832,7 +1832,7 @@
 // Game (HTML) version. This ships independently of the desktop app via the
 // self-updating loader, so bump it whenever you publish a game update; it shows
 // on the terminal so you can confirm which build actually loaded.
-const GAME_VERSION = '0.1.6';
+const GAME_VERSION = '0.1.7';
 const TOTAL_LAPS = 3;
 const PLAYER_COLORS = ['#a855f7','#06b6d4','#fbbf24','#22c55e','#ef4444','#f97316'];
 const CAR_W = 14, CAR_H = 22;
@@ -16671,7 +16671,7 @@ function runLayerSystemRegressionTests() {
         'Togglechat - Chat with the room',
         'Leave - Leave the room',
       ];
-      printLines(lines, { speed: 26 });
+      printLines(relabelHelp(lines), { speed: 26 });
     }, dur);
   }
 
@@ -16873,6 +16873,17 @@ function runLayerSystemRegressionTests() {
   function saveCmdAliases() {
     try { localStorage.setItem('rr-cmd-aliases', JSON.stringify(CMD_ALIASES)); } catch (_) {}
   }
+  // Rewrite each help line's leading command word to the player's chosen alias
+  // (set via `commandchange`) so the help lists reflect what they actually type.
+  function relabelHelp(lines) {
+    const aliasFor = {};
+    for (const alias in CMD_ALIASES) { const t = CMD_ALIASES[alias]; if (t) aliasFor[t] = alias; }
+    const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
+    return lines.map((ln) => ln.replace(/^(\S+)/, (m) => {
+      const a = aliasFor[m.toLowerCase()];
+      return a ? cap(a) : m;
+    }));
+  }
   const CMDS = {
     help: { desc: 'Displays this list', instant: true, run: () => new Promise(resolve => {
       const base = 'User Requested Help; Fetching Commands... ';
@@ -16884,7 +16895,7 @@ function runLayerSystemRegressionTests() {
       setTimeout(() => {
         clearInterval(spin);
         line.textContent = 'User Requested Help; Commands loaded.';
-        printLines([
+        printLines(relabelHelp([
           'Help - Displays this list',
           'Mapmaker - Opens map maker',
           'Tag - Draw your paint tag in a window',
@@ -16931,7 +16942,7 @@ function runLayerSystemRegressionTests() {
           'Controls - Remap keyboard / controller bindings',
           'CRT [on/off] - Toggles the CRT filter',
           'Clear - Clears the screen',
-        ], { speed: 26 }).then(resolve);
+        ]), { speed: 26 }).then(resolve);
       }, dur);
     }) },
     name: { desc: 'set name (claims it as your unique username)', run: (a) => {

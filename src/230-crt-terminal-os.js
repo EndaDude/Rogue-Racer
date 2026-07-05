@@ -798,7 +798,7 @@
         'Togglechat - Chat with the room',
         'Leave - Leave the room',
       ];
-      printLines(lines, { speed: 26 });
+      printLines(relabelHelp(lines), { speed: 26 });
     }, dur);
   }
 
@@ -1000,6 +1000,17 @@
   function saveCmdAliases() {
     try { localStorage.setItem('rr-cmd-aliases', JSON.stringify(CMD_ALIASES)); } catch (_) {}
   }
+  // Rewrite each help line's leading command word to the player's chosen alias
+  // (set via `commandchange`) so the help lists reflect what they actually type.
+  function relabelHelp(lines) {
+    const aliasFor = {};
+    for (const alias in CMD_ALIASES) { const t = CMD_ALIASES[alias]; if (t) aliasFor[t] = alias; }
+    const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
+    return lines.map((ln) => ln.replace(/^(\S+)/, (m) => {
+      const a = aliasFor[m.toLowerCase()];
+      return a ? cap(a) : m;
+    }));
+  }
   const CMDS = {
     help: { desc: 'Displays this list', instant: true, run: () => new Promise(resolve => {
       const base = 'User Requested Help; Fetching Commands... ';
@@ -1011,7 +1022,7 @@
       setTimeout(() => {
         clearInterval(spin);
         line.textContent = 'User Requested Help; Commands loaded.';
-        printLines([
+        printLines(relabelHelp([
           'Help - Displays this list',
           'Mapmaker - Opens map maker',
           'Tag - Draw your paint tag in a window',
@@ -1058,7 +1069,7 @@
           'Controls - Remap keyboard / controller bindings',
           'CRT [on/off] - Toggles the CRT filter',
           'Clear - Clears the screen',
-        ], { speed: 26 }).then(resolve);
+        ]), { speed: 26 }).then(resolve);
       }, dur);
     }) },
     name: { desc: 'set name (claims it as your unique username)', run: (a) => {
