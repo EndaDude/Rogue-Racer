@@ -35,7 +35,20 @@ const parts = await Promise.all(files.map((f) => Bun.file(`src/${f}`).text()));
 // file contents with "\n" reproduces the original inline JS byte-for-byte.
 const js = parts.join("\n");
 
-const out = shell.replace(MARKER, () => js); // function replacer: no $-substitution surprises
+let out = shell.replace(MARKER, () => js); // function replacer: no $-substitution surprises
+
+// Stamp a "generated — do not edit" banner right after the doctype, so anyone who
+// opens rogue-racer.html directly is told to edit src/ instead. (This is the only
+// intentional difference from the original single file.)
+const BANNER =
+  "<!-- ============================================================\n" +
+  "     GENERATED FILE — DO NOT EDIT.\n" +
+  "     Built from src/ by `bun build.ts`. Edit files under src/ and\n" +
+  "     run `bun run build` (or `bun run dev`). Hand edits here are\n" +
+  "     overwritten on the next build.\n" +
+  "     ============================================================ -->";
+out = out.replace(/(<!DOCTYPE html>\r?\n)/i, `$1${BANNER}\n`);
+
 await Bun.write(OUT, out);
 
 console.log(`Bundled ${files.length} files -> ${OUT}`);
