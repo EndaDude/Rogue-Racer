@@ -491,6 +491,20 @@
     modePill.style.cssText = 'font-size:.72rem;padding:3px 9px;border-radius:6px;background:rgba(57,255,20,.16);border:1px solid #39ff14;color:#eafff0;';
     modeWrap.appendChild(modeLbl); modeWrap.appendChild(modePill);
     rulesRow.appendChild(modeWrap);
+    // Prototype ships toggle (host-only)
+    const protoWrap = document.createElement('div');
+    protoWrap.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    const protoLbl = document.createElement('span'); protoLbl.textContent = 'Prototype Ships'; protoLbl.style.cssText = 'font-size:.78rem;color:#9fdcb6;';
+    const protoOn = G.allowPrototypes !== false;
+    const protoChip = mcChip(protoOn ? 'UNLOCKED' : 'LOCKED', protoOn);
+    if (host) {
+      protoChip.onclick = () => {
+        if (typeof setPrototypesAllowed === 'function') setPrototypesAllowed(!(G.allowPrototypes !== false));
+        renderMatchConfig(w);
+      };
+    } else { protoChip.style.cursor = 'default'; }
+    protoWrap.appendChild(protoLbl); protoWrap.appendChild(protoChip);
+    rulesRow.appendChild(protoWrap);
     secRules.appendChild(rulesRow);
     body.appendChild(secRules);
 
@@ -786,6 +800,7 @@
         'Laps <1-20> - Set lap count (host)',
         'Speed [class] - Set speed class (host)',
         'Mode [owner/vote] - Set round mode (host)',
+        'Enableprototypes [on/off] - Allow or lock the prototype ships (host)',
         'Next - Advance to the next track (host)',
         'Tag / Color - Restyle your ship',
         'Togglechat - Chat with the room',
@@ -842,7 +857,7 @@
     const lines = [{ text: 'SHIP DATABASE', cls: 'hi' }, ''];
     shipList().forEach(k => {
       const c = CAR_TYPES[k];
-      const info = INFO[k] || { special: '\u2014', desc: '' };
+      const info = INFO[k] || (typeof SHIP_LORE !== 'undefined' && SHIP_LORE[k]) || { special: '\u2014', desc: '' };
       lines.push({ text: (c.name || k), cls: 'hi' });
       lines.push('  speed    ' + bar(c.topSpeedMult, 0.9, 1.15) + '   accel ' + bar(c.accelMult, 0.5, 1.05) + '   handling ' + bar(c.handlingMult, 0.6, 1.2));
       lines.push('  special  ' + info.special);
@@ -989,8 +1004,8 @@
     const name = (me && me.name) || (nameEl && nameEl.value) || 'Racer';
     const color = (me && me.color) || G.selectedColor || '#39ff14';
     printChat(name, msg, color);
-    try { speakChat(name, msg); } catch (_) {}
-    const payload = { type: 'chat', id: G.myId, name, color, text: msg };
+    try { speakChat(name, msg, TTS.voice); } catch (_) {}
+    const payload = { type: 'chat', id: G.myId, name, color, text: msg, voice: TTS.voice || null };
     if (G.isHost) sendToAll(payload);
     else if (hostConn) sendToHost(payload);
   }
@@ -1061,8 +1076,9 @@
           'Remove friend <name> - Remove a friend by name',
           'Invite <name> - Invite a friend to your room (while hosting)',
           'Togglefriendautojoin <name> - Auto-join a friend when they host',
-          'Commandchange <cmd> - Rebind any command to your own word',
+          'Commandchange <cmd> - Rebind any command to your own word (commandchange reset clears all)',
           'TTS [on/off] - Toggle the robot chat voices',
+          'Voice <name> - Pick your chat voice (voice list to see them)',
           'Bots <0-7> / Botdiff <easy/medium/hard> - Test-track AI settings',
           'Volume [master/music/fx] <0-100> - Sets audio volume',
           'Touch [on/off] - Toggles touch controls',
@@ -1101,6 +1117,10 @@
       if (first === 'desc' || first === 'descriptions' || first === 'info' || first === 'stats') { printShipDescriptions(); return; }
       const t = first; if (!t) { print('usage: ship <type>   (' + shipList().join(', ') + ')   ·  ship desc for stats', 'warn'); return; }
       if (!CAR_TYPES[t]) { print('unknown ship: ' + t + '  (' + shipList().join(', ') + ')', 'err'); return; }
+      if (typeof isPrototypeShip === 'function' && isPrototypeShip(t) && G.allowPrototypes === false) {
+        print('"' + (CAR_TYPES[t].name || t) + '" is a prototype ship — the host has them locked', 'err'); return;
+      }
+      if (typeof carTypeSelectable === 'function' && !carTypeSelectable(t)) { print('"' + (CAR_TYPES[t].name || t) + '" is not allowed in this room', 'err'); return; }
       G.selectedCarType = t; try { refreshShipGrid(); } catch(e){} getLobbyProfileInput();
       print('ship set to ' + (CAR_TYPES[t].name || t), 'hi');
     } },
@@ -1365,9 +1385,17 @@
         else print(msg, 'err');
       });
     } },
-    commandchange: { desc: 'rebind a command  (commandchange <command> [alias])', run: (a) => {
+    commandchange: { desc: 'rebind a command  (commandchange <command> [alias]  ·  commandchange reset)', run: (a) => {
       const target = (a[0] || '').toLowerCase();
-      if (!target || !CMDS[target]) { print('usage: commandchange <command>   e.g.  commandchange host', 'warn'); return; }
+      // Global reset: `commandchange reset` wipes ALL aliases at once (reset is not a real command).
+      if (target === 'reset' && !CMDS.reset) {
+        const n = Object.keys(CMD_ALIASES).length;
+        CMD_ALIASES = {};
+        saveCmdAliases();
+        print(n ? 'all command aliases cleared (' + n + ')' : 'no command aliases to clear', n ? 'hi' : 'dim');
+        return;
+      }
+      if (!target || !CMDS[target]) { print('usage: commandchange <command>   e.g.  commandchange host   (or  commandchange reset  to clear all)', 'warn'); return; }
       const applyAlias = (raw) => {
         const alias = String(raw || '').trim().toLowerCase().split(/\s+/)[0];
         if (!alias) { print('cancelled', 'dim'); return; }
@@ -1397,9 +1425,35 @@
       const wasOn = TTS.enabled; TTS.enabled = true;
       try { if (typeof audioCtx !== 'undefined' && audioCtx.state === 'suspended') audioCtx.resume(); } catch (_) {}
       TTS.recent.delete(txt.toLowerCase());   // never dedupe an explicit test
-      speakChat(myRacerName(), txt);
+      speakChat(myRacerName(), txt, TTS.voice);
       TTS.enabled = wasOn;
       print('🔊 "' + txt + '"', 'dim');
+    } },
+    voice: { desc: 'pick your chat voice  (voice <name>  ·  voice list  ·  voice auto)', instant: true, run: (a) => {
+      const arg = (a[0] || '').toLowerCase();
+      const ids = Object.keys(TTS_VOICES);
+      if (!arg || arg === 'list') {
+        print('voices:  auto  ' + ids.join('  '), 'hi');
+        print('current: ' + (TTS.voice || 'auto') + '   \u2014  try  voice <name>  then  say hello', 'dim');
+        return;
+      }
+      if (!setTtsVoice(arg)) { print('unknown voice "' + arg + '"   (voice list)', 'err'); return; }
+      const chosen = TTS.voice || 'auto';
+      print('voice set to ' + chosen, 'hi');
+      // Live preview of the new voice.
+      const wasOn = TTS.enabled; TTS.enabled = true;
+      try { if (typeof audioCtx !== 'undefined' && audioCtx.state === 'suspended') audioCtx.resume(); } catch (_) {}
+      TTS.recent.delete('voice check');
+      speakChat(myRacerName(), 'voice check', TTS.voice);
+      TTS.enabled = wasOn;
+    } },
+    enableprototypes: { desc: 'host: allow/lock the 9 prototype ships  (enableprototypes on/off)', instant: true, run: (a) => {
+      if (!G.isHost && Object.keys(G.players || {}).length > 1) { print('only the host can change prototype access', 'err'); return; }
+      const s = (a[0] || '').toLowerCase();
+      const next = s ? ['on','yes','true','unlock','1','enable'].includes(s) : !(G.allowPrototypes !== false);
+      if (typeof setPrototypesAllowed === 'function') setPrototypesAllowed(next);
+      else G.allowPrototypes = next;
+      print('prototype ships ' + (G.allowPrototypes ? 'UNLOCKED' : 'LOCKED'), G.allowPrototypes ? 'hi' : 'warn');
     } },
     bots: { desc: 'set test-track bot count  (bots <0-7>)', instant: true, run: (a) => {
       const n = parseInt(a[0], 10);

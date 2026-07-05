@@ -1448,15 +1448,24 @@
     <div class="car-type-wrap">
       <div class="car-type-label">Ship</div>
       <div class="car-type-grid" id="lobby-c-ship-grid">
-        <button class="car-type-btn ship-type-btn active" data-car-type="drifter"><strong>Drifter</strong>Balanced all-round</button>
-        <button class="car-type-btn ship-type-btn" data-car-type="dragger"><strong>Dragger</strong>Shift specialist</button>
-        <button class="car-type-btn ship-type-btn" data-car-type="puncher"><strong>Puncher</strong>Crash-resistant</button>
-        <button class="car-type-btn ship-type-btn" data-car-type="needle"><strong>Needle</strong>Endless top-end</button>
-        <button class="car-type-btn ship-type-btn" data-car-type="baller"><strong>Baller</strong>Bouncy bruiser</button>
-        <button class="car-type-btn ship-type-btn" data-car-type="rotor"><strong>Rotor</strong>Propeller drafter</button>
-        <button class="car-type-btn ship-type-btn" data-car-type="coil"><strong>Coil</strong>Wall-arc battery</button>
-        <button class="car-type-btn ship-type-btn" data-car-type="screamer"><strong>Screamer</strong>Tunnel-vision honk</button>
-        <button class="car-type-btn ship-type-btn" data-car-type="holo"><strong>Holo</strong>Phase &amp; flip</button>
+        <button class="car-type-btn ship-type-btn active" data-car-type="tez"><strong>Tez</strong>Gunner all-rounder</button>
+        <button class="car-type-btn ship-type-btn" data-car-type="kiph"><strong>Kiph</strong>Top-speed runner</button>
+        <button class="car-type-btn ship-type-btn" data-car-type="huntlen"><strong>Huntlen</strong>Armored bruiser</button>
+        <button class="car-type-btn ship-type-btn" data-car-type="gleenixus"><strong>Gleen Ixus</strong>Boost hoarder</button>
+        <button class="car-type-btn ship-type-btn" data-car-type="scrynell"><strong>Scrynell</strong>Fragile flyer</button>
+        <button class="car-type-btn ship-type-btn" data-car-type="exendios"><strong>Exen Dios</strong>Twin-missile</button>
+        <button class="car-type-btn ship-type-btn" data-car-type="vurn"><strong>Vurn</strong>Armored control</button>
+        <button class="car-type-btn ship-type-btn" data-car-type="kessa"><strong>Kessa</strong>Sharp handler</button>
+        <button class="car-type-btn ship-type-btn" data-car-type="draxil"><strong>Draxil</strong>Glass cannon</button>
+        <button class="car-type-btn ship-type-btn proto-ship" data-car-type="drifter" data-proto="1"><strong>Drifter</strong>Balanced all-round</button>
+        <button class="car-type-btn ship-type-btn proto-ship" data-car-type="dragger" data-proto="1"><strong>Dragger</strong>Shift specialist</button>
+        <button class="car-type-btn ship-type-btn proto-ship" data-car-type="puncher" data-proto="1"><strong>Puncher</strong>Crash-resistant</button>
+        <button class="car-type-btn ship-type-btn proto-ship" data-car-type="needle" data-proto="1"><strong>Needle</strong>Endless top-end</button>
+        <button class="car-type-btn ship-type-btn proto-ship" data-car-type="baller" data-proto="1"><strong>Baller</strong>Bouncy bruiser</button>
+        <button class="car-type-btn ship-type-btn proto-ship" data-car-type="rotor" data-proto="1"><strong>Rotor</strong>Propeller drafter</button>
+        <button class="car-type-btn ship-type-btn proto-ship" data-car-type="coil" data-proto="1"><strong>Coil</strong>Wall-arc battery</button>
+        <button class="car-type-btn ship-type-btn proto-ship" data-car-type="screamer" data-proto="1"><strong>Screamer</strong>Tunnel-vision honk</button>
+        <button class="car-type-btn ship-type-btn proto-ship" data-car-type="holo" data-proto="1"><strong>Holo</strong>Phase &amp; flip</button>
       </div>
     </div>
     <button class="btn btn-primary" id="lobby-c-apply" style="font-size:.9rem">Apply</button>
@@ -1832,7 +1841,7 @@
 // Game (HTML) version. This ships independently of the desktop app via the
 // self-updating loader, so bump it whenever you publish a game update; it shows
 // on the terminal so you can confirm which build actually loaded.
-const GAME_VERSION = '0.1.7';
+const GAME_VERSION = '0.1.8';
 const TOTAL_LAPS = 3;
 const PLAYER_COLORS = ['#a855f7','#06b6d4','#fbbf24','#22c55e','#ef4444','#f97316'];
 const CAR_W = 14, CAR_H = 22;
@@ -1850,6 +1859,9 @@ const CAR_TUNING = {
   steerMinSpeedRef: 28,
   steeringGripPenalty: 0.35,
   longDrag: 0.16,
+  // Under power we use a tiny longitudinal drag so acceleration only sets how fast
+  // you REACH the rated top speed (a firm cap), decoupling accel from top speed.
+  throttleDrag: 0.02,
   coastDrag: 0.95,
   lateralGrip: 2.4,
   lateralGripMin: 1.2,
@@ -2113,6 +2125,14 @@ const CAR_TUNING = {
   missileLockRange: 720,          // acquisition range for a lock
   missileTurnRate: 3.4,           // rad/sec steering once locked
   missileRadius: 12,              // collision radius
+  // Machinegun: a short rapid-fire burst of straight, wall-bouncing tracer rounds.
+  bulletSpeed: 900,               // fast, flat trajectory
+  bulletLife: 1.1,               // seconds before a round fizzles
+  bulletDamage: 6,                // per-round base damage (scaled by owner FIREPOWER)
+  bulletRadius: 5,
+  machinegunBurst: 8,             // rounds per pickup use
+  machinegunInterval: 0.06,       // seconds between rounds
+  machinegunSpread: 0.05,         // random aim jitter (radians)
 };
 
 
@@ -2120,6 +2140,7 @@ const CAR_TYPES = {
   drifter: {
     name: 'Drifter',
     shape: 'drifter',
+    prototype: true,
     accelMult: 1.0,
     topSpeedMult: 1.0,
     handlingMult: 1.0,
@@ -2137,6 +2158,7 @@ const CAR_TYPES = {
   dragger: {
     name: 'Dragger',
     shape: 'dragger',
+    prototype: true,
     accelMult: 0.95,
     topSpeedMult: 1.03,
     handlingMult: 1.15,
@@ -2156,6 +2178,7 @@ const CAR_TYPES = {
   puncher: {
     name: 'Puncher',
     shape: 'puncher',
+    prototype: true,
     accelMult: 3.0,
     topSpeedMult: 0.75,
     handlingMult: 1,
@@ -2173,6 +2196,7 @@ const CAR_TYPES = {
   needle: {
     name: 'Needle',
     shape: 'needle',
+    prototype: true,
     accelMult: 0.55,
     topSpeedMult: 1.08,
     handlingMult: 0.62,
@@ -2191,6 +2215,7 @@ const CAR_TYPES = {
   baller: {
     name: 'Baller',
     shape: 'baller',
+    prototype: true,
     accelMult: 0.92,
     topSpeedMult: 0.97,
     handlingMult: 0.9,
@@ -2208,6 +2233,7 @@ const CAR_TYPES = {
   rotor: {
     name: 'Rotor',
     shape: 'rotor',
+    prototype: true,
     // Same base speed profile as the Dragger.
     accelMult: 0.95,
     topSpeedMult: 1.03,
@@ -2229,6 +2255,7 @@ const CAR_TYPES = {
   coil: {
     name: 'Coil',
     shape: 'coil',
+    prototype: true,
     // Same base speed profile as the Drifter.
     accelMult: 1.0,
     topSpeedMult: 1.0,
@@ -2248,6 +2275,7 @@ const CAR_TYPES = {
   screamer: {
     name: 'Screamer',
     shape: 'screamer',
+    prototype: true,
     // Same base speed profile as the Baller.
     accelMult: 0.92,
     topSpeedMult: 0.97,
@@ -2266,6 +2294,7 @@ const CAR_TYPES = {
   holo: {
     name: 'Holo',
     shape: 'holo',
+    prototype: true,
     // Same base speed profile as the Drifter.
     accelMult: 1.0,
     topSpeedMult: 1.0,
@@ -2283,8 +2312,89 @@ const CAR_TYPES = {
   },
 };
 
+// ---- Regular (non-prototype) racing roster --------------------------------
+// New ships are authored with six intuitive 1-10 ratings and converted into the
+// engine's multiplier fields here. Rating 5 == baseline (1.0) on every axis.
+//   accel   -> accelMult      (how fast you reach top speed)
+//   top     -> topSpeedMult   (the firm speed ceiling; decoupled from accel)
+//   handling-> handlingMult   (turn rate / grip)
+//   armor   -> crashResist & weaponResist (damage taken from walls & weapons)
+//   fire    -> firePower      (outgoing weapon damage: missile, machinegun, deathray)
+// `items` is a per-ship weighted DROP pool (id -> weight). Only listed items can
+// drop for that ship; usage of any item stays universal. `extra` overrides.
+function mkShip(name, shape, r, items, extra) {
+  const arm = +(0.7 + (r.armor ?? 5) * 0.06).toFixed(3);
+  const ship = {
+    name, shape,
+    prototype: false,
+    ratings: { accel: r.accel ?? 5, top: r.top ?? 5, handling: r.handling ?? 5, armor: r.armor ?? 5, fire: r.fire ?? 5 },
+    accelMult: +(0.6 + (r.accel ?? 5) * 0.08).toFixed(3),
+    topSpeedMult: +(0.7 + (r.top ?? 5) * 0.06).toFixed(3),
+    handlingMult: +(0.7 + (r.handling ?? 5) * 0.06).toFixed(3),
+    momentumDragMult: 1.0,
+    driftEffectMult: 1.0,
+    driftEnabled: true,
+    shiftEffectMult: 1.0,
+    shiftEnabled: false,
+    crashResist: arm,
+    weaponResist: arm,
+    knockbackOutMult: 1.0,
+    knockbackInMult: 1.0,
+    bounceMult: 1.0,
+    endlessTopSpeed: false,
+    firePower: +(0.6 + (r.fire ?? 5) * 0.08).toFixed(3),
+    itemWeights: items || null,
+  };
+  if (extra) Object.assign(ship, extra);
+  return ship;
+}
+
+Object.assign(CAR_TYPES, {
+  tez:       mkShip('Tez', 'drifter', { accel: 7, handling: 7, top: 6, armor: 6, fire: 7 },
+               { missile: 5, machinegun: 10, mine: 8, ghoul: 3, boost: 5, repair: 3, shield: 5 }),
+  kiph:      mkShip('Kiph', 'dragger', { accel: 5, handling: 7, top: 9, armor: 3, fire: 5 },
+               { emp: 3, mine: 5, machinegun: 8, boost: 5, shield: 5, ball: 3, repair: 5 }),
+  huntlen:   mkShip('Huntlen', 'puncher', { accel: 6, handling: 8, top: 4, armor: 10, fire: 8 },
+               { missile: 8, emp: 2, mine: 8, machinegun: 8, boost: 3, shield: 7, shell: 7 }),
+  gleenixus: mkShip('Gleen Ixus', 'needle', { accel: 7, handling: 4, top: 7, armor: 8, fire: 3 },
+               { deathray: 2, drain: 5, oil: 5, ghoul: 2, machinegun: 4, boost: 9, shield: 4, missile: 7, repair: 1 }),
+  scrynell:  mkShip('Scrynell', 'baller', { accel: 3, handling: 7, top: 10, armor: 5, fire: 7 },
+               { ball: 7, drain: 6, mine: 6, machinegun: 10, repair: 4, boost: 3, missile: 4 }),
+  exendios:  mkShip('Exen Dios', 'rotor', { accel: 6, handling: 5, top: 7, armor: 5, fire: 10 },
+               { machinegun: 10, missile: 7, drain: 4, ghoul: 7, flipper: 3, deathray: 2 },
+               { missileCount: 2 }),
+  vurn:      mkShip('Vurn', 'coil', { accel: 5, handling: 6, top: 5, armor: 9, fire: 6 },
+               { mine: 8, shield: 8, emp: 6, machinegun: 5, repair: 6, missile: 4, boost: 3 }),
+  kessa:     mkShip('Kessa', 'screamer', { accel: 6, handling: 10, top: 6, armor: 3, fire: 5 },
+               { boost: 8, flipper: 7, ghoul: 5, oil: 6, repair: 5, mine: 4, emp: 4 }),
+  draxil:    mkShip('Draxil', 'holo', { accel: 8, handling: 5, top: 8, armor: 4, fire: 9 },
+               { machinegun: 9, missile: 8, deathray: 3, drain: 5, mine: 5, boost: 6, shield: 3 }),
+});
+
 function getCarTypeCfg(typeId) {
   return CAR_TYPES[typeId] || CAR_TYPES.drifter;
+}
+
+// True for the original 9 "prototype" ships (gated behind the host lobby toggle).
+function isPrototypeShip(typeId) {
+  return !!(CAR_TYPES[typeId] && CAR_TYPES[typeId].prototype);
+}
+
+// Whether a ship can be selected right now: honors the host's allowed-car list and
+// the prototype gate (G.allowPrototypes). Falls back safely before G exists.
+function carTypeSelectable(typeId) {
+  if (!CAR_TYPES[typeId]) return false;
+  const allowedList = (typeof G !== 'undefined' && G.allowedCarTypes && G.allowedCarTypes.length) ? G.allowedCarTypes : Object.keys(CAR_TYPES);
+  if (!allowedList.includes(typeId)) return false;
+  const allowProto = (typeof G === 'undefined') || G.allowPrototypes !== false;
+  if (isPrototypeShip(typeId) && !allowProto) return false;
+  return true;
+}
+
+// The default ship to fall back to when the current pick becomes unavailable.
+function firstSelectableCarType() {
+  const keys = Object.keys(CAR_TYPES);
+  return keys.find(carTypeSelectable) || keys.find(k => !isPrototypeShip(k)) || keys[0];
 }
 
 // A car's max health, scaled by its type's healthMult (defaults to full baseHealth).
@@ -2316,6 +2426,7 @@ const POWERUPS_LIST = [
   { id:'ghost', name:'Ghost', icon:'👻', desc:'Pass through obstacles for 4 sec', color:'#c084fc' },
   { id:'repair', name:'Patch Kit', icon:'🔧', desc:'Instantly restore 35 health', color:'#4ade80' },
   { id:'emp', name:'EMP', icon:'🌀', desc:'Shock & stall every racer nearby', color:'#38bdf8' },
+  { id:'machinegun', name:'Machinegun', icon:'🔫', desc:'Rapid-fire burst of tracer rounds', color:'#cbd5e1' },
 ];
 // Unique power-ups that only roll for a specific car type.
 const CAR_UNIQUE_POWERUPS = {
@@ -2340,6 +2451,16 @@ const SHIP_LORE = {
   coil:     { special: 'Wall-arc battery + arc storm', desc: 'Charges by hugging walls and braking; a full battery rockets its shift, but overcharge cooks your own HP.', maker: 'Voltaic Systems', year: '2095', chassis: 'Tesla-Loop', tagline: '“Danger is just stored energy.”' },
   screamer: { special: 'Blackout scream (long range)', desc: 'Honks to blast nearby rivals with a 10-second black-mask blackout.', maker: 'Decibel Motorsport', year: '2092', chassis: 'Wailbox-SR', tagline: '“Heard before it’s seen.”' },
   holo:     { special: 'On-demand ghost phase', desc: 'Briefly turns intangible to slip through cars, walls, and obstacles.', maker: 'Phantom Optics', year: '2099', chassis: 'Mirage-Ø', tagline: '“Now you don’t.”' },
+  // Regular roster — six-stat racers with weighted item affinities.
+  tez:       { special: 'Machinegun affinity', desc: 'Well-rounded skirmisher that showers the track with tracer fire.', maker: 'Terazi Motors', year: '2101', chassis: 'TZ-Vanguard', tagline: '“Jack of all, master of guns.”' },
+  kiph:      { special: 'High top speed', desc: 'Long-legged runner built for open straights; light armor is the price.', maker: 'Kiphon Velocity', year: '2100', chassis: 'KP-Streak', tagline: '“Blink and it’s gone.”' },
+  huntlen:   { special: 'Heavy armor + firepower', desc: 'Rolling fortress that trades top speed for sheer durability and payload.', maker: 'Huntlen Arms', year: '2098', chassis: 'HN-Bastion', tagline: '“Outlast, then out-gun.”' },
+  gleenixus: { special: 'Boost hoarder', desc: 'Efficient cruiser that lives on nitro and utility drops over raw damage.', maker: 'Gleen Consortium', year: '2102', chassis: 'GX-Zephyr', tagline: '“Momentum is a resource.”' },
+  scrynell:  { special: 'Top speed + machinegun', desc: 'Fragile flyweight with a blistering ceiling and a hail of bullets.', maker: 'Scrynell Racing', year: '2103', chassis: 'SC-Wisp', tagline: '“Speed answers everything.”' },
+  exendios:  { special: 'Twin-missile firepower', desc: 'Weapons platform: max firepower and a double-missile salvo.', maker: 'Exen Dynamics', year: '2104', chassis: 'XD-Warden', tagline: '“Two locks, no mercy.”' },
+  vurn:      { special: 'Armored all-rounder', desc: 'Sturdy control ship stacked with mines, shields and EMPs.', maker: 'Vurn Industrial', year: '2099', chassis: 'VR-Aegis', tagline: '“Steady wins the wreck.”' },
+  kessa:     { special: 'Best-in-class handling', desc: 'Razor-sharp cornerer that dances through traffic on boost and tricks.', maker: 'Kessa Circuits', year: '2105', chassis: 'KS-Talon', tagline: '“Corners are just suggestions.”' },
+  draxil:    { special: 'Firepower + speed', desc: 'Aggressive glass cannon: fast, heavily armed, thinly plated.', maker: 'Draxil Ordnance', year: '2103', chassis: 'DX-Reaver', tagline: '“Hit first. Hit hardest.”' },
 };
 const UPGRADES = [
   { id:'topspeed', name:'Top Speed +', icon:'🏎️', desc:'Permanently increases your max speed by 15%' },
@@ -2862,6 +2983,7 @@ let G = {
   shells: [],
   balls: [],
   ghouls: [],
+  bullets: [],     // machinegun tracer rounds
   explosions: [],
   nukeParticles: [],
   checkpointConfetti: [],
@@ -2874,10 +2996,11 @@ let G = {
   raceStats: null, // local player's per-race stats (top speed, drifts, ...)
   ghostRec: null,  // current-lap ghost recording (solo)
   ghostPlay: null, // best-lap ghost being replayed (solo)
-  selectedCarType: 'drifter',
+  selectedCarType: 'tez',
   selectedColor: PLAYER_COLORS[0],
   selectedPaintTag: '',
   allowedCarTypes: Object.keys(CAR_TYPES),
+  allowPrototypes: true,   // host lobby toggle; prototypes are currently unlocked in all play
   speedClass: 'neighborhood',
   speedScale: 1,
   hostMode: 'owner',
@@ -3152,6 +3275,10 @@ function onData(data, fromId) {
     if (!G.balls) G.balls = [];
     G.balls.push(data.ball);
     if (G.isHost) guestConns.forEach(c => { if (c.peer !== data.id) { try { c.send(data); } catch(_){} } });
+  } else if (data.type === 'bullet_spawn') {
+    if (!G.bullets) G.bullets = [];
+    G.bullets.push(data.bullet);
+    if (G.isHost) guestConns.forEach(c => { if (c.peer !== data.id) { try { c.send(data); } catch(_){} } });
   } else if (data.type === 'ghoul_spawn') {
     if (!G.ghouls) G.ghouls = [];
     G.ghouls.push(data.ghoul);
@@ -3169,7 +3296,7 @@ function onData(data, fromId) {
     updateHostPlayerList();
   } else if (data.type === 'chat') {
     if (window.__crtChat) window.__crtChat(data.name || 'Racer', data.text || '', data.color || '#39ff14');
-    try { speakChat(data.name || 'Racer', data.text || ''); } catch (_) {}
+    try { speakChat(data.name || 'Racer', data.text || '', data.voice || null); } catch (_) {}
     if (G.isHost) { guestConns.forEach(c => { if (c.peer !== data.id) { try { c.send(data); } catch(_){} } }); }
   } else if (data.type === 'kicked' && !G.isHost) {
     try { if (peer) peer.destroy(); } catch(_) {}
@@ -3235,6 +3362,10 @@ function onData(data, fromId) {
       G.allowedCarTypes = data.allowedCarTypes;
       refreshShipGrid();
     }
+    if (typeof data.allowPrototypes === 'boolean') {
+      G.allowPrototypes = data.allowPrototypes;
+      refreshShipGrid();
+    }
     updateHostPlayerList();
     renderLobbyQueue();
     renderLobbyPending();
@@ -3244,8 +3375,7 @@ function onData(data, fromId) {
     if (p) {
       if (typeof data.name === 'string') p.name = data.name.slice(0, 16) || 'Racer';
       if (typeof data.carType === 'string' && CAR_TYPES[data.carType]) {
-        const allowed = (G.allowedCarTypes && G.allowedCarTypes.length) ? G.allowedCarTypes : Object.keys(CAR_TYPES);
-        p.carType = allowed.includes(data.carType) ? data.carType : allowed[0];
+        p.carType = carTypeSelectable(data.carType) ? data.carType : firstSelectableCarType();
       }
       if (typeof data.color === 'string') p.color = data.color;
       if (typeof data.paintTag === 'string' && data.paintTag) p.paintTag = data.paintTag;
@@ -3796,7 +3926,19 @@ function sendLobbySync() {
     pendingMaps: G.pendingMaps,
     mapVotes: G.mapVotes,
     allowedCarTypes: G.allowedCarTypes,
+    allowPrototypes: G.allowPrototypes,
   });
+}
+
+// Host lobby toggle: unlock/lock the 9 prototype ships for everyone. Bumps anyone
+// stuck on a now-illegal pick and syncs the new state to guests.
+function setPrototypesAllowed(on) {
+  G.allowPrototypes = !!on;
+  Object.values(G.players).forEach(p => { if (!carTypeSelectable(p.carType)) p.carType = firstSelectableCarType(); });
+  if (!carTypeSelectable(G.selectedCarType)) G.selectedCarType = firstSelectableCarType();
+  if (typeof refreshShipGrid === 'function') refreshShipGrid();
+  if (typeof updateHostPlayerList === 'function') updateHostPlayerList();
+  if (G.isHost && typeof sendLobbySync === 'function') sendLobbySync();
 }
 
 function queueEntryLabel(entry) {
@@ -4049,8 +4191,7 @@ function initCarTypePicker() {
     btn.addEventListener('click', () => {
       const type = btn.getAttribute('data-car-type') || 'drifter';
       if (!CAR_TYPES[type]) return;
-      const allowed = (G.allowedCarTypes && G.allowedCarTypes.length) ? G.allowedCarTypes : Object.keys(CAR_TYPES);
-      if (!allowed.includes(type)) return;
+      if (!carTypeSelectable(type)) return;
       G.selectedCarType = type;
       refreshShipGrid();
       applyCustomize();
@@ -4058,15 +4199,18 @@ function initCarTypePicker() {
   });
 }
 
-// Grey out / disable ships the host has not allowed, and reflect current selection.
+// Grey out / disable ships the host has not allowed (or prototypes when the host
+// has them locked), and reflect current selection.
 function refreshShipGrid() {
-  const allowed = (G.allowedCarTypes && G.allowedCarTypes.length) ? G.allowedCarTypes : Object.keys(CAR_TYPES);
-  if (!allowed.includes(G.selectedCarType)) {
-    G.selectedCarType = allowed[0] || 'drifter';
+  if (!carTypeSelectable(G.selectedCarType)) {
+    G.selectedCarType = firstSelectableCarType();
   }
   document.querySelectorAll('#lobby-c-ship-grid .car-type-btn').forEach(btn => {
     const t = btn.getAttribute('data-car-type');
-    const ok = allowed.includes(t);
+    const isProto = btn.getAttribute('data-proto') === '1';
+    const ok = carTypeSelectable(t);
+    // Prototype ships fully hide when the host locks them; otherwise just disable.
+    btn.style.display = (isProto && G.allowPrototypes === false) ? 'none' : '';
     btn.disabled = !ok;
     btn.classList.toggle('active', ok && t === G.selectedCarType);
   });
@@ -6497,6 +6641,7 @@ function startGame() {
   G.shells = [];
   G.balls = [];
   G.ghouls = [];
+  G.bullets = [];
   G.explosions = [];
   G.nukeParticles = [];
   G.checkpointConfetti = [];
@@ -6954,6 +7099,7 @@ function playItemUse(item) {
     case 'ghoul':   playSweep(160, 60, 0.55, 'triangle', 0.34); break;
     case 'deathray':playSweep(1400, 400, 0.55, 'sawtooth', 0.30); break;
     case 'drain':   playSweep(200, 900, 0.40, 'sine', 0.30); break;
+    case 'machinegun': playSweep(1000, 480, 0.05, 'square', 0.20); break;
     default:        playSweep(420, 820, 0.30, 'sawtooth', 0.30);
   }
 }
@@ -7236,6 +7382,58 @@ function itemButtonUp() {
   fireDrainBeam(me);
 }
 
+// Weighted item roll for ships that define an `itemWeights` drop pool (id -> weight).
+// Only listed items can drop; higher weight = more likely. Luck Box nudges rare
+// (low-weight) items up so the fancy stuff shows more often.
+function rollWeightedItem(weights, lucky) {
+  const entries = [];
+  let total = 0;
+  for (const id in weights) {
+    let w = weights[id];
+    if (!(w > 0)) continue;
+    if (lucky && w <= 3) w *= 1.6;
+    entries.push([id, w]); total += w;
+  }
+  if (!entries.length || total <= 0) return 'boost';
+  let r = Math.random() * total;
+  for (const [id, w] of entries) { if ((r -= w) <= 0) return id; }
+  return entries[entries.length - 1][0];
+}
+
+// Spawn one machinegun tracer round from an owner ship. FIREPOWER is baked into the
+// round's damage at spawn so the victim-authoritative hit needs no extra lookup.
+function spawnBullet(owner) {
+  const cfg = getCarTypeCfg(owner.carType);
+  const ang = owner.angle + (Math.random() - 0.5) * CAR_TUNING.machinegunSpread;
+  const bullet = {
+    id: owner.id + '_b_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+    x: owner.x + Math.cos(owner.angle) * 26,
+    y: owner.y + Math.sin(owner.angle) * 26,
+    vx: Math.cos(ang) * CAR_TUNING.bulletSpeed,
+    vy: Math.sin(ang) * CAR_TUNING.bulletSpeed,
+    ownerId: owner.id,
+    layer: owner.layer || 0,
+    life: CAR_TUNING.bulletLife,
+    dmg: CAR_TUNING.bulletDamage * (cfg.firePower || 1),
+  };
+  G.bullets.push(bullet);
+  broadcast({ type: 'bullet_spawn', bullet });
+}
+
+// Emit any in-progress machinegun burst for the local player, one round per interval.
+function updateMachinegunBurst(dt) {
+  const me = G.players[G.myId];
+  if (!me || !me._mgBurst) return;
+  const b = me._mgBurst;
+  b.t -= dt;
+  while (b.left > 0 && b.t <= 0) {
+    if (!me.finished && (me.deathRespawn || 0) <= 0) { spawnBullet(me); playItemUse('machinegun'); }
+    b.left--;
+    b.t += CAR_TUNING.machinegunInterval;
+  }
+  if (b.left <= 0) me._mgBurst = null;
+}
+
 function useItem() {
   const me = G.players[G.myId];
   if (!me || !me.heldItem || !G.raceStarted) return;
@@ -7298,24 +7496,39 @@ function useItem() {
     // Reworked missile: fired blind. It flies at constant speed, bouncing off the
     // track walls, and only starts hunting once it has held a rival in range long
     // enough to lock. A locked missile navigates the track to reach its target.
-    const missile = {
-      id: G.myId + '_' + Date.now(),
-      x: me.x + Math.cos(me.angle) * 24,
-      y: me.y + Math.sin(me.angle) * 24,
-      vx: Math.cos(me.angle) * CAR_TUNING.missileSpeed,
-      vy: Math.sin(me.angle) * CAR_TUNING.missileSpeed,
-      angle: me.angle,
-      speed: CAR_TUNING.missileSpeed,
-      ownerId: G.myId,
-      targetId: null,
-      lockT: 0,
-      locked: false,
-      layer: me.layer || 0,
-      life: CAR_TUNING.missileLife,
-    };
-    G.missiles.push(missile);
-    broadcast({ type: 'missile_spawn', missile });
+    // Some ships (e.g. Exen Dios) fire a spread salvo; FIREPOWER scales the payload.
+    const mgCfg = getCarTypeCfg(me.carType);
+    const count = Math.max(1, mgCfg.missileCount || 1);
+    const fp = mgCfg.firePower || 1;
+    const spread = 0.16; // radians between salvo missiles
+    for (let i = 0; i < count; i++) {
+      const off = count > 1 ? (i - (count - 1) / 2) * spread : 0;
+      const ang = me.angle + off;
+      const missile = {
+        id: G.myId + '_' + Date.now() + '_' + i,
+        x: me.x + Math.cos(ang) * 24,
+        y: me.y + Math.sin(ang) * 24,
+        vx: Math.cos(ang) * CAR_TUNING.missileSpeed,
+        vy: Math.sin(ang) * CAR_TUNING.missileSpeed,
+        angle: ang,
+        speed: CAR_TUNING.missileSpeed,
+        ownerId: G.myId,
+        targetId: null,
+        lockT: 0,
+        locked: false,
+        layer: me.layer || 0,
+        life: CAR_TUNING.missileLife,
+        dmg: CAR_TUNING.missileDamage * fp,
+      };
+      G.missiles.push(missile);
+      broadcast({ type: 'missile_spawn', missile });
+    }
     return; // missile is a projectile — no item_used broadcast
+  } else if (item === 'machinegun') {
+    // Machinegun: queue a short rapid-fire burst; rounds are emitted from
+    // updateMachinegunBurst() each frame so they stream out over time.
+    me._mgBurst = { left: CAR_TUNING.machinegunBurst, t: 0 };
+    return;
   } else if (item === 'shell') {
     // Puncher Shell: a heavy shell that bounces off walls; homes only when a rival
     // strays within range.
@@ -7582,11 +7795,13 @@ function gameLoop(ts) {
     updateMyPlayer(dt);
     updateBots(dt);
     updateRemotePlayers(dt);
+    updateMachinegunBurst(dt);
     updateMissiles(dt);
     updateMines(dt);
     updateShells(dt);
     updateBalls(dt);
     updateGhouls(dt);
+    updateBullets(dt);
     applyDrainEffects(dt);
     applyDeathrayEffects(dt);
     sendMyState();
@@ -7962,7 +8177,7 @@ function updateMyPlayer(dt) {
     }
 
     const drag = (throttle || brakeInput)
-      ? CAR_TUNING.longDrag * carCfg.momentumDragMult * (shiftActive ? CAR_TUNING.shiftLongDragMult * carCfg.shiftEffectMult : (driftHold ? CAR_TUNING.driftLongDragMult / Math.max(0.5, carCfg.driftEffectMult) : 1))
+      ? (throttle && !brakeInput ? CAR_TUNING.throttleDrag : CAR_TUNING.longDrag) * carCfg.momentumDragMult * (shiftActive ? CAR_TUNING.shiftLongDragMult * carCfg.shiftEffectMult : (driftHold ? CAR_TUNING.driftLongDragMult / Math.max(0.5, carCfg.driftEffectMult) : 1))
       : CAR_TUNING.coastDrag * carCfg.momentumDragMult * (shiftActive ? CAR_TUNING.shiftCoastDragMult * carCfg.shiftEffectMult : (driftHold ? CAR_TUNING.driftCoastDragMult / Math.max(0.5, carCfg.driftEffectMult) : 1));
     const dragMult = Math.max(0, 1 - drag * (me._onIce ? CAR_TUNING.iceDragMult : 1) * dt);
     forwardSpeed *= dragMult;
@@ -8088,9 +8303,15 @@ function updateMyPlayer(dt) {
     }
 
     if (!carCfg.endlessTopSpeed && forwardSpeed > forwardCap) {
-      const bleed = shiftActive ? CAR_TUNING.shiftOverspeedBleed : (coastingDrift ? CAR_TUNING.driftCoastOverspeedBleed : CAR_TUNING.driftOverspeedBleed);
-      const k = Math.max(0, Math.min(1, bleed * dt));
-      forwardSpeed = Math.max(forwardCap, forwardSpeed - (forwardSpeed - forwardCap) * k);
+      if (throttle && !driftHold && !shiftActive) {
+        // Decoupled top speed: under straight power, the rated cap is a firm ceiling
+        // (acceleration only decides how quickly you get here).
+        forwardSpeed = forwardCap;
+      } else {
+        const bleed = shiftActive ? CAR_TUNING.shiftOverspeedBleed : (coastingDrift ? CAR_TUNING.driftCoastOverspeedBleed : CAR_TUNING.driftOverspeedBleed);
+        const k = Math.max(0, Math.min(1, bleed * dt));
+        forwardSpeed = Math.max(forwardCap, forwardSpeed - (forwardSpeed - forwardCap) * k);
+      }
     }
     if (carCfg.endlessTopSpeed && !throttle) {
       // Needle keeps high-speed carry with very soft cap bleed when coasting.
@@ -8696,14 +8917,20 @@ function updateMyPlayer(dt) {
     G.track.items.forEach((item, idx) => {
       if (item.active === false || me.heldItem) return;
       if (dist(me.x, me.y, item.x, item.y) < pickR) {
-        const pool = ups.includes('luckbox')
-          ? POWERUPS_LIST
-          : POWERUPS_LIST.filter(p=>p.id!=='missile'||Math.random()<0.5);
-        const chosen = pool[Math.floor(Math.random()*pool.length)];
-        let chosenId = chosen.id;
-        // Car-unique powerup: chance to roll the class-specific item instead.
-        const uniq = CAR_UNIQUE_POWERUPS[me.carType];
-        if (uniq && Math.random() < 0.25) chosenId = uniq.id;
+        const carCfg = getCarTypeCfg(me.carType);
+        let chosenId;
+        if (carCfg.itemWeights) {
+          // Regular roster: draw from the ship's own weighted affinity pool.
+          chosenId = rollWeightedItem(carCfg.itemWeights, ups.includes('luckbox'));
+        } else {
+          // Prototype ships: the classic universal pool + 25% class-unique roll.
+          const pool = ups.includes('luckbox')
+            ? POWERUPS_LIST
+            : POWERUPS_LIST.filter(p=>p.id!=='missile'||Math.random()<0.5);
+          chosenId = pool[Math.floor(Math.random()*pool.length)].id;
+          const uniq = CAR_UNIQUE_POWERUPS[me.carType];
+          if (uniq && Math.random() < 0.25) chosenId = uniq.id;
+        }
         me.heldItem = chosenId;
         G.heldItem = chosenId;
         startItemRoulette(); // slot-machine flicker, then reveals the real item
@@ -9675,7 +9902,34 @@ function playOvertakeBlip(up) {
 // own recognizably awful voice. Messages queue with a gap (slowdown),
 // and a repeated message within 30s prints silently.
 // ============================================================
-const TTS = { queue: [], playing: false, recent: new Map(), enabled: true };
+const TTS = { queue: [], playing: false, recent: new Map(), enabled: true, voice: null };
+
+// Named voice presets selectable with the `voice` command. Each overrides the
+// per-name-hash defaults; omitted fields fall back in ttsSpeak (consonantBoost
+// 1.35 / cutoff 2100 / Q 2.5). `null`/'auto' = classic hash-of-name voice.
+const TTS_VOICES = {
+  burly:  { label: 'Burly',  base: 90,  wave: 'sawtooth', drawl: 1.15, consonantBoost: 1.2,  cutoff: 1500, q: 3.0 },
+  dainty: { label: 'Dainty', base: 360, wave: 'triangle', drawl: 0.85, consonantBoost: 1.5,  cutoff: 3200, q: 1.5 },
+  smooth: { label: 'Smooth', base: 165, wave: 'sine',     drawl: 1.0,  consonantBoost: 1.2,  cutoff: 2600, q: 1.2 },
+  growl:  { label: 'Growl',  base: 78,  wave: 'square',   drawl: 1.05, consonantBoost: 1.1,  cutoff: 1200, q: 4.0 },
+  chirp:  { label: 'Chirp',  base: 440, wave: 'square',   drawl: 0.8,  consonantBoost: 1.6,  cutoff: 4000, q: 2.0 },
+  drone:  { label: 'Drone',  base: 120, wave: 'sawtooth', drawl: 1.2,  consonantBoost: 1.0,  cutoff: 1800, q: 1.0 },
+  warble: { label: 'Warble', base: 210, wave: 'triangle', drawl: 0.95, consonantBoost: 1.4,  cutoff: 2400, q: 3.5 },
+  boomy:  { label: 'Boomy',  base: 100, wave: 'sine',     drawl: 1.1,  consonantBoost: 1.15, cutoff: 1400, q: 5.0 },
+  crisp:  { label: 'Crisp',  base: 280, wave: 'square',   drawl: 0.9,  consonantBoost: 1.45, cutoff: 3400, q: 1.8 },
+  tinny:  { label: 'Tinny',  base: 320, wave: 'square',   drawl: 0.9,  consonantBoost: 1.5,  cutoff: 3600, q: 6.0 },
+};
+try { TTS.voice = localStorage.getItem('rr-voice') || null; } catch (_) { TTS.voice = null; }
+
+// Set (and persist) the local player's outgoing chat voice. id null/'auto' = classic.
+function setTtsVoice(id) {
+  id = String(id || '').toLowerCase();
+  if (id === 'auto' || id === 'default' || id === 'off' || id === '') id = null;
+  if (id && !TTS_VOICES[id]) return false;
+  TTS.voice = id;
+  try { if (id) localStorage.setItem('rr-voice', id); else localStorage.removeItem('rr-voice'); } catch (_) {}
+  return true;
+}
 
 function ttsHash(str) {
   let h = 2166136261;
@@ -9683,7 +9937,8 @@ function ttsHash(str) {
   return h >>> 0;
 }
 
-function ttsVoiceFor(name) {
+function ttsVoiceFor(name, voiceId) {
+  if (voiceId && TTS_VOICES[voiceId]) return TTS_VOICES[voiceId];
   const h = ttsHash(String(name || 'Racer').toLowerCase());
   const bases = [92, 130, 175, 235, 320, 420]; // deep rumbler → shrill tin-can
   return {
@@ -9693,7 +9948,7 @@ function ttsVoiceFor(name) {
   };
 }
 
-function speakChat(name, text) {
+function speakChat(name, text, voiceId) {
   if (!TTS.enabled) return;
   const msg = String(text || '').trim().slice(0, 90);
   if (!msg) return;
@@ -9702,7 +9957,7 @@ function speakChat(name, text) {
   if (now - (TTS.recent.get(key) || 0) < 30000) return; // repeat: no audio
   TTS.recent.set(key, now);
   if (TTS.recent.size > 40) TTS.recent.delete(TTS.recent.keys().next().value);
-  TTS.queue.push({ name, msg });
+  TTS.queue.push({ name, msg, voiceId: voiceId || null });
   if (TTS.queue.length > 4) TTS.queue.splice(0, TTS.queue.length - 4);
   if (!TTS.playing) ttsPump();
 }
@@ -9711,22 +9966,23 @@ function ttsPump() {
   const next = TTS.queue.shift();
   if (!next) { TTS.playing = false; return; }
   TTS.playing = true;
-  const dur = ttsSpeak(next.name, next.msg);
+  const dur = ttsSpeak(next.name, next.msg, next.voiceId);
   setTimeout(ttsPump, dur * 1000 + 650);
 }
 
-function ttsSpeak(name, msg) {
+function ttsSpeak(name, msg, voiceId) {
   const g0 = fxGain();
   if (g0 <= 0 || !audioCtx) return 0.1;
   try { if (audioCtx.state === 'suspended') audioCtx.resume(); } catch (_) {}
-  const v = ttsVoiceFor(name);
+  const v = ttsVoiceFor(name, voiceId);
+  const cboost = v.consonantBoost || 1.35;
   const t0 = audioCtx.currentTime + 0.03;
   let t = t0;
   const vowels = 'aeiouy';
   const master = audioCtx.createGain();
   master.gain.value = 0.16 * g0;
   const lp = audioCtx.createBiquadFilter();
-  lp.type = 'lowpass'; lp.frequency.value = 2100; lp.Q.value = 2.5; // boxy speaker
+  lp.type = 'lowpass'; lp.frequency.value = v.cutoff || 2100; lp.Q.value = v.q || 2.5; // boxy speaker
   master.connect(lp); lp.connect(audioCtx.destination);
   const words = msg.toLowerCase().split(/\s+/).slice(0, 14);
   for (const w of words) {
@@ -9737,7 +9993,7 @@ function ttsSpeak(name, msg) {
       const durB = (isV ? 0.085 : 0.05) * v.drawl;
       // Quantized semitone ladder per character = the bit-crushed robot feel.
       const semi = Math.round((ch.charCodeAt(0) * 7) % 12) - 5;
-      const f = v.base * Math.pow(2, semi / 12) * (isV ? 1 : 1.35);
+      const f = v.base * Math.pow(2, semi / 12) * (isV ? 1 : cboost);
       const o = audioCtx.createOscillator();
       o.type = v.wave;
       o.frequency.setValueAtTime(f, t);
@@ -10778,6 +11034,7 @@ function render(dt) {
   drawMissiles(ctx);
   drawShells(ctx);
   drawBalls(ctx);
+  drawBullets(ctx);
   drawGhouls(ctx);
   drawDeathrays(ctx);
   drawDrainBeams(ctx);
@@ -12678,7 +12935,7 @@ function updateMissiles(dt) {
       if (dist(m.x, m.y, p.x, p.y) < 20 + T.missileRadius) {
         if (p.id === G.myId && p.shielded) { p.shielded = false; }
         else {
-          applyDamage(p, T.missileDamage / Math.max(0.5, getCarTypeCfg(p.carType).weaponResist || 1), 'missile');
+          applyDamage(p, (m.dmg || T.missileDamage) / Math.max(0.5, getCarTypeCfg(p.carType).weaponResist || 1), 'missile');
           if (p.isBot) { p.stun = Math.max(p.stun || 0, 1.1); p._speed = (p._speed || 0) * 0.3; }
         }
         {
@@ -12793,6 +13050,32 @@ function updateBalls(dt) {
   });
 }
 
+// Machinegun tracer rounds: fast, straight, bounce off the track walls, no homing.
+// Damage travels on the round (baked-in FIREPOWER) so hits are victim-authoritative.
+function updateBullets(dt) {
+  const T = CAR_TUNING;
+  if (!G.bullets || !G.bullets.length) return;
+  G.bullets = G.bullets.filter(b => {
+    if (b.layer === undefined) b.layer = 0;
+    b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+    bounceProjectileOffWall(b, T.bulletRadius);
+    for (const p of Object.values(G.players)) {
+      if (p.id === b.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (b.layer || 0)) continue;
+      if (p.id !== G.myId && !p.isBot) continue;   // victim-authoritative
+      if (dist(b.x, b.y, p.x, p.y) < 18 + T.bulletRadius) {
+        if (p.id === G.myId && p.shielded) { p.shielded = false; }
+        else {
+          applyDamage(p, (b.dmg || T.bulletDamage) / Math.max(0.5, getCarTypeCfg(p.carType).weaponResist || 1), 'bullet');
+          if (p.isBot) p.stun = Math.max(p.stun || 0, 0.2);
+        }
+        spawnExplosion(b.x, b.y, 22, 'pulse');
+        return false;
+      }
+    }
+    return b.life > 0;
+  });
+}
+
 // Screamer Ghoul: rides the track spline for a set distance, halving the speed of
 // every racer it sweeps over (spanning the full track width).
 function updateGhouls(dt) {
@@ -12854,20 +13137,54 @@ function applyDrainEffects(dt) {
 }
 
 // Needle Engine Deathray: a fixed forward beam that shreds anything in its band.
+// Distance along a ship's deathray to the first blocker on the owner's layer —
+// any active obstacle circle, or the point where the beam leaves the track ribbon.
+// Shared by damage + draw so the visible beam stops exactly where it stops hurting.
+function deathrayBlockDist(owner) {
+  const ax = Math.cos(owner.angle), ay = Math.sin(owner.angle);
+  const ol = owner.layer || 0;
+  const maxLen = 6000;
+  let best = maxLen;
+  // Ray vs obstacle circles — any active obstacle on the same layer blocks the beam.
+  const obs = (G.track && G.track.obstacles) || [];
+  for (const o of obs) {
+    if (!o || o.active === false) continue;
+    if (obstacleLayer(o) !== ol) continue;
+    const relx = o.x - owner.x, rely = o.y - owner.y;
+    const proj = relx * ax + rely * ay;
+    if (proj <= 0) continue;                        // behind the nose
+    const perp = Math.abs(relx * -ay + rely * ax);
+    const rr = o.r || 0;
+    if (perp > rr) continue;                         // ray misses this circle
+    const entry = proj - Math.sqrt(rr * rr - perp * perp);
+    if (entry >= 0 && entry < best) best = entry;
+  }
+  // March forward to find where the beam first leaves the track ribbon (a wall).
+  const step = 12;
+  for (let d = 20; d < best; d += step) {
+    const info = projTrackInfo(owner.x + ax * d, owner.y + ay * d);
+    if (info && Math.abs(info.signed) > info.halfW) { best = d; break; }
+  }
+  return best;
+}
+
 function applyDeathrayEffects(dt) {
   for (const owner of Object.values(G.players)) {
     if ((owner.deathray || 0) <= 0) continue;
     if (owner.id === G.myId || owner.isBot) owner.deathray = Math.max(0, owner.deathray - dt);
     const ax = Math.cos(owner.angle), ay = Math.sin(owner.angle);
     const px = -ay, py = ax;
+    const blockDist = deathrayBlockDist(owner);     // beam stops at first wall/obstacle
+    const fp = getCarTypeCfg(owner.carType).firePower || 1;  // FIREPOWER scales the beam
     for (const v of Object.values(G.players)) {
       if (v.id === owner.id || v.finished || (v.deathRespawn || 0) > 0 || (v.layer || 0) !== (owner.layer || 0)) continue;
       if (v.id !== G.myId && !v.isBot) continue;   // victim-authoritative
       const dx = v.x - owner.x, dy = v.y - owner.y;
       const along = dx * ax + dy * ay;
       if (along < 0) continue;                     // behind the nose
+      if (along > blockDist) continue;             // shielded by a wall/obstacle
       if (Math.abs(dx * px + dy * py) > CAR_TUNING.needleDeathrayWidth) continue;
-      applyContinuousDamage(v, CAR_TUNING.needleDeathrayDamagePerSec * dt, 'deathray');
+      applyContinuousDamage(v, CAR_TUNING.needleDeathrayDamagePerSec * fp * dt, 'deathray');
     }
   }
 }
@@ -12959,6 +13276,24 @@ function drawBalls(ctx) {
   });
 }
 
+// Machinegun tracer rounds — short bright streaks.
+function drawBullets(ctx) {
+  if (!G.bullets || !G.bullets.length) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const b of G.bullets) {
+    const a = Math.atan2(b.vy, b.vx);
+    const tx = Math.cos(a), ty = Math.sin(a);
+    ctx.strokeStyle = 'rgba(255,244,214,0.95)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(b.x - tx * 12, b.y - ty * 12);
+    ctx.lineTo(b.x + tx * 6, b.y + ty * 6);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 // Screamer Ghoul — translucent sweep spanning the full track width.
 function drawGhouls(ctx) {
   if (!G.ghouls || !G.ghouls.length) return;
@@ -13003,7 +13338,7 @@ function drawDeathrays(ctx) {
   for (const owner of Object.values(G.players)) {
     if ((owner.deathray || 0) <= 0) continue;
     const ax = Math.cos(owner.angle), ay = Math.sin(owner.angle);
-    const len = 6000;
+    const len = deathrayBlockDist(owner);          // clip to the first wall/obstacle
     const ex = owner.x + ax * len, ey = owner.y + ay * len;
     const w = CAR_TUNING.needleDeathrayWidth;
     ctx.save();
@@ -13545,12 +13880,13 @@ function setupPostRaceUI() {
 function renderResultsShipGrid() {
   const grid = document.getElementById('results-ship-grid');
   if (!grid) return;
-  const allowed = (G.allowedCarTypes && G.allowedCarTypes.length) ? G.allowedCarTypes : Object.keys(CAR_TYPES);
-  if (!allowed.includes(G.selectedCarType)) G.selectedCarType = allowed[0] || 'drifter';
+  if (!carTypeSelectable(G.selectedCarType)) G.selectedCarType = firstSelectableCarType();
   grid.innerHTML = '';
   Object.keys(CAR_TYPES).forEach(t => {
     const cfg = CAR_TYPES[t];
-    const ok = allowed.includes(t);
+    // Hide prototypes entirely when the host has them locked; otherwise show state.
+    if (isPrototypeShip(t) && G.allowPrototypes === false) return;
+    const ok = carTypeSelectable(t);
     const btn = document.createElement('button');
     btn.className = 'car-type-btn' + (ok && t === G.selectedCarType ? ' active' : '');
     btn.disabled = !ok;
@@ -16364,6 +16700,20 @@ function runLayerSystemRegressionTests() {
     modePill.style.cssText = 'font-size:.72rem;padding:3px 9px;border-radius:6px;background:rgba(57,255,20,.16);border:1px solid #39ff14;color:#eafff0;';
     modeWrap.appendChild(modeLbl); modeWrap.appendChild(modePill);
     rulesRow.appendChild(modeWrap);
+    // Prototype ships toggle (host-only)
+    const protoWrap = document.createElement('div');
+    protoWrap.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    const protoLbl = document.createElement('span'); protoLbl.textContent = 'Prototype Ships'; protoLbl.style.cssText = 'font-size:.78rem;color:#9fdcb6;';
+    const protoOn = G.allowPrototypes !== false;
+    const protoChip = mcChip(protoOn ? 'UNLOCKED' : 'LOCKED', protoOn);
+    if (host) {
+      protoChip.onclick = () => {
+        if (typeof setPrototypesAllowed === 'function') setPrototypesAllowed(!(G.allowPrototypes !== false));
+        renderMatchConfig(w);
+      };
+    } else { protoChip.style.cursor = 'default'; }
+    protoWrap.appendChild(protoLbl); protoWrap.appendChild(protoChip);
+    rulesRow.appendChild(protoWrap);
     secRules.appendChild(rulesRow);
     body.appendChild(secRules);
 
@@ -16659,6 +17009,7 @@ function runLayerSystemRegressionTests() {
         'Laps <1-20> - Set lap count (host)',
         'Speed [class] - Set speed class (host)',
         'Mode [owner/vote] - Set round mode (host)',
+        'Enableprototypes [on/off] - Allow or lock the prototype ships (host)',
         'Next - Advance to the next track (host)',
         'Tag / Color - Restyle your ship',
         'Togglechat - Chat with the room',
@@ -16715,7 +17066,7 @@ function runLayerSystemRegressionTests() {
     const lines = [{ text: 'SHIP DATABASE', cls: 'hi' }, ''];
     shipList().forEach(k => {
       const c = CAR_TYPES[k];
-      const info = INFO[k] || { special: '\u2014', desc: '' };
+      const info = INFO[k] || (typeof SHIP_LORE !== 'undefined' && SHIP_LORE[k]) || { special: '\u2014', desc: '' };
       lines.push({ text: (c.name || k), cls: 'hi' });
       lines.push('  speed    ' + bar(c.topSpeedMult, 0.9, 1.15) + '   accel ' + bar(c.accelMult, 0.5, 1.05) + '   handling ' + bar(c.handlingMult, 0.6, 1.2));
       lines.push('  special  ' + info.special);
@@ -16862,8 +17213,8 @@ function runLayerSystemRegressionTests() {
     const name = (me && me.name) || (nameEl && nameEl.value) || 'Racer';
     const color = (me && me.color) || G.selectedColor || '#39ff14';
     printChat(name, msg, color);
-    try { speakChat(name, msg); } catch (_) {}
-    const payload = { type: 'chat', id: G.myId, name, color, text: msg };
+    try { speakChat(name, msg, TTS.voice); } catch (_) {}
+    const payload = { type: 'chat', id: G.myId, name, color, text: msg, voice: TTS.voice || null };
     if (G.isHost) sendToAll(payload);
     else if (hostConn) sendToHost(payload);
   }
@@ -16934,8 +17285,9 @@ function runLayerSystemRegressionTests() {
           'Remove friend <name> - Remove a friend by name',
           'Invite <name> - Invite a friend to your room (while hosting)',
           'Togglefriendautojoin <name> - Auto-join a friend when they host',
-          'Commandchange <cmd> - Rebind any command to your own word',
+          'Commandchange <cmd> - Rebind any command to your own word (commandchange reset clears all)',
           'TTS [on/off] - Toggle the robot chat voices',
+          'Voice <name> - Pick your chat voice (voice list to see them)',
           'Bots <0-7> / Botdiff <easy/medium/hard> - Test-track AI settings',
           'Volume [master/music/fx] <0-100> - Sets audio volume',
           'Touch [on/off] - Toggles touch controls',
@@ -16974,6 +17326,10 @@ function runLayerSystemRegressionTests() {
       if (first === 'desc' || first === 'descriptions' || first === 'info' || first === 'stats') { printShipDescriptions(); return; }
       const t = first; if (!t) { print('usage: ship <type>   (' + shipList().join(', ') + ')   ·  ship desc for stats', 'warn'); return; }
       if (!CAR_TYPES[t]) { print('unknown ship: ' + t + '  (' + shipList().join(', ') + ')', 'err'); return; }
+      if (typeof isPrototypeShip === 'function' && isPrototypeShip(t) && G.allowPrototypes === false) {
+        print('"' + (CAR_TYPES[t].name || t) + '" is a prototype ship — the host has them locked', 'err'); return;
+      }
+      if (typeof carTypeSelectable === 'function' && !carTypeSelectable(t)) { print('"' + (CAR_TYPES[t].name || t) + '" is not allowed in this room', 'err'); return; }
       G.selectedCarType = t; try { refreshShipGrid(); } catch(e){} getLobbyProfileInput();
       print('ship set to ' + (CAR_TYPES[t].name || t), 'hi');
     } },
@@ -17238,9 +17594,17 @@ function runLayerSystemRegressionTests() {
         else print(msg, 'err');
       });
     } },
-    commandchange: { desc: 'rebind a command  (commandchange <command> [alias])', run: (a) => {
+    commandchange: { desc: 'rebind a command  (commandchange <command> [alias]  ·  commandchange reset)', run: (a) => {
       const target = (a[0] || '').toLowerCase();
-      if (!target || !CMDS[target]) { print('usage: commandchange <command>   e.g.  commandchange host', 'warn'); return; }
+      // Global reset: `commandchange reset` wipes ALL aliases at once (reset is not a real command).
+      if (target === 'reset' && !CMDS.reset) {
+        const n = Object.keys(CMD_ALIASES).length;
+        CMD_ALIASES = {};
+        saveCmdAliases();
+        print(n ? 'all command aliases cleared (' + n + ')' : 'no command aliases to clear', n ? 'hi' : 'dim');
+        return;
+      }
+      if (!target || !CMDS[target]) { print('usage: commandchange <command>   e.g.  commandchange host   (or  commandchange reset  to clear all)', 'warn'); return; }
       const applyAlias = (raw) => {
         const alias = String(raw || '').trim().toLowerCase().split(/\s+/)[0];
         if (!alias) { print('cancelled', 'dim'); return; }
@@ -17270,9 +17634,35 @@ function runLayerSystemRegressionTests() {
       const wasOn = TTS.enabled; TTS.enabled = true;
       try { if (typeof audioCtx !== 'undefined' && audioCtx.state === 'suspended') audioCtx.resume(); } catch (_) {}
       TTS.recent.delete(txt.toLowerCase());   // never dedupe an explicit test
-      speakChat(myRacerName(), txt);
+      speakChat(myRacerName(), txt, TTS.voice);
       TTS.enabled = wasOn;
       print('🔊 "' + txt + '"', 'dim');
+    } },
+    voice: { desc: 'pick your chat voice  (voice <name>  ·  voice list  ·  voice auto)', instant: true, run: (a) => {
+      const arg = (a[0] || '').toLowerCase();
+      const ids = Object.keys(TTS_VOICES);
+      if (!arg || arg === 'list') {
+        print('voices:  auto  ' + ids.join('  '), 'hi');
+        print('current: ' + (TTS.voice || 'auto') + '   \u2014  try  voice <name>  then  say hello', 'dim');
+        return;
+      }
+      if (!setTtsVoice(arg)) { print('unknown voice "' + arg + '"   (voice list)', 'err'); return; }
+      const chosen = TTS.voice || 'auto';
+      print('voice set to ' + chosen, 'hi');
+      // Live preview of the new voice.
+      const wasOn = TTS.enabled; TTS.enabled = true;
+      try { if (typeof audioCtx !== 'undefined' && audioCtx.state === 'suspended') audioCtx.resume(); } catch (_) {}
+      TTS.recent.delete('voice check');
+      speakChat(myRacerName(), 'voice check', TTS.voice);
+      TTS.enabled = wasOn;
+    } },
+    enableprototypes: { desc: 'host: allow/lock the 9 prototype ships  (enableprototypes on/off)', instant: true, run: (a) => {
+      if (!G.isHost && Object.keys(G.players || {}).length > 1) { print('only the host can change prototype access', 'err'); return; }
+      const s = (a[0] || '').toLowerCase();
+      const next = s ? ['on','yes','true','unlock','1','enable'].includes(s) : !(G.allowPrototypes !== false);
+      if (typeof setPrototypesAllowed === 'function') setPrototypesAllowed(next);
+      else G.allowPrototypes = next;
+      print('prototype ships ' + (G.allowPrototypes ? 'UNLOCKED' : 'LOCKED'), G.allowPrototypes ? 'hi' : 'warn');
     } },
     bots: { desc: 'set test-track bot count  (bots <0-7>)', instant: true, run: (a) => {
       const n = parseInt(a[0], 10);

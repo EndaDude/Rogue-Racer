@@ -140,7 +140,19 @@ function sendLobbySync() {
     pendingMaps: G.pendingMaps,
     mapVotes: G.mapVotes,
     allowedCarTypes: G.allowedCarTypes,
+    allowPrototypes: G.allowPrototypes,
   });
+}
+
+// Host lobby toggle: unlock/lock the 9 prototype ships for everyone. Bumps anyone
+// stuck on a now-illegal pick and syncs the new state to guests.
+function setPrototypesAllowed(on) {
+  G.allowPrototypes = !!on;
+  Object.values(G.players).forEach(p => { if (!carTypeSelectable(p.carType)) p.carType = firstSelectableCarType(); });
+  if (!carTypeSelectable(G.selectedCarType)) G.selectedCarType = firstSelectableCarType();
+  if (typeof refreshShipGrid === 'function') refreshShipGrid();
+  if (typeof updateHostPlayerList === 'function') updateHostPlayerList();
+  if (G.isHost && typeof sendLobbySync === 'function') sendLobbySync();
 }
 
 function queueEntryLabel(entry) {
@@ -393,8 +405,7 @@ function initCarTypePicker() {
     btn.addEventListener('click', () => {
       const type = btn.getAttribute('data-car-type') || 'drifter';
       if (!CAR_TYPES[type]) return;
-      const allowed = (G.allowedCarTypes && G.allowedCarTypes.length) ? G.allowedCarTypes : Object.keys(CAR_TYPES);
-      if (!allowed.includes(type)) return;
+      if (!carTypeSelectable(type)) return;
       G.selectedCarType = type;
       refreshShipGrid();
       applyCustomize();
@@ -402,15 +413,18 @@ function initCarTypePicker() {
   });
 }
 
-// Grey out / disable ships the host has not allowed, and reflect current selection.
+// Grey out / disable ships the host has not allowed (or prototypes when the host
+// has them locked), and reflect current selection.
 function refreshShipGrid() {
-  const allowed = (G.allowedCarTypes && G.allowedCarTypes.length) ? G.allowedCarTypes : Object.keys(CAR_TYPES);
-  if (!allowed.includes(G.selectedCarType)) {
-    G.selectedCarType = allowed[0] || 'drifter';
+  if (!carTypeSelectable(G.selectedCarType)) {
+    G.selectedCarType = firstSelectableCarType();
   }
   document.querySelectorAll('#lobby-c-ship-grid .car-type-btn').forEach(btn => {
     const t = btn.getAttribute('data-car-type');
-    const ok = allowed.includes(t);
+    const isProto = btn.getAttribute('data-proto') === '1';
+    const ok = carTypeSelectable(t);
+    // Prototype ships fully hide when the host locks them; otherwise just disable.
+    btn.style.display = (isProto && G.allowPrototypes === false) ? 'none' : '';
     btn.disabled = !ok;
     btn.classList.toggle('active', ok && t === G.selectedCarType);
   });

@@ -111,6 +111,7 @@ function playItemUse(item) {
     case 'ghoul':   playSweep(160, 60, 0.55, 'triangle', 0.34); break;
     case 'deathray':playSweep(1400, 400, 0.55, 'sawtooth', 0.30); break;
     case 'drain':   playSweep(200, 900, 0.40, 'sine', 0.30); break;
+    case 'machinegun': playSweep(1000, 480, 0.05, 'square', 0.20); break;
     default:        playSweep(420, 820, 0.30, 'sawtooth', 0.30);
   }
 }
@@ -393,6 +394,58 @@ function itemButtonUp() {
   fireDrainBeam(me);
 }
 
+// Weighted item roll for ships that define an `itemWeights` drop pool (id -> weight).
+// Only listed items can drop; higher weight = more likely. Luck Box nudges rare
+// (low-weight) items up so the fancy stuff shows more often.
+function rollWeightedItem(weights, lucky) {
+  const entries = [];
+  let total = 0;
+  for (const id in weights) {
+    let w = weights[id];
+    if (!(w > 0)) continue;
+    if (lucky && w <= 3) w *= 1.6;
+    entries.push([id, w]); total += w;
+  }
+  if (!entries.length || total <= 0) return 'boost';
+  let r = Math.random() * total;
+  for (const [id, w] of entries) { if ((r -= w) <= 0) return id; }
+  return entries[entries.length - 1][0];
+}
+
+// Spawn one machinegun tracer round from an owner ship. FIREPOWER is baked into the
+// round's damage at spawn so the victim-authoritative hit needs no extra lookup.
+function spawnBullet(owner) {
+  const cfg = getCarTypeCfg(owner.carType);
+  const ang = owner.angle + (Math.random() - 0.5) * CAR_TUNING.machinegunSpread;
+  const bullet = {
+    id: owner.id + '_b_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+    x: owner.x + Math.cos(owner.angle) * 26,
+    y: owner.y + Math.sin(owner.angle) * 26,
+    vx: Math.cos(ang) * CAR_TUNING.bulletSpeed,
+    vy: Math.sin(ang) * CAR_TUNING.bulletSpeed,
+    ownerId: owner.id,
+    layer: owner.layer || 0,
+    life: CAR_TUNING.bulletLife,
+    dmg: CAR_TUNING.bulletDamage * (cfg.firePower || 1),
+  };
+  G.bullets.push(bullet);
+  broadcast({ type: 'bullet_spawn', bullet });
+}
+
+// Emit any in-progress machinegun burst for the local player, one round per interval.
+function updateMachinegunBurst(dt) {
+  const me = G.players[G.myId];
+  if (!me || !me._mgBurst) return;
+  const b = me._mgBurst;
+  b.t -= dt;
+  while (b.left > 0 && b.t <= 0) {
+    if (!me.finished && (me.deathRespawn || 0) <= 0) { spawnBullet(me); playItemUse('machinegun'); }
+    b.left--;
+    b.t += CAR_TUNING.machinegunInterval;
+  }
+  if (b.left <= 0) me._mgBurst = null;
+}
+
 function useItem() {
   const me = G.players[G.myId];
   if (!me || !me.heldItem || !G.raceStarted) return;
@@ -455,24 +508,39 @@ function useItem() {
     // Reworked missile: fired blind. It flies at constant speed, bouncing off the
     // track walls, and only starts hunting once it has held a rival in range long
     // enough to lock. A locked missile navigates the track to reach its target.
-    const missile = {
-      id: G.myId + '_' + Date.now(),
-      x: me.x + Math.cos(me.angle) * 24,
-      y: me.y + Math.sin(me.angle) * 24,
-      vx: Math.cos(me.angle) * CAR_TUNING.missileSpeed,
-      vy: Math.sin(me.angle) * CAR_TUNING.missileSpeed,
-      angle: me.angle,
-      speed: CAR_TUNING.missileSpeed,
-      ownerId: G.myId,
-      targetId: null,
-      lockT: 0,
-      locked: false,
-      layer: me.layer || 0,
-      life: CAR_TUNING.missileLife,
-    };
-    G.missiles.push(missile);
-    broadcast({ type: 'missile_spawn', missile });
+    // Some ships (e.g. Exen Dios) fire a spread salvo; FIREPOWER scales the payload.
+    const mgCfg = getCarTypeCfg(me.carType);
+    const count = Math.max(1, mgCfg.missileCount || 1);
+    const fp = mgCfg.firePower || 1;
+    const spread = 0.16; // radians between salvo missiles
+    for (let i = 0; i < count; i++) {
+      const off = count > 1 ? (i - (count - 1) / 2) * spread : 0;
+      const ang = me.angle + off;
+      const missile = {
+        id: G.myId + '_' + Date.now() + '_' + i,
+        x: me.x + Math.cos(ang) * 24,
+        y: me.y + Math.sin(ang) * 24,
+        vx: Math.cos(ang) * CAR_TUNING.missileSpeed,
+        vy: Math.sin(ang) * CAR_TUNING.missileSpeed,
+        angle: ang,
+        speed: CAR_TUNING.missileSpeed,
+        ownerId: G.myId,
+        targetId: null,
+        lockT: 0,
+        locked: false,
+        layer: me.layer || 0,
+        life: CAR_TUNING.missileLife,
+        dmg: CAR_TUNING.missileDamage * fp,
+      };
+      G.missiles.push(missile);
+      broadcast({ type: 'missile_spawn', missile });
+    }
     return; // missile is a projectile — no item_used broadcast
+  } else if (item === 'machinegun') {
+    // Machinegun: queue a short rapid-fire burst; rounds are emitted from
+    // updateMachinegunBurst() each frame so they stream out over time.
+    me._mgBurst = { left: CAR_TUNING.machinegunBurst, t: 0 };
+    return;
   } else if (item === 'shell') {
     // Puncher Shell: a heavy shell that bounces off walls; homes only when a rival
     // strays within range.
@@ -739,11 +807,13 @@ function gameLoop(ts) {
     updateMyPlayer(dt);
     updateBots(dt);
     updateRemotePlayers(dt);
+    updateMachinegunBurst(dt);
     updateMissiles(dt);
     updateMines(dt);
     updateShells(dt);
     updateBalls(dt);
     updateGhouls(dt);
+    updateBullets(dt);
     applyDrainEffects(dt);
     applyDeathrayEffects(dt);
     sendMyState();
@@ -1119,7 +1189,7 @@ function updateMyPlayer(dt) {
     }
 
     const drag = (throttle || brakeInput)
-      ? CAR_TUNING.longDrag * carCfg.momentumDragMult * (shiftActive ? CAR_TUNING.shiftLongDragMult * carCfg.shiftEffectMult : (driftHold ? CAR_TUNING.driftLongDragMult / Math.max(0.5, carCfg.driftEffectMult) : 1))
+      ? (throttle && !brakeInput ? CAR_TUNING.throttleDrag : CAR_TUNING.longDrag) * carCfg.momentumDragMult * (shiftActive ? CAR_TUNING.shiftLongDragMult * carCfg.shiftEffectMult : (driftHold ? CAR_TUNING.driftLongDragMult / Math.max(0.5, carCfg.driftEffectMult) : 1))
       : CAR_TUNING.coastDrag * carCfg.momentumDragMult * (shiftActive ? CAR_TUNING.shiftCoastDragMult * carCfg.shiftEffectMult : (driftHold ? CAR_TUNING.driftCoastDragMult / Math.max(0.5, carCfg.driftEffectMult) : 1));
     const dragMult = Math.max(0, 1 - drag * (me._onIce ? CAR_TUNING.iceDragMult : 1) * dt);
     forwardSpeed *= dragMult;
@@ -1245,9 +1315,15 @@ function updateMyPlayer(dt) {
     }
 
     if (!carCfg.endlessTopSpeed && forwardSpeed > forwardCap) {
-      const bleed = shiftActive ? CAR_TUNING.shiftOverspeedBleed : (coastingDrift ? CAR_TUNING.driftCoastOverspeedBleed : CAR_TUNING.driftOverspeedBleed);
-      const k = Math.max(0, Math.min(1, bleed * dt));
-      forwardSpeed = Math.max(forwardCap, forwardSpeed - (forwardSpeed - forwardCap) * k);
+      if (throttle && !driftHold && !shiftActive) {
+        // Decoupled top speed: under straight power, the rated cap is a firm ceiling
+        // (acceleration only decides how quickly you get here).
+        forwardSpeed = forwardCap;
+      } else {
+        const bleed = shiftActive ? CAR_TUNING.shiftOverspeedBleed : (coastingDrift ? CAR_TUNING.driftCoastOverspeedBleed : CAR_TUNING.driftOverspeedBleed);
+        const k = Math.max(0, Math.min(1, bleed * dt));
+        forwardSpeed = Math.max(forwardCap, forwardSpeed - (forwardSpeed - forwardCap) * k);
+      }
     }
     if (carCfg.endlessTopSpeed && !throttle) {
       // Needle keeps high-speed carry with very soft cap bleed when coasting.
@@ -1853,14 +1929,20 @@ function updateMyPlayer(dt) {
     G.track.items.forEach((item, idx) => {
       if (item.active === false || me.heldItem) return;
       if (dist(me.x, me.y, item.x, item.y) < pickR) {
-        const pool = ups.includes('luckbox')
-          ? POWERUPS_LIST
-          : POWERUPS_LIST.filter(p=>p.id!=='missile'||Math.random()<0.5);
-        const chosen = pool[Math.floor(Math.random()*pool.length)];
-        let chosenId = chosen.id;
-        // Car-unique powerup: chance to roll the class-specific item instead.
-        const uniq = CAR_UNIQUE_POWERUPS[me.carType];
-        if (uniq && Math.random() < 0.25) chosenId = uniq.id;
+        const carCfg = getCarTypeCfg(me.carType);
+        let chosenId;
+        if (carCfg.itemWeights) {
+          // Regular roster: draw from the ship's own weighted affinity pool.
+          chosenId = rollWeightedItem(carCfg.itemWeights, ups.includes('luckbox'));
+        } else {
+          // Prototype ships: the classic universal pool + 25% class-unique roll.
+          const pool = ups.includes('luckbox')
+            ? POWERUPS_LIST
+            : POWERUPS_LIST.filter(p=>p.id!=='missile'||Math.random()<0.5);
+          chosenId = pool[Math.floor(Math.random()*pool.length)].id;
+          const uniq = CAR_UNIQUE_POWERUPS[me.carType];
+          if (uniq && Math.random() < 0.25) chosenId = uniq.id;
+        }
         me.heldItem = chosenId;
         G.heldItem = chosenId;
         startItemRoulette(); // slot-machine flicker, then reveals the real item

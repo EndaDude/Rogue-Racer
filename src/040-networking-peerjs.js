@@ -98,6 +98,10 @@ function onData(data, fromId) {
     if (!G.balls) G.balls = [];
     G.balls.push(data.ball);
     if (G.isHost) guestConns.forEach(c => { if (c.peer !== data.id) { try { c.send(data); } catch(_){} } });
+  } else if (data.type === 'bullet_spawn') {
+    if (!G.bullets) G.bullets = [];
+    G.bullets.push(data.bullet);
+    if (G.isHost) guestConns.forEach(c => { if (c.peer !== data.id) { try { c.send(data); } catch(_){} } });
   } else if (data.type === 'ghoul_spawn') {
     if (!G.ghouls) G.ghouls = [];
     G.ghouls.push(data.ghoul);
@@ -115,7 +119,7 @@ function onData(data, fromId) {
     updateHostPlayerList();
   } else if (data.type === 'chat') {
     if (window.__crtChat) window.__crtChat(data.name || 'Racer', data.text || '', data.color || '#39ff14');
-    try { speakChat(data.name || 'Racer', data.text || ''); } catch (_) {}
+    try { speakChat(data.name || 'Racer', data.text || '', data.voice || null); } catch (_) {}
     if (G.isHost) { guestConns.forEach(c => { if (c.peer !== data.id) { try { c.send(data); } catch(_){} } }); }
   } else if (data.type === 'kicked' && !G.isHost) {
     try { if (peer) peer.destroy(); } catch(_) {}
@@ -181,6 +185,10 @@ function onData(data, fromId) {
       G.allowedCarTypes = data.allowedCarTypes;
       refreshShipGrid();
     }
+    if (typeof data.allowPrototypes === 'boolean') {
+      G.allowPrototypes = data.allowPrototypes;
+      refreshShipGrid();
+    }
     updateHostPlayerList();
     renderLobbyQueue();
     renderLobbyPending();
@@ -190,8 +198,7 @@ function onData(data, fromId) {
     if (p) {
       if (typeof data.name === 'string') p.name = data.name.slice(0, 16) || 'Racer';
       if (typeof data.carType === 'string' && CAR_TYPES[data.carType]) {
-        const allowed = (G.allowedCarTypes && G.allowedCarTypes.length) ? G.allowedCarTypes : Object.keys(CAR_TYPES);
-        p.carType = allowed.includes(data.carType) ? data.carType : allowed[0];
+        p.carType = carTypeSelectable(data.carType) ? data.carType : firstSelectableCarType();
       }
       if (typeof data.color === 'string') p.color = data.color;
       if (typeof data.paintTag === 'string' && data.paintTag) p.paintTag = data.paintTag;

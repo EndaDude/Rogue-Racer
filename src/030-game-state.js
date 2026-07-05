@@ -22,6 +22,7 @@ let G = {
   shells: [],
   balls: [],
   ghouls: [],
+  bullets: [],     // machinegun tracer rounds
   explosions: [],
   nukeParticles: [],
   checkpointConfetti: [],
@@ -34,10 +35,11 @@ let G = {
   raceStats: null, // local player's per-race stats (top speed, drifts, ...)
   ghostRec: null,  // current-lap ghost recording (solo)
   ghostPlay: null, // best-lap ghost being replayed (solo)
-  selectedCarType: 'drifter',
+  selectedCarType: 'tez',
   selectedColor: PLAYER_COLORS[0],
   selectedPaintTag: '',
   allowedCarTypes: Object.keys(CAR_TYPES),
+  allowPrototypes: true,   // host lobby toggle; prototypes are currently unlocked in all play
   speedClass: 'neighborhood',
   speedScale: 1,
   hostMode: 'owner',

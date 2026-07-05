@@ -139,12 +139,13 @@ function setupPostRaceUI() {
 function renderResultsShipGrid() {
   const grid = document.getElementById('results-ship-grid');
   if (!grid) return;
-  const allowed = (G.allowedCarTypes && G.allowedCarTypes.length) ? G.allowedCarTypes : Object.keys(CAR_TYPES);
-  if (!allowed.includes(G.selectedCarType)) G.selectedCarType = allowed[0] || 'drifter';
+  if (!carTypeSelectable(G.selectedCarType)) G.selectedCarType = firstSelectableCarType();
   grid.innerHTML = '';
   Object.keys(CAR_TYPES).forEach(t => {
     const cfg = CAR_TYPES[t];
-    const ok = allowed.includes(t);
+    // Hide prototypes entirely when the host has them locked; otherwise show state.
+    if (isPrototypeShip(t) && G.allowPrototypes === false) return;
+    const ok = carTypeSelectable(t);
     const btn = document.createElement('button');
     btn.className = 'car-type-btn' + (ok && t === G.selectedCarType ? ' active' : '');
     btn.disabled = !ok;

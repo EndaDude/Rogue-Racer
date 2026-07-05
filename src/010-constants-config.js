@@ -4,7 +4,7 @@
 // Game (HTML) version. This ships independently of the desktop app via the
 // self-updating loader, so bump it whenever you publish a game update; it shows
 // on the terminal so you can confirm which build actually loaded.
-const GAME_VERSION = '0.1.7';
+const GAME_VERSION = '0.1.8';
 const TOTAL_LAPS = 3;
 const PLAYER_COLORS = ['#a855f7','#06b6d4','#fbbf24','#22c55e','#ef4444','#f97316'];
 const CAR_W = 14, CAR_H = 22;
@@ -22,6 +22,9 @@ const CAR_TUNING = {
   steerMinSpeedRef: 28,
   steeringGripPenalty: 0.35,
   longDrag: 0.16,
+  // Under power we use a tiny longitudinal drag so acceleration only sets how fast
+  // you REACH the rated top speed (a firm cap), decoupling accel from top speed.
+  throttleDrag: 0.02,
   coastDrag: 0.95,
   lateralGrip: 2.4,
   lateralGripMin: 1.2,
@@ -285,6 +288,14 @@ const CAR_TUNING = {
   missileLockRange: 720,          // acquisition range for a lock
   missileTurnRate: 3.4,           // rad/sec steering once locked
   missileRadius: 12,              // collision radius
+  // Machinegun: a short rapid-fire burst of straight, wall-bouncing tracer rounds.
+  bulletSpeed: 900,               // fast, flat trajectory
+  bulletLife: 1.1,               // seconds before a round fizzles
+  bulletDamage: 6,                // per-round base damage (scaled by owner FIREPOWER)
+  bulletRadius: 5,
+  machinegunBurst: 8,             // rounds per pickup use
+  machinegunInterval: 0.06,       // seconds between rounds
+  machinegunSpread: 0.05,         // random aim jitter (radians)
 };
 
 
@@ -292,6 +303,7 @@ const CAR_TYPES = {
   drifter: {
     name: 'Drifter',
     shape: 'drifter',
+    prototype: true,
     accelMult: 1.0,
     topSpeedMult: 1.0,
     handlingMult: 1.0,
@@ -309,6 +321,7 @@ const CAR_TYPES = {
   dragger: {
     name: 'Dragger',
     shape: 'dragger',
+    prototype: true,
     accelMult: 0.95,
     topSpeedMult: 1.03,
     handlingMult: 1.15,
@@ -328,6 +341,7 @@ const CAR_TYPES = {
   puncher: {
     name: 'Puncher',
     shape: 'puncher',
+    prototype: true,
     accelMult: 3.0,
     topSpeedMult: 0.75,
     handlingMult: 1,
@@ -345,6 +359,7 @@ const CAR_TYPES = {
   needle: {
     name: 'Needle',
     shape: 'needle',
+    prototype: true,
     accelMult: 0.55,
     topSpeedMult: 1.08,
     handlingMult: 0.62,
@@ -363,6 +378,7 @@ const CAR_TYPES = {
   baller: {
     name: 'Baller',
     shape: 'baller',
+    prototype: true,
     accelMult: 0.92,
     topSpeedMult: 0.97,
     handlingMult: 0.9,
@@ -380,6 +396,7 @@ const CAR_TYPES = {
   rotor: {
     name: 'Rotor',
     shape: 'rotor',
+    prototype: true,
     // Same base speed profile as the Dragger.
     accelMult: 0.95,
     topSpeedMult: 1.03,
@@ -401,6 +418,7 @@ const CAR_TYPES = {
   coil: {
     name: 'Coil',
     shape: 'coil',
+    prototype: true,
     // Same base speed profile as the Drifter.
     accelMult: 1.0,
     topSpeedMult: 1.0,
@@ -420,6 +438,7 @@ const CAR_TYPES = {
   screamer: {
     name: 'Screamer',
     shape: 'screamer',
+    prototype: true,
     // Same base speed profile as the Baller.
     accelMult: 0.92,
     topSpeedMult: 0.97,
@@ -438,6 +457,7 @@ const CAR_TYPES = {
   holo: {
     name: 'Holo',
     shape: 'holo',
+    prototype: true,
     // Same base speed profile as the Drifter.
     accelMult: 1.0,
     topSpeedMult: 1.0,
@@ -455,8 +475,89 @@ const CAR_TYPES = {
   },
 };
 
+// ---- Regular (non-prototype) racing roster --------------------------------
+// New ships are authored with six intuitive 1-10 ratings and converted into the
+// engine's multiplier fields here. Rating 5 == baseline (1.0) on every axis.
+//   accel   -> accelMult      (how fast you reach top speed)
+//   top     -> topSpeedMult   (the firm speed ceiling; decoupled from accel)
+//   handling-> handlingMult   (turn rate / grip)
+//   armor   -> crashResist & weaponResist (damage taken from walls & weapons)
+//   fire    -> firePower      (outgoing weapon damage: missile, machinegun, deathray)
+// `items` is a per-ship weighted DROP pool (id -> weight). Only listed items can
+// drop for that ship; usage of any item stays universal. `extra` overrides.
+function mkShip(name, shape, r, items, extra) {
+  const arm = +(0.7 + (r.armor ?? 5) * 0.06).toFixed(3);
+  const ship = {
+    name, shape,
+    prototype: false,
+    ratings: { accel: r.accel ?? 5, top: r.top ?? 5, handling: r.handling ?? 5, armor: r.armor ?? 5, fire: r.fire ?? 5 },
+    accelMult: +(0.6 + (r.accel ?? 5) * 0.08).toFixed(3),
+    topSpeedMult: +(0.7 + (r.top ?? 5) * 0.06).toFixed(3),
+    handlingMult: +(0.7 + (r.handling ?? 5) * 0.06).toFixed(3),
+    momentumDragMult: 1.0,
+    driftEffectMult: 1.0,
+    driftEnabled: true,
+    shiftEffectMult: 1.0,
+    shiftEnabled: false,
+    crashResist: arm,
+    weaponResist: arm,
+    knockbackOutMult: 1.0,
+    knockbackInMult: 1.0,
+    bounceMult: 1.0,
+    endlessTopSpeed: false,
+    firePower: +(0.6 + (r.fire ?? 5) * 0.08).toFixed(3),
+    itemWeights: items || null,
+  };
+  if (extra) Object.assign(ship, extra);
+  return ship;
+}
+
+Object.assign(CAR_TYPES, {
+  tez:       mkShip('Tez', 'drifter', { accel: 7, handling: 7, top: 6, armor: 6, fire: 7 },
+               { missile: 5, machinegun: 10, mine: 8, ghoul: 3, boost: 5, repair: 3, shield: 5 }),
+  kiph:      mkShip('Kiph', 'dragger', { accel: 5, handling: 7, top: 9, armor: 3, fire: 5 },
+               { emp: 3, mine: 5, machinegun: 8, boost: 5, shield: 5, ball: 3, repair: 5 }),
+  huntlen:   mkShip('Huntlen', 'puncher', { accel: 6, handling: 8, top: 4, armor: 10, fire: 8 },
+               { missile: 8, emp: 2, mine: 8, machinegun: 8, boost: 3, shield: 7, shell: 7 }),
+  gleenixus: mkShip('Gleen Ixus', 'needle', { accel: 7, handling: 4, top: 7, armor: 8, fire: 3 },
+               { deathray: 2, drain: 5, oil: 5, ghoul: 2, machinegun: 4, boost: 9, shield: 4, missile: 7, repair: 1 }),
+  scrynell:  mkShip('Scrynell', 'baller', { accel: 3, handling: 7, top: 10, armor: 5, fire: 7 },
+               { ball: 7, drain: 6, mine: 6, machinegun: 10, repair: 4, boost: 3, missile: 4 }),
+  exendios:  mkShip('Exen Dios', 'rotor', { accel: 6, handling: 5, top: 7, armor: 5, fire: 10 },
+               { machinegun: 10, missile: 7, drain: 4, ghoul: 7, flipper: 3, deathray: 2 },
+               { missileCount: 2 }),
+  vurn:      mkShip('Vurn', 'coil', { accel: 5, handling: 6, top: 5, armor: 9, fire: 6 },
+               { mine: 8, shield: 8, emp: 6, machinegun: 5, repair: 6, missile: 4, boost: 3 }),
+  kessa:     mkShip('Kessa', 'screamer', { accel: 6, handling: 10, top: 6, armor: 3, fire: 5 },
+               { boost: 8, flipper: 7, ghoul: 5, oil: 6, repair: 5, mine: 4, emp: 4 }),
+  draxil:    mkShip('Draxil', 'holo', { accel: 8, handling: 5, top: 8, armor: 4, fire: 9 },
+               { machinegun: 9, missile: 8, deathray: 3, drain: 5, mine: 5, boost: 6, shield: 3 }),
+});
+
 function getCarTypeCfg(typeId) {
   return CAR_TYPES[typeId] || CAR_TYPES.drifter;
+}
+
+// True for the original 9 "prototype" ships (gated behind the host lobby toggle).
+function isPrototypeShip(typeId) {
+  return !!(CAR_TYPES[typeId] && CAR_TYPES[typeId].prototype);
+}
+
+// Whether a ship can be selected right now: honors the host's allowed-car list and
+// the prototype gate (G.allowPrototypes). Falls back safely before G exists.
+function carTypeSelectable(typeId) {
+  if (!CAR_TYPES[typeId]) return false;
+  const allowedList = (typeof G !== 'undefined' && G.allowedCarTypes && G.allowedCarTypes.length) ? G.allowedCarTypes : Object.keys(CAR_TYPES);
+  if (!allowedList.includes(typeId)) return false;
+  const allowProto = (typeof G === 'undefined') || G.allowPrototypes !== false;
+  if (isPrototypeShip(typeId) && !allowProto) return false;
+  return true;
+}
+
+// The default ship to fall back to when the current pick becomes unavailable.
+function firstSelectableCarType() {
+  const keys = Object.keys(CAR_TYPES);
+  return keys.find(carTypeSelectable) || keys.find(k => !isPrototypeShip(k)) || keys[0];
 }
 
 // A car's max health, scaled by its type's healthMult (defaults to full baseHealth).
@@ -488,6 +589,7 @@ const POWERUPS_LIST = [
   { id:'ghost', name:'Ghost', icon:'👻', desc:'Pass through obstacles for 4 sec', color:'#c084fc' },
   { id:'repair', name:'Patch Kit', icon:'🔧', desc:'Instantly restore 35 health', color:'#4ade80' },
   { id:'emp', name:'EMP', icon:'🌀', desc:'Shock & stall every racer nearby', color:'#38bdf8' },
+  { id:'machinegun', name:'Machinegun', icon:'🔫', desc:'Rapid-fire burst of tracer rounds', color:'#cbd5e1' },
 ];
 // Unique power-ups that only roll for a specific car type.
 const CAR_UNIQUE_POWERUPS = {
@@ -512,6 +614,16 @@ const SHIP_LORE = {
   coil:     { special: 'Wall-arc battery + arc storm', desc: 'Charges by hugging walls and braking; a full battery rockets its shift, but overcharge cooks your own HP.', maker: 'Voltaic Systems', year: '2095', chassis: 'Tesla-Loop', tagline: '“Danger is just stored energy.”' },
   screamer: { special: 'Blackout scream (long range)', desc: 'Honks to blast nearby rivals with a 10-second black-mask blackout.', maker: 'Decibel Motorsport', year: '2092', chassis: 'Wailbox-SR', tagline: '“Heard before it’s seen.”' },
   holo:     { special: 'On-demand ghost phase', desc: 'Briefly turns intangible to slip through cars, walls, and obstacles.', maker: 'Phantom Optics', year: '2099', chassis: 'Mirage-Ø', tagline: '“Now you don’t.”' },
+  // Regular roster — six-stat racers with weighted item affinities.
+  tez:       { special: 'Machinegun affinity', desc: 'Well-rounded skirmisher that showers the track with tracer fire.', maker: 'Terazi Motors', year: '2101', chassis: 'TZ-Vanguard', tagline: '“Jack of all, master of guns.”' },
+  kiph:      { special: 'High top speed', desc: 'Long-legged runner built for open straights; light armor is the price.', maker: 'Kiphon Velocity', year: '2100', chassis: 'KP-Streak', tagline: '“Blink and it’s gone.”' },
+  huntlen:   { special: 'Heavy armor + firepower', desc: 'Rolling fortress that trades top speed for sheer durability and payload.', maker: 'Huntlen Arms', year: '2098', chassis: 'HN-Bastion', tagline: '“Outlast, then out-gun.”' },
+  gleenixus: { special: 'Boost hoarder', desc: 'Efficient cruiser that lives on nitro and utility drops over raw damage.', maker: 'Gleen Consortium', year: '2102', chassis: 'GX-Zephyr', tagline: '“Momentum is a resource.”' },
+  scrynell:  { special: 'Top speed + machinegun', desc: 'Fragile flyweight with a blistering ceiling and a hail of bullets.', maker: 'Scrynell Racing', year: '2103', chassis: 'SC-Wisp', tagline: '“Speed answers everything.”' },
+  exendios:  { special: 'Twin-missile firepower', desc: 'Weapons platform: max firepower and a double-missile salvo.', maker: 'Exen Dynamics', year: '2104', chassis: 'XD-Warden', tagline: '“Two locks, no mercy.”' },
+  vurn:      { special: 'Armored all-rounder', desc: 'Sturdy control ship stacked with mines, shields and EMPs.', maker: 'Vurn Industrial', year: '2099', chassis: 'VR-Aegis', tagline: '“Steady wins the wreck.”' },
+  kessa:     { special: 'Best-in-class handling', desc: 'Razor-sharp cornerer that dances through traffic on boost and tricks.', maker: 'Kessa Circuits', year: '2105', chassis: 'KS-Talon', tagline: '“Corners are just suggestions.”' },
+  draxil:    { special: 'Firepower + speed', desc: 'Aggressive glass cannon: fast, heavily armed, thinly plated.', maker: 'Draxil Ordnance', year: '2103', chassis: 'DX-Reaver', tagline: '“Hit first. Hit hardest.”' },
 };
 const UPGRADES = [
   { id:'topspeed', name:'Top Speed +', icon:'🏎️', desc:'Permanently increases your max speed by 15%' },

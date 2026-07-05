@@ -314,6 +314,7 @@ function render(dt) {
   drawMissiles(ctx);
   drawShells(ctx);
   drawBalls(ctx);
+  drawBullets(ctx);
   drawGhouls(ctx);
   drawDeathrays(ctx);
   drawDrainBeams(ctx);
@@ -2214,7 +2215,7 @@ function updateMissiles(dt) {
       if (dist(m.x, m.y, p.x, p.y) < 20 + T.missileRadius) {
         if (p.id === G.myId && p.shielded) { p.shielded = false; }
         else {
-          applyDamage(p, T.missileDamage / Math.max(0.5, getCarTypeCfg(p.carType).weaponResist || 1), 'missile');
+          applyDamage(p, (m.dmg || T.missileDamage) / Math.max(0.5, getCarTypeCfg(p.carType).weaponResist || 1), 'missile');
           if (p.isBot) { p.stun = Math.max(p.stun || 0, 1.1); p._speed = (p._speed || 0) * 0.3; }
         }
         {
@@ -2329,6 +2330,32 @@ function updateBalls(dt) {
   });
 }
 
+// Machinegun tracer rounds: fast, straight, bounce off the track walls, no homing.
+// Damage travels on the round (baked-in FIREPOWER) so hits are victim-authoritative.
+function updateBullets(dt) {
+  const T = CAR_TUNING;
+  if (!G.bullets || !G.bullets.length) return;
+  G.bullets = G.bullets.filter(b => {
+    if (b.layer === undefined) b.layer = 0;
+    b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+    bounceProjectileOffWall(b, T.bulletRadius);
+    for (const p of Object.values(G.players)) {
+      if (p.id === b.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (b.layer || 0)) continue;
+      if (p.id !== G.myId && !p.isBot) continue;   // victim-authoritative
+      if (dist(b.x, b.y, p.x, p.y) < 18 + T.bulletRadius) {
+        if (p.id === G.myId && p.shielded) { p.shielded = false; }
+        else {
+          applyDamage(p, (b.dmg || T.bulletDamage) / Math.max(0.5, getCarTypeCfg(p.carType).weaponResist || 1), 'bullet');
+          if (p.isBot) p.stun = Math.max(p.stun || 0, 0.2);
+        }
+        spawnExplosion(b.x, b.y, 22, 'pulse');
+        return false;
+      }
+    }
+    return b.life > 0;
+  });
+}
+
 // Screamer Ghoul: rides the track spline for a set distance, halving the speed of
 // every racer it sweeps over (spanning the full track width).
 function updateGhouls(dt) {
@@ -2390,20 +2417,54 @@ function applyDrainEffects(dt) {
 }
 
 // Needle Engine Deathray: a fixed forward beam that shreds anything in its band.
+// Distance along a ship's deathray to the first blocker on the owner's layer —
+// any active obstacle circle, or the point where the beam leaves the track ribbon.
+// Shared by damage + draw so the visible beam stops exactly where it stops hurting.
+function deathrayBlockDist(owner) {
+  const ax = Math.cos(owner.angle), ay = Math.sin(owner.angle);
+  const ol = owner.layer || 0;
+  const maxLen = 6000;
+  let best = maxLen;
+  // Ray vs obstacle circles — any active obstacle on the same layer blocks the beam.
+  const obs = (G.track && G.track.obstacles) || [];
+  for (const o of obs) {
+    if (!o || o.active === false) continue;
+    if (obstacleLayer(o) !== ol) continue;
+    const relx = o.x - owner.x, rely = o.y - owner.y;
+    const proj = relx * ax + rely * ay;
+    if (proj <= 0) continue;                        // behind the nose
+    const perp = Math.abs(relx * -ay + rely * ax);
+    const rr = o.r || 0;
+    if (perp > rr) continue;                         // ray misses this circle
+    const entry = proj - Math.sqrt(rr * rr - perp * perp);
+    if (entry >= 0 && entry < best) best = entry;
+  }
+  // March forward to find where the beam first leaves the track ribbon (a wall).
+  const step = 12;
+  for (let d = 20; d < best; d += step) {
+    const info = projTrackInfo(owner.x + ax * d, owner.y + ay * d);
+    if (info && Math.abs(info.signed) > info.halfW) { best = d; break; }
+  }
+  return best;
+}
+
 function applyDeathrayEffects(dt) {
   for (const owner of Object.values(G.players)) {
     if ((owner.deathray || 0) <= 0) continue;
     if (owner.id === G.myId || owner.isBot) owner.deathray = Math.max(0, owner.deathray - dt);
     const ax = Math.cos(owner.angle), ay = Math.sin(owner.angle);
     const px = -ay, py = ax;
+    const blockDist = deathrayBlockDist(owner);     // beam stops at first wall/obstacle
+    const fp = getCarTypeCfg(owner.carType).firePower || 1;  // FIREPOWER scales the beam
     for (const v of Object.values(G.players)) {
       if (v.id === owner.id || v.finished || (v.deathRespawn || 0) > 0 || (v.layer || 0) !== (owner.layer || 0)) continue;
       if (v.id !== G.myId && !v.isBot) continue;   // victim-authoritative
       const dx = v.x - owner.x, dy = v.y - owner.y;
       const along = dx * ax + dy * ay;
       if (along < 0) continue;                     // behind the nose
+      if (along > blockDist) continue;             // shielded by a wall/obstacle
       if (Math.abs(dx * px + dy * py) > CAR_TUNING.needleDeathrayWidth) continue;
-      applyContinuousDamage(v, CAR_TUNING.needleDeathrayDamagePerSec * dt, 'deathray');
+      applyContinuousDamage(v, CAR_TUNING.needleDeathrayDamagePerSec * fp * dt, 'deathray');
     }
   }
 }
@@ -2495,6 +2556,24 @@ function drawBalls(ctx) {
   });
 }
 
+// Machinegun tracer rounds — short bright streaks.
+function drawBullets(ctx) {
+  if (!G.bullets || !G.bullets.length) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const b of G.bullets) {
+    const a = Math.atan2(b.vy, b.vx);
+    const tx = Math.cos(a), ty = Math.sin(a);
+    ctx.strokeStyle = 'rgba(255,244,214,0.95)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(b.x - tx * 12, b.y - ty * 12);
+    ctx.lineTo(b.x + tx * 6, b.y + ty * 6);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 // Screamer Ghoul — translucent sweep spanning the full track width.
 function drawGhouls(ctx) {
   if (!G.ghouls || !G.ghouls.length) return;
@@ -2539,7 +2618,7 @@ function drawDeathrays(ctx) {
   for (const owner of Object.values(G.players)) {
     if ((owner.deathray || 0) <= 0) continue;
     const ax = Math.cos(owner.angle), ay = Math.sin(owner.angle);
-    const len = 6000;
+    const len = deathrayBlockDist(owner);          // clip to the first wall/obstacle
     const ex = owner.x + ax * len, ey = owner.y + ay * len;
     const w = CAR_TUNING.needleDeathrayWidth;
     ctx.save();

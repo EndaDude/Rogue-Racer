@@ -1221,6 +1221,7 @@ function startGame() {
   G.shells = [];
   G.balls = [];
   G.ghouls = [];
+  G.bullets = [];
   G.explosions = [];
   G.nukeParticles = [];
   G.checkpointConfetti = [];
