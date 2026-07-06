@@ -631,6 +631,12 @@ document.getElementById('host-btn').onclick = async () => {
         sendToAll({ type: 'players_sync', players: G.players, speedClass: G.speedClass, hostMode: G.hostMode, mapQueue: G.mapQueue, mapVotes: G.mapVotes });
         sendLobbySync();
         updateHostPlayerList();
+        // If a race is running, the departed player no longer counts toward
+        // "everyone finished" — without this re-check, a mid-race disconnect
+        // left the remaining finishers waiting on them forever. (Checked on
+        // finishOrder rather than raceStarted, which goes false during the
+        // synchronized upgrade pause.)
+        if (!G.raceOver && G.finishOrder.length > 0) checkRaceOver();
       });
     });
   } catch(e) {
@@ -744,7 +750,7 @@ function resetPlayersForRace() {
   Object.values(G.players).forEach((p, i) => {
     const sp = safeSpawnState(i, G.track);
     p.x=sp.x; p.y=sp.y; p.angle=sp.angle;
-    p.lap=1; p.lapProgress=0; p.speed=0; p.vx=0; p.vy=0;
+    p.lap=1; p.lapProgress=0; p._lapArmed=false; p.speed=0; p.vx=0; p.vy=0;
     p.maxHealth = carMaxHealth(p.carType);
     p.health = p.maxHealth;
     p.deathRespawn = 0;

@@ -808,6 +808,7 @@ function gameLoop(ts) {
     applyDrainEffects(dt);
     applyDeathrayEffects(dt);
     sendMyState();
+    checkDnfWindow();
   }
   updateDriftTrails(dt);
   updateFx(dt);
@@ -1963,6 +1964,15 @@ function updateMyPlayer(dt) {
   const hasCheckpoints = !!(G.track && G.track.checkpoints && G.track.checkpoints.length);
   if (!hasCheckpoints) me.checkpointsDoneThisLap = false;
 
+  // Lap arming: a finish-line crossing only counts once the car has actually
+  // been around the far side of the track this lap. Without this, wiggling
+  // back and forth across the start line (reverse over it, then drive forward
+  // again) counted a fresh lap every time — an infinite lap-farm exploit on
+  // any track without ordered checkpoints. A real lap always sweeps the
+  // spline-progress value through the middle range, so passing 0.3–0.7 arms
+  // the next crossing; finishing a lap disarms it again.
+  if (prog > 0.3 && prog < 0.7) me._lapArmed = true;
+
   function finishLapNow() {
     me.lastLapTime = G.raceStartTime ? (Date.now() - G.raceStartTime) : 0;
     // Rotor: crossing the finish line repairs the propeller.
@@ -1993,6 +2003,7 @@ function updateMyPlayer(dt) {
     me.lap++;
     me.nextCheckpoint = 0;
     me.checkpointsDoneThisLap = false;
+    me._lapArmed = false; // must go around the track again before the line counts
     me.lapProgress = prog;
     if (me.lap > G.totalLaps) {
       if (!me.finished) {
@@ -2026,7 +2037,7 @@ function updateMyPlayer(dt) {
   // (on the ground) falsely completes the lap via the layer-agnostic progress wrap.
   const finishLayer = supportFloorAtSplineIdx(0) || 0;
   const onFinishLayer = (me.layer || 0) === finishLayer;
-  const didCrossFinish = (prevProg > 0.85 && prog < 0.15) && onFinishLayer;
+  const didCrossFinish = (prevProg > 0.85 && prog < 0.15) && onFinishLayer && me._lapArmed === true;
   if (didCrossFinish) {
     if (!hasCheckpoints || me.checkpointsDoneThisLap) {
       finishLapNow();
@@ -2521,9 +2532,27 @@ function sendMyState() {
 }
 
 function checkRaceOver() {
+  if (G.raceOver) return;
   const total = Object.keys(G.players).length;
-  if (G.finishOrder.length >= total || G.finishOrder.length >= 1) {
-    // end after all or after 30s
-    if (G.finishOrder.length >= total) showResults();
+  // Everyone still in the room has finished -> results. (Also re-checked from
+  // the host's connection-close handler, so a mid-race rage-quit can no longer
+  // leave the survivors stuck waiting on a player who is gone.)
+  if (total > 0 && G.finishOrder.length >= total) { showResults(); return; }
+  // First finisher starts a 30s clock for everyone else; stragglers DNF when
+  // it runs out. (This window was always documented here but never actually
+  // implemented, so a single AFK/crashed racer used to hang the race forever.)
+  if (G.finishOrder.length > 0 && !G._dnfDeadline) {
+    G._dnfDeadline = Date.now() + 30000;
+    const me = G.players[G.myId];
+    if (me && !me.finished && typeof addToast === 'function') {
+      addToast('30s TO FINISH!', { color: '#f87171', glow: '#b91c1c', size: 26, duration: 2.4 });
+    }
   }
+}
+
+// Ticked from the game loop: ends the race when the post-first-finish window expires.
+function checkDnfWindow() {
+  if (G.raceOver || !G._dnfDeadline) return;
+  if (!G.finishOrder.length) { G._dnfDeadline = 0; return; } // race was reset
+  if (Date.now() >= G._dnfDeadline) showResults();
 }

@@ -114,32 +114,32 @@ function broadcast(data) {
 }
 
 function onData(data, fromId) {
+  // NOTE (relay model): when the HOST receives a message from a guest, the
+  // connection-level handler in the lobby code already re-forwards it once to
+  // every OTHER guest (see the generic relay in the host's conn.on('data')).
+  // Do NOT relay again inside this dispatcher — doing both delivered missiles,
+  // chat lines, cone pushes and item pickups TWICE to every other guest
+  // (duplicate projectiles = double damage, double chat/TTS, etc).
   if (data.type === 'missile_spawn') {
     G.missiles.push(data.missile);
-    if (G.isHost) guestConns.forEach(c => { if (c.peer !== data.id) { try { c.send(data); } catch(_){} } });
   } else if (data.type === 'shell_spawn') {
     if (!G.shells) G.shells = [];
     G.shells.push(data.shell);
-    if (G.isHost) guestConns.forEach(c => { if (c.peer !== data.id) { try { c.send(data); } catch(_){} } });
   } else if (data.type === 'ball_spawn') {
     if (!G.balls) G.balls = [];
     G.balls.push(data.ball);
-    if (G.isHost) guestConns.forEach(c => { if (c.peer !== data.id) { try { c.send(data); } catch(_){} } });
   } else if (data.type === 'bullet_spawn') {
     if (!G.bullets) G.bullets = [];
     G.bullets.push(data.bullet);
-    if (G.isHost) guestConns.forEach(c => { if (c.peer !== data.id) { try { c.send(data); } catch(_){} } });
   } else if (data.type === 'ghoul_spawn') {
     if (!G.ghouls) G.ghouls = [];
     G.ghouls.push(data.ghoul);
-    if (G.isHost) guestConns.forEach(c => { if (c.peer !== data.id) { try { c.send(data); } catch(_){} } });
   } else if (data.type === 'drain_start') {
     // Only the tethered victim resolves the drain locally.
     if (data.targetId === G.myId) {
       const me = G.players[G.myId];
       if (me) { me.drain = CAR_TUNING.drainDuration; me.drainedBy = data.ownerId; }
     }
-    if (G.isHost) guestConns.forEach(c => { if (c.peer !== data.id) { try { c.send(data); } catch(_){} } });
   } else if (data.type === 'player_join') {
     normalizePlayerState(data.player);
     G.players[data.player.id] = data.player;
@@ -147,10 +147,10 @@ function onData(data, fromId) {
   } else if (data.type === 'chat') {
     if (window.__crtChat) window.__crtChat(data.name || 'Racer', data.text || '', data.color || '#39ff14');
     try { speakChat(data.name || 'Racer', data.text || '', data.voice || null); } catch (_) {}
-    if (G.isHost) { guestConns.forEach(c => { if (c.peer !== data.id) { try { c.send(data); } catch(_){} } }); }
   } else if (data.type === 'kicked' && !G.isHost) {
     try { if (peer) peer.destroy(); } catch(_) {}
     peer = null; hostConn = null;
+    if (G._countdownTimer) { clearInterval(G._countdownTimer); G._countdownTimer = null; }
     G.players = {};
     lobbyRoomWrap.style.display = 'none';
     lobbyHost.style.display = 'none';
@@ -290,8 +290,8 @@ function onData(data, fromId) {
         obs.x = obs.bx; obs.y = obs.by;
       }
     }
-    // Host relays a guest's cone push to every OTHER guest so it slides for all.
-    if (G.isHost) guestConns.forEach(c => { if (c.peer !== data.id) { try { c.send(data); } catch(_){} } });
+    // (Relay to other guests happens once at the connection level — see the
+    // NOTE at the top of onData. No second relay here.)
   } else if (data.type === 'item_used') {
     handleItemEffect(data);
   } else if (data.type === 'oil_placed') {
@@ -418,8 +418,9 @@ function onData(data, fromId) {
     disableObstacle(data.idx, data.duration || 10, false, data.fx || null);
   } else if (data.type === 'item_pickup') {
     disableItem(data.idx, data.respawn || CAR_TUNING.powerupRespawnSec, false);
-    // Host relays the pickup to every other guest so the box vanishes for all.
-    if (G.isHost) sendToAll({ type: 'item_pickup', idx: data.idx, respawn: data.respawn || CAR_TUNING.powerupRespawnSec });
+    // (The connection-level relay already forwards this once to every other
+    // guest; the old sendToAll here delivered it twice AND echoed it back to
+    // the picker.)
   } else if (data.type === 'item_respawned') {
     if (!G.isHost && G.track && G.track.items && G.track.items[data.idx]) {
       G.track.items[data.idx].active = true;

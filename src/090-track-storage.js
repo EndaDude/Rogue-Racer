@@ -1241,6 +1241,7 @@ function startGame() {
   G._speedZoom = 1;
   G._finishPunch = 0;
   G._launchHold = 0;
+  G._dnfDeadline = 0;
   G._introStart = performance.now();
   G.raceStats = { topSpeed: 0, bestLapMs: null, drifts: 0, itemsUsed: 0, wallHits: 0, dmgTaken: 0 };
   G.ghostRec = null;
@@ -1253,8 +1254,12 @@ function startGame() {
   playCountdownVoice();
   resizeCanvas();
   if (!gameLoopActive) { gameLoopActive = true; requestAnimationFrame(gameLoop); }
-  // Countdown
-  const countdownTimer = setInterval(()=>{
+  // Countdown. The timer handle lives on G so it can be cancelled: leaving a
+  // race during the countdown (Esc -> menu) used to leak this interval, which
+  // then flipped raceStarted=true while at the MENU (background physics +
+  // network sends) and made the NEXT race's countdown tick at double speed.
+  if (G._countdownTimer) { clearInterval(G._countdownTimer); G._countdownTimer = null; }
+  G._countdownTimer = setInterval(()=>{
     G.countdownVal--;
     if (G.countdownVal <= 0) {
       G.raceStarted = true;
@@ -1268,7 +1273,7 @@ function startGame() {
         addToast('PERFECT START!', { color: '#4ade80', glow: '#16a34a', size: 30, duration: 1.6 });
         playOvertakeBlip(true);
       }
-      clearInterval(countdownTimer);
+      clearInterval(G._countdownTimer); G._countdownTimer = null;
     }
   }, 1000);
 }

@@ -212,6 +212,7 @@ function hostReturnToMenu() {
 function doReturnToLobby() {
   clearPostRaceTimer();
   clearUpgradePause();
+  if (G._countdownTimer) { clearInterval(G._countdownTimer); G._countdownTimer = null; }
   G.raceOver = false; G.raceStarted = false; G.finishOrder = [];
   const results = document.getElementById('results-screen'); if (results) results.style.display = 'none';
   document.getElementById('game').style.display = 'none';

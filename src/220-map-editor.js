@@ -1276,6 +1276,7 @@ function exitTestToEditor(){
   G._testMode=false;
   clearPostRaceTimer();
   clearUpgradePause();
+  if (G._countdownTimer) { clearInterval(G._countdownTimer); G._countdownTimer = null; }
   silenceAllEngines();
   G.raceOver=false; G.raceStarted=false; G.finishOrder=[];
   const results=document.getElementById('results-screen'); if(results)results.style.display='none';
