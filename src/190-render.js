@@ -1267,11 +1267,16 @@ function drawTrackWalls(ctx, layerToDraw) {
     // Only stroke the parts of this wall whose road is drawn on THIS layer, split into
     // contiguous runs so a wall follows its road's floor and never bleeds through onto a
     // layer it doesn't belong to (e.g. a ground wall passing under an elevated deck).
+    // Also break the run at hidden "spleen" samples — the main-loop segment a fork
+    // replaces is not real road, so a wall must not be stroked straight across the split
+    // opening (that produced a phantom bar cutting across the fork mouth).
+    const shid = G.track.splineHidden;
+    const isSpleen = (i) => Array.isArray(shid) && shid.length === n ? !!shid[i] : false;
     const runs = [];
     {
       let cur = [];
       for (const i of idxs) {
-        if ((supportFloorAtSplineIdx(i) || 0) === layerToDraw) cur.push(i);
+        if (!isSpleen(i) && (supportFloorAtSplineIdx(i) || 0) === layerToDraw) cur.push(i);
         else if (cur.length) { runs.push(cur); cur = []; }
       }
       if (cur.length) runs.push(cur);

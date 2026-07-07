@@ -4997,7 +4997,9 @@ const mmCtx = minimapCanvas.getContext('2d');
 // ---- Menu music ----
 const menuMusic = new Audio('Audio/Tracks/menu.ogg');
 menuMusic.loop = true;
-menuMusic.volume = 0.5;
+// menu1 (the main menu theme) is mixed 40% quieter than the shared music base.
+const MENU1_VOLUME_SCALE = 0.6;
+menuMusic.volume = 0.5 * MENU1_VOLUME_SCALE;
 // Track Builder theme. Crossfades in/out over the main menu music while the map
 // editor is open. The file is authored to loop seamlessly, so plain loop=true is fine.
 const builderMusic = new Audio('Audio/Tracks/menu2.ogg');
@@ -5035,7 +5037,7 @@ function setBuilderMusic(on) {
 // Applies the current crossfade mix to both tracks' volumes, respecting audio settings.
 function applyMusicMixVolumes() {
   const base = CAR_TUNING.audioMenuMusicBaseVolume * AUDIO_SETTINGS.music * AUDIO_SETTINGS.master;
-  menuMusic.volume = base * (1 - _builderMusicMix);
+  menuMusic.volume = base * (1 - _builderMusicMix) * MENU1_VOLUME_SCALE;
   builderMusic.volume = base * _builderMusicMix;
 }
 
@@ -8927,12 +8929,17 @@ function updateMyPlayer(dt) {
         continue;
       }
       if (obs.type === 'boost_pad' && d < hitR) {
-        // Booster strip: no solid collision — you drive straight through it. It shoves
-        // you along the pad's arrow, and instead of a nitro flame it fattens your
-        // trail for a second.
-        const dir = ((obs.rot || 0) * Math.PI) / 180;
-        me.vx += Math.cos(dir) * 620 * speedScale * dt;
-        me.vy += Math.sin(dir) * 620 * speedScale * dt;
+        // Booster strip: no solid collision — you drive straight through it. It kicks you
+        // FORWARD (along your current heading/velocity, not the pad's arrow) and briefly
+        // raises your top speed the same way the nitro item does, so the extra velocity
+        // isn't immediately clamped by the speed cap and you actually accelerate. Instead
+        // of a nitro flame it fattens your trail for a second.
+        const spd = Math.sqrt(me.vx * me.vx + me.vy * me.vy);
+        const fx = spd > 20 ? me.vx / spd : Math.cos(me.angle);
+        const fy = spd > 20 ? me.vy / spd : Math.sin(me.angle);
+        me.vx += fx * 900 * speedScale * dt;
+        me.vy += fy * 900 * speedScale * dt;
+        me.boosting = Math.max(me.boosting || 0, 0.8);
         me.trailBoost = Math.max(me.trailBoost || 0, 1);
         continue;
       }
@@ -12443,11 +12450,16 @@ function drawTrackWalls(ctx, layerToDraw) {
     // Only stroke the parts of this wall whose road is drawn on THIS layer, split into
     // contiguous runs so a wall follows its road's floor and never bleeds through onto a
     // layer it doesn't belong to (e.g. a ground wall passing under an elevated deck).
+    // Also break the run at hidden "spleen" samples — the main-loop segment a fork
+    // replaces is not real road, so a wall must not be stroked straight across the split
+    // opening (that produced a phantom bar cutting across the fork mouth).
+    const shid = G.track.splineHidden;
+    const isSpleen = (i) => Array.isArray(shid) && shid.length === n ? !!shid[i] : false;
     const runs = [];
     {
       let cur = [];
       for (const i of idxs) {
-        if ((supportFloorAtSplineIdx(i) || 0) === layerToDraw) cur.push(i);
+        if (!isSpleen(i) && (supportFloorAtSplineIdx(i) || 0) === layerToDraw) cur.push(i);
         else if (cur.length) { runs.push(cur); cur = []; }
       }
       if (cur.length) runs.push(cur);

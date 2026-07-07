@@ -1685,12 +1685,17 @@ function updateMyPlayer(dt) {
         continue;
       }
       if (obs.type === 'boost_pad' && d < hitR) {
-        // Booster strip: no solid collision — you drive straight through it. It shoves
-        // you along the pad's arrow, and instead of a nitro flame it fattens your
-        // trail for a second.
-        const dir = ((obs.rot || 0) * Math.PI) / 180;
-        me.vx += Math.cos(dir) * 620 * speedScale * dt;
-        me.vy += Math.sin(dir) * 620 * speedScale * dt;
+        // Booster strip: no solid collision — you drive straight through it. It kicks you
+        // FORWARD (along your current heading/velocity, not the pad's arrow) and briefly
+        // raises your top speed the same way the nitro item does, so the extra velocity
+        // isn't immediately clamped by the speed cap and you actually accelerate. Instead
+        // of a nitro flame it fattens your trail for a second.
+        const spd = Math.sqrt(me.vx * me.vx + me.vy * me.vy);
+        const fx = spd > 20 ? me.vx / spd : Math.cos(me.angle);
+        const fy = spd > 20 ? me.vy / spd : Math.sin(me.angle);
+        me.vx += fx * 900 * speedScale * dt;
+        me.vy += fy * 900 * speedScale * dt;
+        me.boosting = Math.max(me.boosting || 0, 0.8);
         me.trailBoost = Math.max(me.trailBoost || 0, 1);
         continue;
       }

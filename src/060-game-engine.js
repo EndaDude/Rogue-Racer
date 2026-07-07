@@ -9,7 +9,9 @@ const mmCtx = minimapCanvas.getContext('2d');
 // ---- Menu music ----
 const menuMusic = new Audio('Audio/Tracks/menu.ogg');
 menuMusic.loop = true;
-menuMusic.volume = 0.5;
+// menu1 (the main menu theme) is mixed 40% quieter than the shared music base.
+const MENU1_VOLUME_SCALE = 0.6;
+menuMusic.volume = 0.5 * MENU1_VOLUME_SCALE;
 // Track Builder theme. Crossfades in/out over the main menu music while the map
 // editor is open. The file is authored to loop seamlessly, so plain loop=true is fine.
 const builderMusic = new Audio('Audio/Tracks/menu2.ogg');
@@ -47,7 +49,7 @@ function setBuilderMusic(on) {
 // Applies the current crossfade mix to both tracks' volumes, respecting audio settings.
 function applyMusicMixVolumes() {
   const base = CAR_TUNING.audioMenuMusicBaseVolume * AUDIO_SETTINGS.music * AUDIO_SETTINGS.master;
-  menuMusic.volume = base * (1 - _builderMusicMix);
+  menuMusic.volume = base * (1 - _builderMusicMix) * MENU1_VOLUME_SCALE;
   builderMusic.volume = base * _builderMusicMix;
 }
 
