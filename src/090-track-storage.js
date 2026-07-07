@@ -406,6 +406,8 @@ loadMaps();
 function applyAudioSettings() {
   applyMusicMixVolumes();
   countdownVoice.volume = CAR_TUNING.audioCountdownBaseVolume * AUDIO_SETTINGS.fx * AUDIO_SETTINGS.master;
+  // Keep the shield-active ambience loop at the correct level if it's playing.
+  try { if (!sfxShieldLoop.paused) sfxShieldLoop.volume = Math.max(0, Math.min(1, 0.55 * AUDIO_SETTINGS.fx * AUDIO_SETTINGS.master)); } catch (_) {}
   if (touchControlsRoot) {
     touchControlsRoot.style.display = AUDIO_SETTINGS.touchControls ? 'flex' : 'none';
   }

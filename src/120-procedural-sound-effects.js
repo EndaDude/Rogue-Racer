@@ -4,6 +4,55 @@
 // ============================================================
 function fxGain() { return Math.max(0, AUDIO_SETTINGS.fx * AUDIO_SETTINGS.master); }
 
+// Play a sampled one-shot SFX (an <audio> element from 060) at the current fx
+// volume. Clones the node so rapid repeats (e.g. machinegun fire) can overlap.
+function playSfxSample(el, vol) {
+  try {
+    const g = (vol == null ? 1 : vol) * fxGain();
+    if (g <= 0 || !el) return;
+    const n = el.cloneNode();
+    n.volume = Math.max(0, Math.min(1, g));
+    n.play().catch(() => {});
+  } catch (_) {}
+}
+
+// Throttled "shield blocked a hit" cue — dedups the many hit paths (projectiles,
+// obstacles, applyDamage) so one impact never machine-guns the sound.
+let _shieldHitLast = 0;
+function playShieldHit() {
+  const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  if (now - _shieldHitLast < 90) return;
+  _shieldHitLast = now;
+  playSfxSample(sfxShieldHit, 0.6);
+}
+
+// Fade the shield-active ambience loop in (on activation) or out (on loss) over
+// 0.2s. Driven by the local player's shield state each frame (see updateMyPlayer).
+let _shieldLoopOn = false;
+let _shieldFadeTimer = null;
+function fadeShieldLoop(on) {
+  try {
+    const base = 0.55 * fxGain();
+    const target = on ? base : 0;
+    if (on) {
+      try { if (sfxShieldLoop.paused) { sfxShieldLoop.currentTime = 0; sfxShieldLoop.volume = 0; sfxShieldLoop.play().catch(() => {}); } } catch (_) {}
+    }
+    if (_shieldFadeTimer) { clearInterval(_shieldFadeTimer); _shieldFadeTimer = null; }
+    const start = sfxShieldLoop.volume || 0;
+    const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const dur = 200;
+    _shieldFadeTimer = setInterval(() => {
+      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      const k = Math.min(1, (now - t0) / dur);
+      sfxShieldLoop.volume = Math.max(0, Math.min(1, start + (target - start) * k));
+      if (k >= 1) {
+        clearInterval(_shieldFadeTimer); _shieldFadeTimer = null;
+        if (!on) { try { sfxShieldLoop.pause(); } catch (_) {} }
+      }
+    }, 16);
+  } catch (_) {}
+}
+
 let _sfxNoiseBuffer = null;
 function getSfxNoiseBuffer() {
   if (_sfxNoiseBuffer) return _sfxNoiseBuffer;
@@ -106,12 +155,12 @@ function playItemUse(item) {
     case 'mine':    playSweep(220, 70, 0.28, 'square', 0.26); break;
     case 'pulse':   playSweep(120, 760, 0.30, 'sawtooth', 0.36); break;
     case 'missile': playSweep(760, 220, 0.42, 'sawtooth', 0.32); break;
-    case 'shell':   playSweep(520, 180, 0.40, 'square', 0.30); break;
+    case 'shell':   playSfxSample(sfxShell, 0.75); break;
     case 'ball':    playSweep(300, 540, 0.34, 'sine', 0.30); break;
     case 'ghoul':   playSweep(160, 60, 0.55, 'triangle', 0.34); break;
     case 'deathray':playSweep(1400, 400, 0.55, 'sawtooth', 0.30); break;
     case 'drain':   playSweep(200, 900, 0.40, 'sine', 0.30); break;
-    case 'machinegun': playSweep(1000, 480, 0.05, 'square', 0.20); break;
+    case 'machinegun': playSfxSample(sfxMachineGun, 0.5); break;
     default:        playSweep(420, 820, 0.30, 'sawtooth', 0.30);
   }
 }
@@ -1656,6 +1705,7 @@ function updateMyPlayer(dt) {
         if (me.shielded) {
           // Shield is active: smash the obstacle aside and take no damage. It is NOT
           // consumed here — it blocks every hit for the whole shield duration.
+          playShieldHit();
           disableObstacle(oi, 10, true);
         } else {
           if (obs.type === 'snow_pile') {
@@ -1886,6 +1936,16 @@ function updateMyPlayer(dt) {
   if (me.trailBoost > 0) { me.trailBoost -= dt; if (me.trailBoost < 0) me.trailBoost = 0; }
   if (me.shieldTime > 0) { me.shieldTime -= dt; if (me.shieldTime <= 0) { me.shieldTime = 0; me.shielded = false; } }
   else me.shielded = false;
+  // Shield-active ambience: fade the loop in on activation and out on loss (0.2s),
+  // and play a "shield down" cue when it actually drops mid-race.
+  {
+    const wantShield = !!(me.shielded && !me.finished);
+    if (wantShield && !_shieldLoopOn) { _shieldLoopOn = true; fadeShieldLoop(true); }
+    else if (!wantShield && _shieldLoopOn) {
+      _shieldLoopOn = false; fadeShieldLoop(false);
+      if (G.raceStarted && !me.finished) playSfxSample(sfxShieldDown, 0.75);
+    }
+  }
 
   const fwdNowX = Math.cos(me.angle), fwdNowY = Math.sin(me.angle);
   const rightNowX = -fwdNowY, rightNowY = fwdNowX;
@@ -2330,7 +2390,7 @@ function applyDamage(player, rawDamage, cause) {
   // Active shield blocks ALL incoming hits for its full duration (never consumed by a
   // single hit, so it can no longer be an insta-kill trap). Self-inflicted costs (e.g.
   // the Needle deathray) subtract health directly and never route through here.
-  if (player.shielded) return false;
+  if (player.shielded) { if (player.id === G.myId) playShieldHit(); return false; }
   const dmg = Math.max(1, rawDamage || 0);
   // Rotor: physical hits chip the front propeller; enough damage breaks it.
   if (player.carType === 'rotor' && !player.propBroken && cause !== 'overcharge' && cause !== 'arc' && cause !== 'drain' && cause !== 'deathray') {

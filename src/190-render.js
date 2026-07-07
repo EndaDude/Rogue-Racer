@@ -2561,7 +2561,7 @@ function updateMissiles(dt) {
       if (p.id === m.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (m.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;
       if (dist(m.x, m.y, p.x, p.y) < 20 + T.missileRadius) {
-        if (p.id === G.myId && p.shielded) { /* shield deflects it — not consumed */ }
+        if (p.id === G.myId && p.shielded) { playShieldHit(); /* shield deflects it — not consumed */ }
         else {
           applyDamage(p, (m.dmg || T.missileDamage) / Math.max(0.5, getCarTypeCfg(p.carType).weaponResist || 1), 'missile');
           if (p.isBot) { p.stun = Math.max(p.stun || 0, 1.1); p._speed = (p._speed || 0) * 0.3; }
@@ -2658,7 +2658,7 @@ function updateShells(dt) {
       if (p.id === s.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (s.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;
       if (dist(s.x, s.y, p.x, p.y) < 20 + T.shellRadius) {
-        if (p.id === G.myId && p.shielded) { /* shield deflects it — not consumed */ }
+        if (p.id === G.myId && p.shielded) { playShieldHit(); /* shield deflects it — not consumed */ }
         else {
           applyDamage(p, T.shellDamage / Math.max(0.5, getCarTypeCfg(p.carType).crashResist || 1), 'shell');
           if (p.isBot) { p.stun = Math.max(p.stun || 0, 0.6); p._speed = (p._speed || 0) * 0.5; }
@@ -2690,7 +2690,7 @@ function updateBalls(dt) {
       if (p.id === b.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (b.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;
       if (dist(b.x, b.y, p.x, p.y) < 20 + T.ballRadius) {
-        if (p.id === G.myId && p.shielded) { /* shield deflects it — not consumed */ }
+        if (p.id === G.myId && p.shielded) { playShieldHit(); /* shield deflects it — not consumed */ }
         else {
           applyDamage(p, T.ballDamage / Math.max(0.5, getCarTypeCfg(p.carType).weaponResist || 1), 'ball');
           p.noControl = Math.max(p.noControl || 0, T.ballControlLossSec);
@@ -2718,7 +2718,7 @@ function updateBullets(dt) {
       if (p.id === b.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (b.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;   // victim-authoritative
       if (dist(b.x, b.y, p.x, p.y) < 18 + T.bulletRadius) {
-        if (p.id === G.myId && p.shielded) { /* shield deflects it — not consumed */ }
+        if (p.id === G.myId && p.shielded) { playShieldHit(); /* shield deflects it — not consumed */ }
         else {
           applyDamage(p, (b.dmg || T.bulletDamage) / Math.max(0.5, getCarTypeCfg(p.carType).weaponResist || 1), 'bullet');
           if (p.isBot) p.stun = Math.max(p.stun || 0, 0.2);

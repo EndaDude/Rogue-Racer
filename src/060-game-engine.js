@@ -23,6 +23,16 @@ const BUILDER_FADE_PER_SEC = 0.55; // ~1.8s to fully crossfade
 const countdownVoice = new Audio('Audio/Effects/321go.ogg');
 countdownVoice.volume = 0.85;
 
+// ---- Sampled combat / shield SFX (played via playSfxSample / fadeShieldLoop in
+// 120-procedural-sound-effects.js). Volume is applied per-play from AUDIO_SETTINGS. ----
+const sfxMachineGun = new Audio('Audio/Effects/Machine gun bullet.ogg');
+const sfxShell      = new Audio('Audio/Effects/shell.ogg');
+const sfxShieldLoop = new Audio('Audio/Effects/sheild long.ogg'); // shield-active ambience (fades in/out)
+sfxShieldLoop.loop = true;
+sfxShieldLoop.volume = 0;
+const sfxShieldDown = new Audio('Audio/Effects/shield down.ogg');  // shield expires / is lost
+const sfxShieldHit  = new Audio('Audio/Effects/shield hit.ogg');   // shield blocks a hit
+
 // Turn the Track Builder theme on/off. Both tracks keep playing during the fade so the
 // transition is smooth; the menu track resumes underneath when the builder fades out.
 function setBuilderMusic(on) {
