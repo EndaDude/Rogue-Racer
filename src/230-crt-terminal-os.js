@@ -1870,6 +1870,15 @@
 
   function boot(){
     addLine('ROGUE RACER OS', 'hi');
+    // If the self-updating loader pulled a new build since last launch, the stored
+    // version won't match GAME_VERSION — flag it so players know the update landed.
+    try {
+      const prevV = localStorage.getItem('rr_last_version');
+      if (prevV && prevV !== GAME_VERSION) {
+        addLine('*** UPDATED  v' + prevV + '  ->  v' + GAME_VERSION + ' ***', 'hi');
+      }
+      localStorage.setItem('rr_last_version', GAME_VERSION);
+    } catch (e) {}
     // Dim "preview" hint that types itself out, letter by letter, to nudge the
     // user toward the help command (Enter also works — intentionally unstated).
     const hint = addLine('', 'dim');

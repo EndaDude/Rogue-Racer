@@ -10,7 +10,7 @@ const ME = {
   gateAngle: 0,       // through-direction (radians) for next placed gate
   gateLink: 1,        // link id for next placed gate (pairs share a link)
   gateW: TRACK_W,     // doorway width/length for next placed gate
-  trackModel: 'v1',   // 'v1' = classic single loop, 'v2' = branching splits
+  trackModel: 'v2',   // always 'v2' (branching splits); V1 classic loop retired
   branches: [],       // V2 only: [{ id, fromIdx, toIdx, nodes:[...], parent }]
   selectedBranch: null,   // V2: owner main-node index whose fork node is selected (null = main loop)
   selectedBranchPath: 0,  // V2: which fork of that node (0 = left, 1 = right)
@@ -114,7 +114,6 @@ function meNormalizeEditorNode(p){
 function meSplitSelected(){
   if (ME.selectedBranch != null) return; // in-editor nesting not supported yet
   if (ME.selectedIdx < 0 || ME.selectedIdx >= ME.wpts.length) return;
-  if (ME.trackModel !== 'v2') { alert('Switch Track Model to V2 to create track splits.'); return; }
   const N = ME.wpts.length; if (N < 2) return;
   const i = ME.selectedIdx;
   const a = ME.wpts[i], b = ME.wpts[(i + 1) % N];
@@ -475,7 +474,7 @@ function meRefreshNodeSettings() {
     layerSel.value = String(lv);
   }
   if (splitBtn) {
-    splitBtn.disabled = !(ME.trackModel === 'v2' && !branchSel);
+    splitBtn.disabled = !!branchSel;
     splitBtn.classList.toggle('active', !branchSel && Array.isArray(n.branches) && n.branches.length > 0);
   }
   document.querySelectorAll('.me-type-btn[data-type]').forEach(b=>b.classList.toggle('active',b.dataset.type===t));
@@ -1174,11 +1173,6 @@ function meInitEditor(){
   wallForceInp.oninput=()=>{ ME.wallForce = Math.max(20, Math.min(300, parseFloat(wallForceInp.value) || 120)); };
   wallBounceInp.oninput=()=>{ ME.wallBounce = Math.max(0.2, Math.min(2.0, parseFloat(wallBounceInp.value) || 1.0)); };
   obstacleTypeSel.onchange=()=>{ ME.obstacleType = obstacleTypeSel.value || 'wall'; };
-  const trackModelSel = document.getElementById('me-track-model');
-  if (trackModelSel) {
-    trackModelSel.value = ME.trackModel || 'v1';
-    trackModelSel.onchange = () => { ME.trackModel = (trackModelSel.value === 'v2') ? 'v2' : 'v1'; meRefreshNodeSettings(); meDraw(); };
-  }
   obstacleLayerSel.onchange=()=>{ ME.obstacleLayer = Number.isFinite(+obstacleLayerSel.value) ? Math.round(+obstacleLayerSel.value) : 0; meEditSelObs(); };
   obstacleRotRange.oninput=()=>{ obstacleRotNum.value = obstacleRotRange.value; ME.obstacleRot = parseFloat(obstacleRotRange.value) || 0; meEditSelObs(); };
   obstacleRotNum.oninput=()=>{ obstacleRotRange.value = obstacleRotNum.value; ME.obstacleRot = parseFloat(obstacleRotNum.value) || 0; meEditSelObs(); };
@@ -1478,7 +1472,7 @@ document.getElementById('me-test-btn').onclick=()=>startTrackTest();
 // session (no network room needed). ESC or the results button returns here.
 function startTrackTest(){
   if(ME.wpts.length<4){alert('Place at least 4 waypoints first.');return;}
-  G.customMap={name:document.getElementById('me-map-name').value||'Test Track',waypoints:[...ME.wpts],obstacles:[...ME.obstacles],powerups:[...ME.powerups],wallRegions:[...ME.wallRegions],gates:[...ME.gates],trackModel:ME.trackModel||'v1',branches:meCloneBranches(ME.branches)};
+  G.customMap={name:document.getElementById('me-map-name').value||'Test Track',waypoints:[...ME.wpts],obstacles:[...ME.obstacles],powerups:[...ME.powerups],wallRegions:[...ME.wallRegions],gates:[...ME.gates],trackModel:'v2',branches:meCloneBranches(ME.branches)};
   saveMaps();
   G._testMode=true;
   G.isHost=true;
@@ -1529,7 +1523,7 @@ function meCurrentMapData(){
   return {
     name: (document.getElementById('me-map-name').value || 'My Track').trim(),
     waypoints: ME.wpts, obstacles: ME.obstacles, powerups: ME.powerups, wallRegions: ME.wallRegions, gates: ME.gates,
-    trackModel: ME.trackModel || 'v1', branches: meCloneBranches(ME.branches),
+    trackModel: 'v2', branches: meCloneBranches(ME.branches),
     version: 3, created: new Date().toISOString().slice(0,10),
   };
 }
@@ -1706,11 +1700,9 @@ function meLoadMapData(data){
       layer: Number.isFinite(+g.layer) ? Math.round(+g.layer) : 0,
     }))
     : [];
-  ME.trackModel = (data.trackModel === 'v2') ? 'v2' : 'v1';
+  ME.trackModel = 'v2';   // track model is always v2 (splits) now
   ME.branches = meNormalizeBranches(data.branches);
   ME.selectedBranch = null; ME.selectedBranchPath = 0; ME.selectedBranchNode = -1;
-  const trackModelSel = document.getElementById('me-track-model');
-  if (trackModelSel) trackModelSel.value = ME.trackModel;
   ME.selectedIdx = ME.wpts.length ? 0 : -1;
   document.getElementById('me-map-name').value=data.name||'Unnamed';
   if(ME.wpts.length){ME.panX=ME.wpts.reduce((s,p)=>s+p.x,0)/ME.wpts.length;ME.panY=ME.wpts.reduce((s,p)=>s+p.y,0)/ME.wpts.length;}

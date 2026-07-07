@@ -304,7 +304,7 @@ function _cleanMapForQueue(map) {
   return {
     name: map.name, waypoints: map.waypoints, obstacles: map.obstacles || [],
     powerups: map.powerups || [], wallRegions: map.wallRegions || [], gates: map.gates || [],
-    trackModel: map.trackModel === 'v2' ? 'v2' : 'v1', branches: Array.isArray(map.branches) ? map.branches : [],
+    trackModel: 'v2', branches: Array.isArray(map.branches) ? map.branches : [],
     laps: map.laps, version: map.version || 3, created: map.created,
   };
 }
