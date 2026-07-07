@@ -1163,6 +1163,25 @@ function updateMyPlayer(dt) {
     if ((me.rotorSpinUp || 0) > 0) maxSpeed *= CAR_TUNING.rotorSpinUpSpeedMult;
   }
   if (me.boosting > 0) { maxSpeed *= CAR_TUNING.boostSpeedMultiplier; me.boosting -= dt; }
+  // Boost-pad bonus: each pad you crossed adds an independent hump that decays to 0 over
+  // CAR_TUNING.boostPadBonusSec; the humps SUM so stacking pads gives an even bigger
+  // boost. The total raises top speed here and drives the white speed vignette in render.
+  {
+    let boostPadBonus = 0;
+    if (Array.isArray(me.boostHumps) && me.boostHumps.length) {
+      const nowB = performance.now();
+      const life = CAR_TUNING.boostPadBonusSec * 1000;
+      me.boostHumps = me.boostHumps.filter(h => nowB - h.t0 < life);
+      for (const h of me.boostHumps) boostPadBonus += h.mag * Math.max(0, 1 - (nowB - h.t0) / life);
+    }
+    me.boostBonus = boostPadBonus;
+    if (boostPadBonus > 0) maxSpeed *= (1 + boostPadBonus);
+    // White vignette: fast fade-in (~0.2s), then follows the bonus back down to 0.
+    const vigTarget = Math.min(1, boostPadBonus);
+    me.boostVignette = vigTarget > (me.boostVignette || 0)
+      ? Math.min(vigTarget, (me.boostVignette || 0) + dt / 0.2)
+      : vigTarget;
+  }
   if (me.stun > 0) {
     me.stun -= dt;
     me.speed *= CAR_TUNING.stunVelocityDamping;
@@ -1663,6 +1682,7 @@ function updateMyPlayer(dt) {
 
   // Obstacles
   let onIce = false;
+  let boostPadContact = false;
   if (surfaceType === 'ice') onIce = true;
   if (me.ghostMode <= 0) {
     for (let oi = 0; oi < G.track.obstacles.length; oi++) {
@@ -1685,18 +1705,21 @@ function updateMyPlayer(dt) {
         continue;
       }
       if (obs.type === 'boost_pad' && d < hitR) {
-        // Booster strip: no solid collision — you drive straight through it. It kicks you
-        // FORWARD (along your current heading/velocity, not the pad's arrow) and briefly
-        // raises your top speed the same way the nitro item does, so the extra velocity
-        // isn't immediately clamped by the speed cap and you actually accelerate. Instead
-        // of a nitro flame it fattens your trail for a second.
-        const spd = Math.sqrt(me.vx * me.vx + me.vy * me.vy);
-        const fx = spd > 20 ? me.vx / spd : Math.cos(me.angle);
-        const fy = spd > 20 ? me.vy / spd : Math.sin(me.angle);
-        me.vx += fx * 900 * speedScale * dt;
-        me.vy += fy * 900 * speedScale * dt;
-        me.boosting = Math.max(me.boosting || 0, 0.8);
-        me.trailBoost = Math.max(me.trailBoost || 0, 1);
+        // Booster strip: no solid collision — you drive straight through it. Edge-triggered
+        // (one kick per pad you cross, not one per frame): it bumps your current speed a
+        // little higher and adds a decaying speed hump (see maxSpeed above) that also lifts
+        // your top speed so the kick isn't clamped. Crossing several pads stacks the humps
+        // for a bigger boost. It is NOT the nitro item. Fattens your trail for a second.
+        boostPadContact = true;
+        if (!me._onBoostPad) {
+          const shipAccel = Math.max(1, Math.min(10, (carCfg.accelMult || 1) * 5)); // 1..10
+          const trackSpeed = Math.max(1, Math.min(9, speedScale));                 // 1..9
+          const mag = CAR_TUNING.boostPadPushPerStat * shipAccel * trackSpeed;      // fraction
+          (me.boostHumps || (me.boostHumps = [])).push({ t0: performance.now(), mag });
+          me.vx *= (1 + mag);
+          me.vy *= (1 + mag);
+          me.trailBoost = Math.max(me.trailBoost || 0, 1);
+        }
         continue;
       }
       if (obs.type === 'repair_pad' && d < hitR) {
@@ -1823,6 +1846,7 @@ function updateMyPlayer(dt) {
     }
 
     me._onIce = onIce;
+    me._onBoostPad = boostPadContact;
     if (onIce) {
       const fwdIx = Math.cos(me.angle), fwdIy = Math.sin(me.angle);
       const rightIx = -fwdIy, rightIy = fwdIx;

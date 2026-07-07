@@ -370,6 +370,16 @@ function render(dt) {
     ctx.fillStyle = gB;
     ctx.fillRect(0, 0, W, H);
   }
+  // Boost-pad speed vignette (white): fades in fast when you cross a pad, then
+  // depreciates with the boost bonus. me.boostVignette (0..1) is driven in updateMyPlayer.
+  if ((me.boostVignette || 0) > 0.001) {
+    const a = Math.min(1, me.boostVignette);
+    const gW = ctx.createRadialGradient(W/2, H/2, Math.min(W, H) * 0.30, W/2, H/2, Math.max(W, H) * 0.78);
+    gW.addColorStop(0, 'rgba(255,255,255,0)');
+    gW.addColorStop(1, `rgba(255,255,255,${(0.32 * a).toFixed(3)})`);
+    ctx.fillStyle = gW;
+    ctx.fillRect(0, 0, W, H);
+  }
   // Critical-damage pulse vignette.
   {
     const hpFrac = me.maxHealth ? Math.max(0, (me.health || 0) / me.maxHealth) : 1;
@@ -1185,10 +1195,16 @@ function drawTrackWalls(ctx, layerToDraw) {
   if (!sp || sp.length < 2 || !Array.isArray(walls) || !walls.length) return;
   const n = sp.length;
   const sw = G.track.splineWidth;
+  const shid = G.track.splineHidden;
+  const isSpleen = (i) => Array.isArray(shid) && shid.length === n ? !!shid[i] : false;
 
   const edgePoint = (i, sign, extra) => {
-    const iPrev = (i - 1 + n) % n;
-    const iNext = (i + 1) % n;
+    // Take the tangent from the nearest NON-hidden neighbours so a wall endpoint sitting
+    // next to a fork's hidden "spleen" samples isn't skewed toward the replaced main path
+    // (that skew jutted the endpoint sideways and drew a stub across the fork mouth).
+    let iPrev = (i - 1 + n) % n, iNext = (i + 1) % n;
+    for (let g = 0; isSpleen(iPrev) && g < n; g++) iPrev = (iPrev - 1 + n) % n;
+    for (let g = 0; isSpleen(iNext) && g < n; g++) iNext = (iNext + 1) % n;
     let tx = sp[iNext].x - sp[iPrev].x, ty = sp[iNext].y - sp[iPrev].y;
     const tl = Math.sqrt(tx * tx + ty * ty) || 1;
     tx /= tl; ty /= tl;
@@ -1217,7 +1233,7 @@ function drawTrackWalls(ctx, layerToDraw) {
       const span = openMergedSpan(wr);
       if ((supportFloorAtSplineIdx(span.start) || 0) !== layerToDraw) continue; // open run-off stays on its own floor
       if ((wr.startIdx || 0) !== span.start) continue; // drawn by the run's first region
-      const runIdxs = span.idxs;
+      const runIdxs = span.idxs.filter(i => !isSpleen(i)); // drop hidden fork "spleen" samples
       if (runIdxs.length < 2) continue;
       const STEPS = 8;
       for (const sign of sides) {
@@ -1270,8 +1286,6 @@ function drawTrackWalls(ctx, layerToDraw) {
     // Also break the run at hidden "spleen" samples — the main-loop segment a fork
     // replaces is not real road, so a wall must not be stroked straight across the split
     // opening (that produced a phantom bar cutting across the fork mouth).
-    const shid = G.track.splineHidden;
-    const isSpleen = (i) => Array.isArray(shid) && shid.length === n ? !!shid[i] : false;
     const runs = [];
     {
       let cur = [];

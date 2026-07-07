@@ -121,6 +121,12 @@ const CAR_TUNING = {
   offTrackLightSlowDrifter: 0.95, // Drifter loses less speed at the track edge (dirt)
   riverTrackPush: 200,
   riverTrackDrag: 0.22,
+  // Boost pads: crossing one adds an independent "hump" that peaks instantly and
+  // decays to 0 over boostPadBonusSec. Humps SUM, so several pads stack into a bigger
+  // boost. Per-pad kick = boostPadPushPerStat * shipAccel(1-10) * trackSpeed(1-9), as a
+  // fraction of current speed; the summed bonus also raises your top speed while active.
+  boostPadBonusSec: 2,
+  boostPadPushPerStat: 0.005,
   powerupRespawnSec: 30,
   shieldDuration: 5,      // Shield now blocks ALL hits for this many seconds (was one-shot)
   autopilotDuration: 5,   // Autopilot drives the car along the racing line for this long
@@ -596,12 +602,12 @@ function carMaxHealth(typeId) {
 }
 
 const SPEED_CLASSES = {
-  junkyard: { label: 'Junkyard', scale: 0.7 },
-  neighborhood: { label: 'Neighborhood', scale: 1.0 },
-  city: { label: 'City', scale: 1.3 },
-  freeway: { label: 'Freeway', scale: 2.0 },
-  highway: { label: 'Highway', scale: 2.5 },
-  speedway: { label: 'Speedway', scale: 4.0 },
+  junkyard: { label: 'Junkyard', scale: 1.0 },
+  neighborhood: { label: 'Neighborhood', scale: 1.5 },
+  city: { label: 'City', scale: 2.0 },
+  freeway: { label: 'Freeway', scale: 3.0 },
+  highway: { label: 'Highway', scale: 5.0 },
+  speedway: { label: 'Speedway', scale: 7.0 },
   umbra: { label: 'Umbra', scale: 9.0 },
 };
 

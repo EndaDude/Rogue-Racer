@@ -2012,6 +2012,12 @@ const CAR_TUNING = {
   offTrackLightSlowDrifter: 0.95, // Drifter loses less speed at the track edge (dirt)
   riverTrackPush: 200,
   riverTrackDrag: 0.22,
+  // Boost pads: crossing one adds an independent "hump" that peaks instantly and
+  // decays to 0 over boostPadBonusSec. Humps SUM, so several pads stack into a bigger
+  // boost. Per-pad kick = boostPadPushPerStat * shipAccel(1-10) * trackSpeed(1-9), as a
+  // fraction of current speed; the summed bonus also raises your top speed while active.
+  boostPadBonusSec: 2,
+  boostPadPushPerStat: 0.005,
   powerupRespawnSec: 30,
   shieldDuration: 5,      // Shield now blocks ALL hits for this many seconds (was one-shot)
   autopilotDuration: 5,   // Autopilot drives the car along the racing line for this long
@@ -2487,12 +2493,12 @@ function carMaxHealth(typeId) {
 }
 
 const SPEED_CLASSES = {
-  junkyard: { label: 'Junkyard', scale: 0.7 },
-  neighborhood: { label: 'Neighborhood', scale: 1.0 },
-  city: { label: 'City', scale: 1.3 },
-  freeway: { label: 'Freeway', scale: 2.0 },
-  highway: { label: 'Highway', scale: 2.5 },
-  speedway: { label: 'Speedway', scale: 4.0 },
+  junkyard: { label: 'Junkyard', scale: 1.0 },
+  neighborhood: { label: 'Neighborhood', scale: 1.5 },
+  city: { label: 'City', scale: 2.0 },
+  freeway: { label: 'Freeway', scale: 3.0 },
+  highway: { label: 'Highway', scale: 5.0 },
+  speedway: { label: 'Speedway', scale: 7.0 },
   umbra: { label: 'Umbra', scale: 9.0 },
 };
 
@@ -8407,6 +8413,25 @@ function updateMyPlayer(dt) {
     if ((me.rotorSpinUp || 0) > 0) maxSpeed *= CAR_TUNING.rotorSpinUpSpeedMult;
   }
   if (me.boosting > 0) { maxSpeed *= CAR_TUNING.boostSpeedMultiplier; me.boosting -= dt; }
+  // Boost-pad bonus: each pad you crossed adds an independent hump that decays to 0 over
+  // CAR_TUNING.boostPadBonusSec; the humps SUM so stacking pads gives an even bigger
+  // boost. The total raises top speed here and drives the white speed vignette in render.
+  {
+    let boostPadBonus = 0;
+    if (Array.isArray(me.boostHumps) && me.boostHumps.length) {
+      const nowB = performance.now();
+      const life = CAR_TUNING.boostPadBonusSec * 1000;
+      me.boostHumps = me.boostHumps.filter(h => nowB - h.t0 < life);
+      for (const h of me.boostHumps) boostPadBonus += h.mag * Math.max(0, 1 - (nowB - h.t0) / life);
+    }
+    me.boostBonus = boostPadBonus;
+    if (boostPadBonus > 0) maxSpeed *= (1 + boostPadBonus);
+    // White vignette: fast fade-in (~0.2s), then follows the bonus back down to 0.
+    const vigTarget = Math.min(1, boostPadBonus);
+    me.boostVignette = vigTarget > (me.boostVignette || 0)
+      ? Math.min(vigTarget, (me.boostVignette || 0) + dt / 0.2)
+      : vigTarget;
+  }
   if (me.stun > 0) {
     me.stun -= dt;
     me.speed *= CAR_TUNING.stunVelocityDamping;
@@ -8907,6 +8932,7 @@ function updateMyPlayer(dt) {
 
   // Obstacles
   let onIce = false;
+  let boostPadContact = false;
   if (surfaceType === 'ice') onIce = true;
   if (me.ghostMode <= 0) {
     for (let oi = 0; oi < G.track.obstacles.length; oi++) {
@@ -8929,18 +8955,21 @@ function updateMyPlayer(dt) {
         continue;
       }
       if (obs.type === 'boost_pad' && d < hitR) {
-        // Booster strip: no solid collision — you drive straight through it. It kicks you
-        // FORWARD (along your current heading/velocity, not the pad's arrow) and briefly
-        // raises your top speed the same way the nitro item does, so the extra velocity
-        // isn't immediately clamped by the speed cap and you actually accelerate. Instead
-        // of a nitro flame it fattens your trail for a second.
-        const spd = Math.sqrt(me.vx * me.vx + me.vy * me.vy);
-        const fx = spd > 20 ? me.vx / spd : Math.cos(me.angle);
-        const fy = spd > 20 ? me.vy / spd : Math.sin(me.angle);
-        me.vx += fx * 900 * speedScale * dt;
-        me.vy += fy * 900 * speedScale * dt;
-        me.boosting = Math.max(me.boosting || 0, 0.8);
-        me.trailBoost = Math.max(me.trailBoost || 0, 1);
+        // Booster strip: no solid collision — you drive straight through it. Edge-triggered
+        // (one kick per pad you cross, not one per frame): it bumps your current speed a
+        // little higher and adds a decaying speed hump (see maxSpeed above) that also lifts
+        // your top speed so the kick isn't clamped. Crossing several pads stacks the humps
+        // for a bigger boost. It is NOT the nitro item. Fattens your trail for a second.
+        boostPadContact = true;
+        if (!me._onBoostPad) {
+          const shipAccel = Math.max(1, Math.min(10, (carCfg.accelMult || 1) * 5)); // 1..10
+          const trackSpeed = Math.max(1, Math.min(9, speedScale));                 // 1..9
+          const mag = CAR_TUNING.boostPadPushPerStat * shipAccel * trackSpeed;      // fraction
+          (me.boostHumps || (me.boostHumps = [])).push({ t0: performance.now(), mag });
+          me.vx *= (1 + mag);
+          me.vy *= (1 + mag);
+          me.trailBoost = Math.max(me.trailBoost || 0, 1);
+        }
         continue;
       }
       if (obs.type === 'repair_pad' && d < hitR) {
@@ -9067,6 +9096,7 @@ function updateMyPlayer(dt) {
     }
 
     me._onIce = onIce;
+    me._onBoostPad = boostPadContact;
     if (onIce) {
       const fwdIx = Math.cos(me.angle), fwdIy = Math.sin(me.angle);
       const rightIx = -fwdIy, rightIy = fwdIx;
@@ -11553,6 +11583,16 @@ function render(dt) {
     ctx.fillStyle = gB;
     ctx.fillRect(0, 0, W, H);
   }
+  // Boost-pad speed vignette (white): fades in fast when you cross a pad, then
+  // depreciates with the boost bonus. me.boostVignette (0..1) is driven in updateMyPlayer.
+  if ((me.boostVignette || 0) > 0.001) {
+    const a = Math.min(1, me.boostVignette);
+    const gW = ctx.createRadialGradient(W/2, H/2, Math.min(W, H) * 0.30, W/2, H/2, Math.max(W, H) * 0.78);
+    gW.addColorStop(0, 'rgba(255,255,255,0)');
+    gW.addColorStop(1, `rgba(255,255,255,${(0.32 * a).toFixed(3)})`);
+    ctx.fillStyle = gW;
+    ctx.fillRect(0, 0, W, H);
+  }
   // Critical-damage pulse vignette.
   {
     const hpFrac = me.maxHealth ? Math.max(0, (me.health || 0) / me.maxHealth) : 1;
@@ -12368,10 +12408,16 @@ function drawTrackWalls(ctx, layerToDraw) {
   if (!sp || sp.length < 2 || !Array.isArray(walls) || !walls.length) return;
   const n = sp.length;
   const sw = G.track.splineWidth;
+  const shid = G.track.splineHidden;
+  const isSpleen = (i) => Array.isArray(shid) && shid.length === n ? !!shid[i] : false;
 
   const edgePoint = (i, sign, extra) => {
-    const iPrev = (i - 1 + n) % n;
-    const iNext = (i + 1) % n;
+    // Take the tangent from the nearest NON-hidden neighbours so a wall endpoint sitting
+    // next to a fork's hidden "spleen" samples isn't skewed toward the replaced main path
+    // (that skew jutted the endpoint sideways and drew a stub across the fork mouth).
+    let iPrev = (i - 1 + n) % n, iNext = (i + 1) % n;
+    for (let g = 0; isSpleen(iPrev) && g < n; g++) iPrev = (iPrev - 1 + n) % n;
+    for (let g = 0; isSpleen(iNext) && g < n; g++) iNext = (iNext + 1) % n;
     let tx = sp[iNext].x - sp[iPrev].x, ty = sp[iNext].y - sp[iPrev].y;
     const tl = Math.sqrt(tx * tx + ty * ty) || 1;
     tx /= tl; ty /= tl;
@@ -12400,7 +12446,7 @@ function drawTrackWalls(ctx, layerToDraw) {
       const span = openMergedSpan(wr);
       if ((supportFloorAtSplineIdx(span.start) || 0) !== layerToDraw) continue; // open run-off stays on its own floor
       if ((wr.startIdx || 0) !== span.start) continue; // drawn by the run's first region
-      const runIdxs = span.idxs;
+      const runIdxs = span.idxs.filter(i => !isSpleen(i)); // drop hidden fork "spleen" samples
       if (runIdxs.length < 2) continue;
       const STEPS = 8;
       for (const sign of sides) {
@@ -12453,8 +12499,6 @@ function drawTrackWalls(ctx, layerToDraw) {
     // Also break the run at hidden "spleen" samples — the main-loop segment a fork
     // replaces is not real road, so a wall must not be stroked straight across the split
     // opening (that produced a phantom bar cutting across the fork mouth).
-    const shid = G.track.splineHidden;
-    const isSpleen = (i) => Array.isArray(shid) && shid.length === n ? !!shid[i] : false;
     const runs = [];
     {
       let cur = [];
