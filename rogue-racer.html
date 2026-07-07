@@ -1705,6 +1705,8 @@
           </div>
           <div class="me-grp" id="me-grp-obstacle" hidden>
             <span class="me-grp-title">Object</span>
+            <button class="me-check-btn" id="me-obstacle-auto-layer" title="Auto-detect the layer from the nearest track node or split spline on placement">Auto Layer</button>
+            <button class="me-check-btn" id="me-obstacle-auto-orient" title="Auto-orient to the nearest spline (incl. splits) on placement">Auto Orient</button>
             <span class="me-field">
               <select id="me-obstacle-type">
                 <option value="wall">Wall</option>
@@ -1897,7 +1899,7 @@
 // Game (HTML) version. This ships independently of the desktop app via the
 // self-updating loader, so bump it whenever you publish a game update; it shows
 // on the terminal so you can confirm which build actually loaded.
-const GAME_VERSION = '0.1.15';
+const GAME_VERSION = '0.1.16';
 const TOTAL_LAPS = 3;
 const PLAYER_COLORS = ['#a855f7','#06b6d4','#fbbf24','#22c55e','#ef4444','#f97316'];
 const CAR_W = 14, CAR_H = 22;
@@ -14291,9 +14293,14 @@ function updateHud() {
     } else {
       strip.style.display = 'flex';
       const doneCount = Math.max(0, Math.min(cps.length, me.nextCheckpoint || 0));
+      // Linked checkpoints (a split's per-fork gates) are ONE logical checkpoint —
+      // collapse each link group into a single arch so the strip shows one, not both.
       let html = '';
-      for (let i = 0; i < cps.length; i++) {
-        html += `<span class="checkpoint-arch${i < doneCount ? ' done' : ''}"></span>`;
+      let i = 0;
+      while (i < cps.length) {
+        const end = checkpointGroupEnd(cps, i);
+        html += `<span class="checkpoint-arch${doneCount >= end ? ' done' : ''}"></span>`;
+        i = end;
       }
       strip.innerHTML = html;
     }
@@ -15003,6 +15010,9 @@ const ME = {
   obstacleLayer: 0,
   obstacleRot: 0,
   obstacleScale: 1,
+  autoLayer: true,    // auto-detect obstacle layer from nearest node/spline (incl. splits)
+  autoOrient: true,   // auto-orient obstacle to nearest spline (incl. splits)
+  selObs: -1,         // index of the currently selected obstacle (for slider editing)
 };
 function meC()      { return document.getElementById('me-canvas'); }
 function meWtoX(wx) { const c=meC(); return (wx-ME.panX)*ME.zoom+c.width/2; }
@@ -15206,8 +15216,8 @@ function meInjectLegacyBridgeSlopes(pts) {
 }
 
 // Auto-layer detection: objects placed on the map inherit the support layer of
-// the nearest track node (main loop + any V2 branch nodes), so bridge decks get
-// deck obstacles without touching the layer box.
+// the nearest track node — main loop AND any V2 split-spline (branch) nodes — so
+// bridge decks and forks get deck obstacles without touching the layer box.
 function meAutoLayerAt(wx, wy) {
   let best = 0, bd = Infinity;
   const consider = (p) => {
@@ -15215,29 +15225,54 @@ function meAutoLayerAt(wx, wy) {
     const d2 = (p.x - wx) * (p.x - wx) + (p.y - wy) * (p.y - wy);
     if (d2 < bd) { bd = d2; best = Math.round(p.supportLayer || 0); }
   };
-  (ME.wpts || []).forEach(consider);
-  const walkBranches = (branches) => {
-    if (!branches) return;
-    Object.values(branches).forEach(list => (Array.isArray(list) ? list : []).forEach(path => {
-      (path && path.nodes ? path.nodes : []).forEach(nd => { consider(nd); if (nd && nd.branches) walkBranches(nd.branches); });
-    }));
-  };
-  try { walkBranches(ME.branches); } catch (_) {}
+  (ME.wpts || []).forEach(node => {
+    consider(node);
+    if (Array.isArray(node.branches)) {
+      node.branches.forEach(path => (Array.isArray(path) ? path : []).forEach(consider));
+    }
+  });
   return best;
 }
 
-// Nearest-segment tangent (radians) of the track at a world point — used to
-// auto-orient obstacles to the road direction on placement.
-function meAutoTangentAt(wx, wy) {
-  const sp = ME.spline;
-  if (!sp || sp.length < 2) return 0;
-  let bi = 0, bd = Infinity;
-  for (let i = 0; i < sp.length; i++) {
-    const d2 = (sp[i].x - wx) ** 2 + (sp[i].y - wy) ** 2;
-    if (d2 < bd) { bd = d2; bi = i; }
+// Sample a fork spline (owner node `a` → branch node list `br` → next main node `b`)
+// into a point list, matching how the fork road ribbon is drawn.
+function meSampleForkPts(a, br, b) {
+  const ctrl = [a].concat(br, [b]);
+  const m = ctrl.length;
+  const samp = [];
+  for (let k = 0; k < m - 1; k++) {
+    const c0 = ctrl[Math.max(0, k - 1)], c1 = ctrl[k], c2 = ctrl[k + 1], c3 = ctrl[Math.min(m - 1, k + 2)];
+    const steps = (k === m - 2) ? 16 : 15;
+    for (let s = 0; s <= steps; s++) { const t = s / 16; samp.push(catmullRom(c0, c1, c2, c3, t)); }
   }
-  const a = sp[(bi - 1 + sp.length) % sp.length];
-  const b = sp[(bi + 1) % sp.length];
+  return samp;
+}
+
+// Nearest-segment tangent (radians) of the track at a world point — used to
+// auto-orient obstacles to the road direction on placement. Considers the main
+// loop AND every V2 split spline, so forks orient their obstacles correctly too.
+function meAutoTangentAt(wx, wy) {
+  let bestList = null, bi = 0, bd = Infinity;
+  const scan = (pts) => {
+    if (!pts || pts.length < 2) return;
+    for (let i = 0; i < pts.length; i++) {
+      const d2 = (pts[i].x - wx) ** 2 + (pts[i].y - wy) ** 2;
+      if (d2 < bd) { bd = d2; bi = i; bestList = pts; }
+    }
+  };
+  scan(ME.spline);
+  if (ME.trackModel === 'v2' && ME.wpts.length >= 2) {
+    const NN = ME.wpts.length;
+    ME.wpts.forEach((a, i) => {
+      const brs = a.branches;
+      if (!Array.isArray(brs) || !brs.length) return;
+      const b = ME.wpts[(i + 1) % NN];
+      brs.forEach(br => { if (Array.isArray(br) && br.length) scan(meSampleForkPts(a, br, b)); });
+    });
+  }
+  if (!bestList) return 0;
+  const a = bestList[(bi - 1 + bestList.length) % bestList.length];
+  const b = bestList[(bi + 1) % bestList.length];
   return Math.atan2(b.y - a.y, b.x - a.x);
 }
 
@@ -15285,6 +15320,44 @@ function meHitTestObstacle(cx, cy) {
     if ((cx - sx) ** 2 + (cy - sy) ** 2 <= rr * rr) return i;
   }
   return -1;
+}
+
+// Push ME.obstacle* (rot / scale / layer) into the toolbar's rot/scale/layer inputs.
+function meSyncObstacleControls() {
+  const rotR = document.getElementById('me-obstacle-rot-range');
+  const rotN = document.getElementById('me-obstacle-rot');
+  const scR = document.getElementById('me-obstacle-scale-range');
+  const scN = document.getElementById('me-obstacle-scale');
+  const lyr = document.getElementById('me-obstacle-layer');
+  if (rotR) rotR.value = String(Math.round(ME.obstacleRot || 0));
+  if (rotN) rotN.value = String(Math.round(ME.obstacleRot || 0));
+  if (scR) scR.value = String(Math.round((ME.obstacleScale || 1) * 100));
+  if (scN) scN.value = String(Math.round((ME.obstacleScale || 1) * 100));
+  if (lyr) lyr.value = String(Math.round(ME.obstacleLayer || 0));
+}
+
+// Select an already-placed obstacle so the sliders edit it in place.
+function meSelectObstacle(idx) {
+  ME.selObs = idx;
+  const o = ME.obstacles[idx];
+  if (o) {
+    ME.obstacleRot = Math.round(o.rot || 0);
+    ME.obstacleScale = Math.max(0.4, Math.min(2.2, o.scale || 1));
+    ME.obstacleLayer = Math.round(o.layer || 0);
+    meSyncObstacleControls();
+  }
+  meDraw();
+}
+
+// Apply the current rot / scale / layer sliders to the selected obstacle (if any).
+function meEditSelObs() {
+  if (ME.selObs < 0) return;
+  const o = ME.obstacles[ME.selObs];
+  if (!o) { ME.selObs = -1; return; }
+  o.rot = Math.round(ME.obstacleRot || 0);
+  o.scale = Math.max(0.4, Math.min(2.2, ME.obstacleScale || 1));
+  o.layer = Math.round(ME.obstacleLayer || 0);
+  meDraw();
 }
 
 function meHitTestPowerup(cx, cy) {
@@ -15716,7 +15789,7 @@ function meDraw() {
   }
 
   // Manual obstacles
-  ME.obstacles.forEach(o => {
+  ME.obstacles.forEach((o, i) => {
     const sx = meWtoX(o.x), sy = meWtoY(o.y);
     const rr = Math.max(5, (o.r || 12) * (o.scale || 1) * ME.zoom);
     const rot = ((o.rot || 0) * Math.PI) / 180;
@@ -15789,6 +15862,17 @@ function meDraw() {
       ctx.fill();
     }
     ctx.restore();
+    // Highlight the selected obstacle so slider edits are visibly targeted.
+    if (i === ME.selObs) {
+      ctx.save();
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.arc(sx, sy, rr + 6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
     ctx.fillStyle = '#f8fafc';
     ctx.font = 'bold 9px monospace';
     ctx.textAlign = 'center';
@@ -15998,8 +16082,12 @@ function meInitEditor(){
   const obstacleRotNum = document.getElementById('me-obstacle-rot');
   const obstacleScaleRange = document.getElementById('me-obstacle-scale-range');
   const obstacleScaleNum = document.getElementById('me-obstacle-scale');
+  const obstacleAutoLayerBtn = document.getElementById('me-obstacle-auto-layer');
+  const obstacleAutoOrientBtn = document.getElementById('me-obstacle-auto-orient');
 
   function refreshModeButtons() {
+    // Leaving obstacle mode drops the current obstacle selection (and its highlight).
+    if (ME.mode !== 'obstacle' && ME.selObs !== -1) ME.selObs = -1;
     modeWaypointBtn.classList.toggle('active', ME.mode === 'waypoint');
     modeWallBtn.classList.toggle('active', ME.mode === 'wall');
     modeObstacleBtn.classList.toggle('active', ME.mode === 'obstacle');
@@ -16019,7 +16107,7 @@ function meInitEditor(){
     if (hint) hint.textContent = {
       waypoint: 'Click to add track nodes · drag to move · click a node to edit its type / width / layer.',
       wall:     'Click a track edge segment to paint the selected wall behavior · right-click removes it.',
-      obstacle: 'Click the track to place — the layer is auto-detected from the nearest node. Right-click erases.',
+      obstacle: 'Click empty track to place — click a placed object to select it, then use the Rotate/Scale/Layer sliders. Right-click erases.',
       powerup:  'Click the track to drop an item box — layer auto-detected. Right-click erases.',
       gate:     'Click to drop a portal gate. Two gates with the same Link teleport between each other; different angles rotate travel. Right-click erases.',
       erase:    'Click any placed obstacle or item box to remove it.',
@@ -16065,11 +16153,15 @@ function meInitEditor(){
     trackModelSel.value = ME.trackModel || 'v1';
     trackModelSel.onchange = () => { ME.trackModel = (trackModelSel.value === 'v2') ? 'v2' : 'v1'; meRefreshNodeSettings(); meDraw(); };
   }
-  obstacleLayerSel.onchange=()=>{ ME.obstacleLayer = Number.isFinite(+obstacleLayerSel.value) ? Math.round(+obstacleLayerSel.value) : 0; };
-  obstacleRotRange.oninput=()=>{ obstacleRotNum.value = obstacleRotRange.value; ME.obstacleRot = parseFloat(obstacleRotRange.value) || 0; };
-  obstacleRotNum.oninput=()=>{ obstacleRotRange.value = obstacleRotNum.value; ME.obstacleRot = parseFloat(obstacleRotNum.value) || 0; };
-  obstacleScaleRange.oninput=()=>{ obstacleScaleNum.value = obstacleScaleRange.value; ME.obstacleScale = Math.max(0.4, Math.min(2.2, (parseFloat(obstacleScaleRange.value) || 100) / 100)); };
-  obstacleScaleNum.oninput=()=>{ obstacleScaleRange.value = obstacleScaleNum.value; ME.obstacleScale = Math.max(0.4, Math.min(2.2, (parseFloat(obstacleScaleNum.value) || 100) / 100)); };
+  obstacleLayerSel.onchange=()=>{ ME.obstacleLayer = Number.isFinite(+obstacleLayerSel.value) ? Math.round(+obstacleLayerSel.value) : 0; meEditSelObs(); };
+  obstacleRotRange.oninput=()=>{ obstacleRotNum.value = obstacleRotRange.value; ME.obstacleRot = parseFloat(obstacleRotRange.value) || 0; meEditSelObs(); };
+  obstacleRotNum.oninput=()=>{ obstacleRotRange.value = obstacleRotNum.value; ME.obstacleRot = parseFloat(obstacleRotNum.value) || 0; meEditSelObs(); };
+  obstacleScaleRange.oninput=()=>{ obstacleScaleNum.value = obstacleScaleRange.value; ME.obstacleScale = Math.max(0.4, Math.min(2.2, (parseFloat(obstacleScaleRange.value) || 100) / 100)); meEditSelObs(); };
+  obstacleScaleNum.oninput=()=>{ obstacleScaleRange.value = obstacleScaleNum.value; ME.obstacleScale = Math.max(0.4, Math.min(2.2, (parseFloat(obstacleScaleNum.value) || 100) / 100)); meEditSelObs(); };
+  if (obstacleAutoLayerBtn) obstacleAutoLayerBtn.onclick = () => { ME.autoLayer = !ME.autoLayer; obstacleAutoLayerBtn.classList.toggle('active', ME.autoLayer); };
+  if (obstacleAutoOrientBtn) obstacleAutoOrientBtn.onclick = () => { ME.autoOrient = !ME.autoOrient; obstacleAutoOrientBtn.classList.toggle('active', ME.autoOrient); };
+  if (obstacleAutoLayerBtn) obstacleAutoLayerBtn.classList.toggle('active', ME.autoLayer);
+  if (obstacleAutoOrientBtn) obstacleAutoOrientBtn.classList.toggle('active', ME.autoOrient);
   if (gateLinkInp) gateLinkInp.oninput=()=>{ ME.gateLink = Math.max(1, Math.min(6, Math.round(+gateLinkInp.value) || 1)); };
   if (gateAngleRange) gateAngleRange.oninput=()=>{ gateAngleNum.value = gateAngleRange.value; ME.gateAngle = (parseFloat(gateAngleRange.value) || 0) * Math.PI / 180; };
   if (gateAngleNum) gateAngleNum.oninput=()=>{ gateAngleRange.value = gateAngleNum.value; ME.gateAngle = (parseFloat(gateAngleNum.value) || 0) * Math.PI / 180; };
@@ -16121,6 +16213,7 @@ function meInitEditor(){
       const ho=meHitTestObstacle(cx,cy);
       if(ho>=0){
         ME.obstacles.splice(ho,1);
+        if (ME.selObs === ho) ME.selObs = -1; else if (ME.selObs > ho) ME.selObs--;
         meDraw();
         e.preventDefault();return;
       }
@@ -16171,20 +16264,17 @@ function meInitEditor(){
 
     if (ME.mode === 'obstacle') {
       const owx = meXtoW(cx), owy = meYtoW(cy);
-      const autoLayer = meAutoLayerAt(owx, owy);
-      ME.obstacleLayer = autoLayer;
-      const layerBox = document.getElementById('me-obstacle-layer');
-      if (layerBox) layerBox.value = String(autoLayer);
-      const obs = meDefaultObstacle(ME.obstacleType, owx, owy, autoLayer);
-      // Auto-orient to the road: blockers turn broadside so they block the lane.
-      obs.rot = meAutoObstacleRot(ME.obstacleType, owx, owy);
-      const rotBox = document.getElementById('me-obstacle-rot');
-      const rotRange = document.getElementById('me-obstacle-rot-range');
-      if (rotBox) rotBox.value = String(obs.rot);
-      if (rotRange) rotRange.value = String(obs.rot);
-      ME.obstacleRot = obs.rot;
+      // Left-click an existing obstacle to select it — the rot/scale/layer sliders
+      // then edit it in place. Empty space places a new one.
+      const hit = meHitTestObstacle(cx, cy);
+      if (hit >= 0) { meSelectObstacle(hit); return; }
+      const layer = ME.autoLayer ? meAutoLayerAt(owx, owy) : Math.round(ME.obstacleLayer || 0);
+      const obs = meDefaultObstacle(ME.obstacleType, owx, owy, layer);
+      // Auto-orient to the nearest spline (blockers turn broadside to block the
+      // lane); when auto-orient is off the manual Rotate slider is used as-is.
+      obs.rot = ME.autoOrient ? meAutoObstacleRot(ME.obstacleType, owx, owy) : Math.round(ME.obstacleRot || 0);
       ME.obstacles.push(obs);
-      meDraw();
+      meSelectObstacle(ME.obstacles.length - 1);
       return;
     }
     if (ME.mode === 'wall') {
@@ -16237,6 +16327,7 @@ function meInitEditor(){
       const ho=meHitTestObstacle(cx,cy);
       if (ho >= 0) {
         ME.obstacles.splice(ho,1);
+        if (ME.selObs === ho) ME.selObs = -1; else if (ME.selObs > ho) ME.selObs--;
         meDraw();
       }
       return;
@@ -16350,7 +16441,7 @@ document.getElementById('me-back-btn').onclick=()=>{
 document.getElementById('me-new-btn').onclick=()=>{
   if(ME.wpts.length>0&&!confirm('Discard current map?'))return;
   ME.wpts=[];ME.spline=[];ME.splineW=[];ME.obstacles=[];ME.powerups=[];ME.wallRegions=[];ME.gates=[];ME.panX=0;ME.panY=0;ME.selectedIdx=-1;
-  ME.obstacleRot = 0; ME.obstacleScale = 1;
+  ME.obstacleRot = 0; ME.obstacleScale = 1; ME.selObs = -1;
   document.getElementById('me-map-name').value='My Track';
   meRefreshNodeSettings();
   meDraw();

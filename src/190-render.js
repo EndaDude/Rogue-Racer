@@ -3185,9 +3185,14 @@ function updateHud() {
     } else {
       strip.style.display = 'flex';
       const doneCount = Math.max(0, Math.min(cps.length, me.nextCheckpoint || 0));
+      // Linked checkpoints (a split's per-fork gates) are ONE logical checkpoint —
+      // collapse each link group into a single arch so the strip shows one, not both.
       let html = '';
-      for (let i = 0; i < cps.length; i++) {
-        html += `<span class="checkpoint-arch${i < doneCount ? ' done' : ''}"></span>`;
+      let i = 0;
+      while (i < cps.length) {
+        const end = checkpointGroupEnd(cps, i);
+        html += `<span class="checkpoint-arch${doneCount >= end ? ' done' : ''}"></span>`;
+        i = end;
       }
       strip.innerHTML = html;
     }
