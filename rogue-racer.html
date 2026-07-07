@@ -3565,6 +3565,10 @@ function onData(data, fromId) {
       if (joinStatus) { joinStatus.textContent = 'You were kicked by the host.'; joinStatus.className = 'status-msg err'; }
       if (window.crtwm) { try { window.crtwm.close('lobby'); } catch(_){} }
       if (window.__crtPrint) window.__crtPrint('You were kicked by the host.', 'err');
+      if (G.raceStarted) {
+        if (G.isHost) hostReturnToMenu();   
+        else doReturnToLobby(); 
+      }
     }
   } else if (data.type === 'players_sync') {
     const myState = G.players[G.myId]; // preserve local player state
