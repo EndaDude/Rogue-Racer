@@ -136,8 +136,8 @@ function applyProfileExtras(p, profile) {
   if (!p || !profile) return;
   if (typeof profile.smokeColor === 'string') p.smokeColor = profile.smokeColor;
   if (typeof profile.trailColor === 'string') p.trailColor = profile.trailColor;
-  if (Array.isArray(profile.decals)) p.decals = profile.decals;
-  else if (typeof profile.decal === 'string') p.decals = profile.decal ? [{ src: profile.decal, x: 0, y: 0, scale: 1, rot: 0 }] : [];
+  if (Array.isArray(profile.decals)) { p.decals = profile.decals; bumpDecalVer(p); }
+  else if (typeof profile.decal === 'string') { p.decals = profile.decal ? [{ src: profile.decal, x: 0, y: 0, scale: 1, rot: 0 }] : []; bumpDecalVer(p); }
   if (typeof profile.showTag === 'boolean') p.showTag = profile.showTag;
 }
 

@@ -1820,7 +1820,8 @@
     editor: { desc: 'Opens map maker', win: true, run: () => { openMapMakerWindow(); } },
     settings: { desc: 'audio settings', run: () => {
       print('Audio — master ' + pct(AUDIO_SETTINGS.master) + '  music ' + pct(AUDIO_SETTINGS.music) + '  fx ' + pct(AUDIO_SETTINGS.fx) + '   touch ' + (AUDIO_SETTINGS.touchControls ? 'ON' : 'OFF'), 'hi');
-      print('use: volume [master/music/fx] <0-100>   |   touch [on/off]', 'dim');
+      print('Graphics — FX quality ' + (AUDIO_SETTINGS.lowFx ? 'LOW' : 'HIGH'), 'hi');
+      print('use: volume [master/music/fx] <0-100>   |   touch [on/off]   |   fx [low/high]', 'dim');
     } },
     volume: { desc: 'set audio volume', run: (a) => {
       const ch = (a[0] || '').toLowerCase();
@@ -1843,6 +1844,20 @@
       else AUDIO_SETTINGS.touchControls = !AUDIO_SETTINGS.touchControls;
       try { applyAudioSettings(); saveAudioSettings(); syncSettingsInputs(); } catch(e){}
       print('touch controls ' + (AUDIO_SETTINGS.touchControls ? 'ON' : 'OFF'), 'hi');
+    } },
+    fx: { desc: 'graphics quality (low|high)', run: (a) => {
+      const s = (a[0] || '').toLowerCase();
+      if (s === '' || s === 'status') {
+        print('FX quality: ' + (AUDIO_SETTINGS.lowFx ? 'LOW' : 'HIGH'), 'hi');
+        print('use: fx low | fx high   (Low FX = fewer particles, no trails/skids, lighter shake)', 'dim');
+        return;
+      }
+      if (s === 'low') AUDIO_SETTINGS.lowFx = true;
+      else if (s === 'high' || s === 'full') AUDIO_SETTINGS.lowFx = false;
+      else if (s === 'toggle') AUDIO_SETTINGS.lowFx = !AUDIO_SETTINGS.lowFx;
+      else { print('usage: fx [low|high]', 'err'); return; }
+      try { saveAudioSettings(); } catch (e) {}
+      print('FX quality set to ' + (AUDIO_SETTINGS.lowFx ? 'LOW' : 'HIGH'), 'hi');
     } },
     controls: { desc: 'remap controls', instant: true, run: () => {
       try { openKeybindModal(); print('Controls menu opened. Click a slot, then press a key or controller button.', 'hi'); }

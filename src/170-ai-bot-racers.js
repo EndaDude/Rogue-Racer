@@ -361,7 +361,7 @@ function updateBots(dt) {
   const speedScale = Math.max(0.2, G.speedScale || 1);
   const me = G.players[G.myId];
 
-  Object.values(G.players).forEach(b => {
+  framePlayers().forEach(b => {
     if (!b.isBot) return;
     b.invuln = Math.max(0, (b.invuln || 0) - dt);
     if ((b.boosting || 0) > 0) b.boosting -= dt;

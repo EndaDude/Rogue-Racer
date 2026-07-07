@@ -830,8 +830,23 @@ let gameLoopActive = false;
 
 function gameLoop(ts) {
   requestAnimationFrame(gameLoop);
+  const frameMs = ts - prevTime;
   const dt = Math.min((ts - prevTime) / 1000, 0.05);
   prevTime = ts;
+  // New frame: invalidate the per-frame derivation caches (framePlayers /
+  // frameLayerBucket) by bumping the frame id. They rebuild lazily on first use.
+  G._frameId = (G._frameId || 0) + 1;
+  // Rolling frame-time estimate drives dynamic particle scaling: when frames get
+  // expensive we spawn fewer particles so a slow frame doesn't spiral into a
+  // slower one. Clamped so a single hitch (tab switch, GC) doesn't tank the scale.
+  if (frameMs > 0 && frameMs < 200) {
+    G._frameMsAvg = G._frameMsAvg ? G._frameMsAvg * 0.9 + frameMs * 0.1 : frameMs;
+  }
+  {
+    const ms = G._frameMsAvg || 16.7;
+    // 1.0 at/under ~55fps; eases down to a 0.35 floor as frame time climbs.
+    G._fxScale = ms <= 18 ? 1 : Math.max(0.35, 1 - (ms - 18) / 40);
+  }
   resizeCanvas();
   pollGamepad(dt);
 
@@ -901,7 +916,7 @@ function applyCarSpecials(me, dt, io) {
     }
     if (!me.propBroken) {
       let feed = 0;
-      Object.values(G.players).forEach(p => {
+      framePlayers().forEach(p => {
         if (p.id === me.id || p.finished || (p.layer || 0) !== (me.layer || 0)) return;
         const d = dist(me.x, me.y, p.x, p.y);
         if (d > T.rotorDraftRange) return;
@@ -975,7 +990,7 @@ function applyCarSpecials(me, dt, io) {
 
   // ── Victim effects: read every other racer's synced state ──
   if (!me.finished) {
-    Object.values(G.players).forEach(p => {
+    framePlayers().forEach(p => {
       if (p.id === me.id || p.finished || (p.layer || 0) !== (me.layer || 0)) return;
       const d = dist(me.x, me.y, p.x, p.y);
       // Fast Rotor wake slows cars caught behind it, proportional to its overspeed.
@@ -1409,7 +1424,7 @@ function updateMyPlayer(dt) {
 
     // Draft boost (adds forward momentum while slipstreaming)
     if (ups.includes('draft')) {
-      Object.values(G.players).forEach(p=>{
+      framePlayers().forEach(p=>{
         if(p.id!==G.myId&&!p.finished){
           const d=dist(me.x,me.y,p.x,p.y);
           const a=angleDiff(me.angle,angle(me.x,me.y,p.x,p.y));
@@ -1864,7 +1879,7 @@ function updateMyPlayer(dt) {
     }
 
     // Multiplayer cars: bouncy contact instead of sticky slowdown.
-    for (const op of Object.values(G.players)) {
+    for (const op of framePlayers()) {
       if (!op || op.id === G.myId || op.finished) continue;
       if (bridgeFloorAt(op.x, op.y) !== (me.layer || 0)) continue;
       const d = dist(nx, ny, op.x, op.y);
@@ -2318,6 +2333,7 @@ function drawCheckpointConfetti(ctx) {
 }
 
 function addScreenShake(mag, dur) {
+  if (lowFxOn()) mag = (mag || 0) * 0.3; // gentler juice in Low FX
   G.camera.shakeMag = Math.max(G.camera.shakeMag || 0, mag || 0);
   G.camera.shakeTime = Math.max(G.camera.shakeTime || 0, dur || 0);
 }
@@ -2472,7 +2488,7 @@ function updateMines(dt) {
     if (m.arm > 0) continue;
     // Locally simulated bots can trip mines too.
     let tripped = false;
-    for (const p of Object.values(G.players)) {
+    for (const p of framePlayers()) {
       if (!p.isBot || p.finished || p.deathRespawn > 0 || p.id === m.ownerId) continue;
       if ((m.layer || 0) !== (p.layer || 0)) continue;
       if (dist(p.x, p.y, m.x, m.y) <= (m.blastR || 92) * 0.6) {
@@ -2623,8 +2639,9 @@ function drawExplosions(ctx) {
 
 function drawMines(ctx, layer) {
   if (!G.mines.length) return;
-  G.mines.forEach(m => {
-    if ((m.layer || 0) !== (layer || 0)) return;
+  const bucket = frameLayerBucket('mines', G.mines, layer);
+  for (let i = 0; i < bucket.length; i++) {
+    const m = bucket[i];
     ctx.save();
     ctx.translate(m.x, m.y);
     ctx.fillStyle = m.arm > 0 ? 'rgba(148,163,184,0.9)' : 'rgba(249,115,22,0.95)';
@@ -2636,21 +2653,23 @@ function drawMines(ctx, layer) {
     ctx.arc(0, 0, 4, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-  });
+  }
 }
 
 function drawDriftTrails(ctx, layer) {
   if (!G.driftTrails.length) return;
+  const bucket = frameLayerBucket('drift', G.driftTrails, layer);
+  if (!bucket.length) return;
   ctx.save();
-  G.driftTrails.forEach(t => {
-    if ((t.layer || 0) !== (layer || 0)) return;
+  for (let i = 0; i < bucket.length; i++) {
+    const t = bucket[i];
     const a = Math.max(0, t.life / t.maxLife);
     ctx.globalAlpha = Math.min(1, a * 0.95);
     ctx.fillStyle = t.color;
     ctx.beginPath();
     ctx.arc(t.x, t.y, t.r, 0, Math.PI * 2);
     ctx.fill();
-  });
+  }
   ctx.restore();
 }
 
@@ -2660,7 +2679,7 @@ function drawDriftTrails(ctx, layer) {
 // This removes the visual rubber-banding from the throttled state updates.
 function updateRemotePlayers(dt) {
   const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-  for (const p of Object.values(G.players)) {
+  for (const p of framePlayers()) {
     if (!p || p.id === G.myId || p.isBot) continue;
     if (p._netX === undefined) continue;
     // Extrapolate the target using the last known velocity (capped so a dropped

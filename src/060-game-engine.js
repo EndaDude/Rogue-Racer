@@ -72,6 +72,7 @@ const AUDIO_SETTINGS = {
   music: 0.7,
   fx: 0.85,
   touchControls: true,
+  lowFx: false, // "Low FX" graphics-quality toggle (persisted); see `fx` terminal cmd
 };
 let touchControlsRoot = null;
 
@@ -85,6 +86,7 @@ function loadAudioSettings() {
       if (Number.isFinite(s.music)) AUDIO_SETTINGS.music = Math.max(0, Math.min(1, s.music));
       if (Number.isFinite(s.fx)) AUDIO_SETTINGS.fx = Math.max(0, Math.min(1, s.fx));
       if (typeof s.touchControls === 'boolean') AUDIO_SETTINGS.touchControls = s.touchControls;
+      if (typeof s.lowFx === 'boolean') AUDIO_SETTINGS.lowFx = s.lowFx;
     }
   } catch(_) {}
 }

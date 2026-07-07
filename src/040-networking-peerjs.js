@@ -231,8 +231,8 @@ function onData(data, fromId) {
       if (typeof data.paintTag === 'string' && data.paintTag) p.paintTag = data.paintTag;
       if (typeof data.smokeColor === 'string') p.smokeColor = data.smokeColor;
       if (typeof data.trailColor === 'string') p.trailColor = data.trailColor;
-      if (Array.isArray(data.decals)) p.decals = data.decals;
-      else if (typeof data.decal === 'string') p.decals = data.decal ? [{ src: data.decal, x: 0, y: 0, scale: 1, rot: 0 }] : [];
+      if (Array.isArray(data.decals)) { p.decals = data.decals; bumpDecalVer(p); }
+      else if (typeof data.decal === 'string') { p.decals = data.decal ? [{ src: data.decal, x: 0, y: 0, scale: 1, rot: 0 }] : []; bumpDecalVer(p); }
       if (typeof data.showTag === 'boolean') p.showTag = data.showTag;
       updateHostPlayerList();
       sendLobbySync();
