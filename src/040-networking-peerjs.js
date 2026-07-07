@@ -151,18 +151,20 @@ function onData(data, fromId) {
     try { if (peer) peer.destroy(); } catch(_) {}
     peer = null; hostConn = null;
     if (G._countdownTimer) { clearInterval(G._countdownTimer); G._countdownTimer = null; }
-    G.players = {};
-    lobbyRoomWrap.style.display = 'none';
-    lobbyHost.style.display = 'none';
-    lobbyJoin.style.display = 'none';
-    if (lobbyCustomize) lobbyCustomize.style.display = 'none';
-    if (lobbyTracks) lobbyTracks.style.display = 'none';
-    lobbyMain.style.display = '';
-    const panel = document.getElementById('join-room-panel');
-    if (panel) panel.style.display = 'none';
-    if (joinStatus) { joinStatus.textContent = 'You were kicked by the host.'; joinStatus.className = 'status-msg err'; }
-    if (window.crtwm) { try { window.crtwm.close('lobby'); } catch(_){} }
-    if (window.__crtPrint) window.__crtPrint('You were kicked by the host.', 'err');
+    if (data.id == G.myId){
+      G.players = {};
+      lobbyRoomWrap.style.display = 'none';
+      lobbyHost.style.display = 'none';
+      lobbyJoin.style.display = 'none';
+      if (lobbyCustomize) lobbyCustomize.style.display = 'none';
+      if (lobbyTracks) lobbyTracks.style.display = 'none';
+      lobbyMain.style.display = '';
+      const panel = document.getElementById('join-room-panel');
+      if (panel) panel.style.display = 'none';
+      if (joinStatus) { joinStatus.textContent = 'You were kicked by the host.'; joinStatus.className = 'status-msg err'; }
+      if (window.crtwm) { try { window.crtwm.close('lobby'); } catch(_){} }
+      if (window.__crtPrint) window.__crtPrint('You were kicked by the host.', 'err');
+    }
   } else if (data.type === 'players_sync') {
     const myState = G.players[G.myId]; // preserve local player state
     G.players = data.players;

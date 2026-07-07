@@ -970,7 +970,7 @@ function kickPlayer(pid) {
   if (!G.isHost || !pid || pid === G.myId) return;
   const conn = guestConns.find(c => c.peer === pid);
   if (conn) {
-    try { conn.send({ type: 'kicked' }); } catch(_) {}
+    try { conn.send({ type: 'kicked', id: pid }); } catch(_) {}
     setTimeout(() => { try { conn.close(); } catch(_) {} }, 60);
   }
   guestConns = guestConns.filter(c => c.peer !== pid);
