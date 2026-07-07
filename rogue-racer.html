@@ -15282,8 +15282,12 @@ const OBS_BLOCKERS = new Set(['wall', 'brick_wall', 'moving_platform', 'punch_gl
 const OBS_ALONG = new Set(['flowing_water', 'boost_pad', 'ice_track']);
 function meAutoObstacleRot(type, wx, wy) {
   const tangDeg = meAutoTangentAt(wx, wy) * 180 / Math.PI;
-  if (OBS_BLOCKERS.has(type)) return Math.round(((tangDeg + 90) % 360 + 360) % 360 - 180);
-  if (OBS_ALONG.has(type)) return Math.round(((tangDeg) % 360 + 360) % 360 - 180);
+  const norm = d => Math.round(((d) % 360 + 360) % 360 - 180);
+  if (OBS_BLOCKERS.has(type)) return norm(tangDeg + 90);
+  // Along-the-road pieces point in the racing direction. The tangent runs backwards
+  // relative to travel, so flip 180° (matters for the asymmetric boost pad arrow;
+  // symmetric water/ice are unaffected).
+  if (OBS_ALONG.has(type)) return norm(tangDeg + 180);
   return ME.obstacleRot || 0; // round pieces (cone, repair pad): leave as-is
 }
 
