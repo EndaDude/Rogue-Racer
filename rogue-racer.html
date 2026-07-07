@@ -15268,12 +15268,10 @@ function meAutoTangentAt(wx, wy) {
   if (!bestList) return 0;
   const a = bestList[(bi - 1 + bestList.length) % bestList.length];
   const b = bestList[(bi + 1) % bestList.length];
-  let ang = Math.atan2(b.y - a.y, b.x - a.x);
-  // The main loop's sample list runs opposite the racing direction, while fork
-  // samples run WITH it (owner → branch → next node). Flip only the main so both
-  // report a "racing-forward" tangent.
-  if (bestList === ME.spline) ang += Math.PI;
-  return ang;
+  // Both the main loop (meRebuildSpline, wpt order) and fork samples
+  // (meSampleForkPts, owner→branch→next) are ordered opposite the racing
+  // direction, so flip 180° for both to report a racing-forward tangent.
+  return Math.atan2(b.y - a.y, b.x - a.x) + Math.PI;
 }
 
 // Obstacles that visually READ as a barrier get turned broadside to the road so
