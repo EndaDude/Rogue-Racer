@@ -61,6 +61,74 @@ let G = {
   viewLayer: 0, // fractional viewer layer, eases toward me.layer for smooth slope transitions
 };
 
+// ---- Per-frame derivation caches -------------------------------------------
+// The render/update loop is frame-time bound. Two patterns dominated the waste:
+//   1. dozens of per-frame functions each called Object.values(G.players),
+//      allocating a fresh array every call (some once *per layer*);
+//   2. the Phase-C draw passes each re-scanned *all* entities filtering by layer,
+//      once per layer — an L x E cost every frame.
+// gameLoop() bumps G._frameId once per rendered frame; the helpers below memoise
+// those derivations for the current frame so the work happens once, not L times.
+// Everything keys on G._frameId, so the caches auto-invalidate next frame with no
+// manual clearing and no risk of going stale across frames.
+G._frameId = 0;
+G._playersArr = null;
+G._playersArrFrame = -1;
+
+// Object.values(G.players) for the current frame, built at most once per frame.
+// Returns live player object references (mutating through it mutates the players),
+// exactly like a direct Object.values call — just without the per-call allocation.
+function framePlayers() {
+  if (G._playersArrFrame !== G._frameId) {
+    G._playersArr = Object.values(G.players);
+    G._playersArrFrame = G._frameId;
+  }
+  return G._playersArr;
+}
+
+// Generic "bucket a flat list by its .layer" cache. Each distinct `key` is
+// bucketed at most once per frame; a draw pass then reads only its own layer's
+// slice instead of filtering the whole list. This turns the Phase-C L x E
+// per-layer re-scan into a single O(E) pass plus O(1) map lookups. Entity order
+// within a layer is preserved, so paint order is identical to the old filter.
+const _EMPTY_LAYER_BUCKET = [];
+G._layerBuckets = { frame: -1, maps: {} };
+function frameLayerBucket(key, list, layer) {
+  const lb = G._layerBuckets;
+  if (lb.frame !== G._frameId) { lb.frame = G._frameId; lb.maps = {}; }
+  let m = lb.maps[key];
+  if (!m) {
+    m = new Map();
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      const l = e.layer || 0;
+      let arr = m.get(l);
+      if (!arr) { arr = []; m.set(l, arr); }
+      arr.push(e);
+    }
+    lb.maps[key] = m;
+  }
+  return m.get(layer || 0) || _EMPTY_LAYER_BUCKET;
+}
+
+// Invalidate a player's cached hull-decal clip by bumping an integer version.
+// getPlayerDecalClip keys its cache on this instead of JSON.stringify-ing the
+// (data-URL-heavy) decal list every frame — call this wherever decals change.
+function bumpDecalVer(p) { if (p) p._decalVer = (p._decalVer || 0) + 1; }
+
+// Multiplier applied to particle spawn counts / rates. Folds together the rolling
+// FPS estimate (spawn less when frames are expensive) and the user "Low FX"
+// quality toggle. 1 = full particles; smaller = fewer. Spawn helpers multiply
+// their counts by this and probabilistically drop fractional spawns.
+function fxSpawnScale() {
+  let s = G._fxScale == null ? 1 : G._fxScale;
+  if (typeof AUDIO_SETTINGS !== 'undefined' && AUDIO_SETTINGS.lowFx) s *= 0.45;
+  return s;
+}
+// True when the Low FX quality mode is on (used to gate trails, skid marks, and
+// the heavier per-car glow passes entirely).
+function lowFxOn() { return typeof AUDIO_SETTINGS !== 'undefined' && !!AUDIO_SETTINGS.lowFx; }
+
 function makePlayer(id, name, color, x, y, angle, carType) {
   return {
     id, name, color,

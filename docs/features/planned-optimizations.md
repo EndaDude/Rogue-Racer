@@ -21,6 +21,8 @@ watch frame time in the browser Performance panel.
   are called once *per layer*. Build the array once at the top of the frame and pass it
   down.
 
+Note - These have already been implemented
+
 ## Render pipeline (`190-render.js`)
 
 - **Bucket entities by layer once per frame instead of re-scanning per layer.** The

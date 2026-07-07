@@ -4,21 +4,36 @@
 
 // ---- Unified particle pool -------------------------------------------------
 // Entries: {x,y,vx,vy,r,life,maxLife,layer,c0,c1,a0,drag,grow}
+
+// Turn a desired particle count into an actual one, scaled by fxSpawnScale()
+// (rolling-FPS + Low FX). Fractional remainders spawn probabilistically so low
+// scales still emit an occasional particle instead of rounding to zero.
+function fxCount(base) {
+  const n = base * fxSpawnScale();
+  const whole = Math.floor(n);
+  return whole + (Math.random() < (n - whole) ? 1 : 0);
+}
+
 function spawnFxParticle(p) {
   G.fx.push(p);
-  if (G.fx.length > 900) G.fx.splice(0, G.fx.length - 900);
+  // Hard cap keeps the pool bounded; tighter under Low FX so slow machines never
+  // pay for a huge live-particle count.
+  const cap = lowFxOn() ? 280 : 900;
+  if (G.fx.length > cap) G.fx.splice(0, G.fx.length - cap);
 }
 
 function spawnFxBurst(x, y, layer, kind, dirX, dirY) {
   if (kind === 'pickup') {
-    for (let i = 0; i < 14; i++) {
+    const N = fxCount(14);
+    for (let i = 0; i < N; i++) {
       const a = Math.random() * Math.PI * 2, s = 40 + Math.random() * 130;
       const L = 0.35 + Math.random() * 0.3;
       spawnFxParticle({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s, r: 1.6 + Math.random()*1.8,
         life: L, maxLife: L, layer, c0: [253,224,71], c1: [251,146,60], a0: 0.95, drag: 3.4, grow: 0 });
     }
   } else if (kind === 'heal') {
-    for (let i = 0; i < 12; i++) {
+    const N = fxCount(12);
+    for (let i = 0; i < N; i++) {
       const a = Math.random() * Math.PI * 2, s = 20 + Math.random() * 60;
       const L = 0.5 + Math.random() * 0.35;
       spawnFxParticle({ x: x + (Math.random()-0.5)*18, y: y + (Math.random()-0.5)*18,
@@ -26,15 +41,17 @@ function spawnFxBurst(x, y, layer, kind, dirX, dirY) {
         life: L, maxLife: L, layer, c0: [134,239,172], c1: [34,197,94], a0: 0.9, drag: 2.0, grow: 0 });
     }
   } else if (kind === 'emp') {
-    for (let i = 0; i < 26; i++) {
-      const a = (i / 26) * Math.PI * 2 + Math.random() * 0.2, s = 180 + Math.random() * 160;
+    const N = Math.max(6, fxCount(26));
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2 + Math.random() * 0.2, s = 180 + Math.random() * 160;
       const L = 0.3 + Math.random() * 0.25;
       spawnFxParticle({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s, r: 1.4 + Math.random()*1.6,
         life: L, maxLife: L, layer, c0: [165,243,252], c1: [56,189,248], a0: 0.95, drag: 2.6, grow: 0 });
     }
   } else if (kind === 'sparks') {
     const bx = dirX || 0, by = dirY || 0;
-    for (let i = 0; i < 5; i++) {
+    const N = fxCount(5);
+    for (let i = 0; i < N; i++) {
       const a = Math.atan2(by, bx) + (Math.random() - 0.5) * 1.6;
       const s = 60 + Math.random() * 170;
       const L = 0.16 + Math.random() * 0.18;
@@ -48,7 +65,11 @@ function spawnFxBurst(x, y, layer, kind, dirX, dirY) {
 // Ambient per-car emitters: engine exhaust, boost flame trail, damage smoke.
 function updateFxEmitters(dt) {
   if (!G.raceStarted || !G.track) return;
-  Object.values(G.players).forEach(p => {
+  // Widen emit intervals when frames get expensive / Low FX is on (>= scale means
+  // fewer exhaust + smoke particles). Clamped so cars never go fully smokeless.
+  const emitScl = Math.max(0.2, fxSpawnScale());
+  const lowFx = lowFxOn();
+  framePlayers().forEach(p => {
     if (p.finished || (p.deathRespawn || 0) > 0) return;
     const spd = Math.abs(p.speed || 0);
     const boost = (p.boosting || 0) > 0;
@@ -60,7 +81,7 @@ function updateFxEmitters(dt) {
     // Exhaust smoke: faster = denser and hotter; boosting swaps to flame colors.
     // (Nitro flame stays its own default colors — the custom trail below is separate.)
     p._exhaustT = (p._exhaustT || 0) + dt;
-    const rate = boost ? 0.016 : (spd > 40 ? Math.max(0.03, 0.11 - spd * 0.00012) : 0.22);
+    const rate = (boost ? 0.016 : (spd > 40 ? Math.max(0.03, 0.11 - spd * 0.00012) : 0.22)) / emitScl;
     while (p._exhaustT >= rate) {
       p._exhaustT -= rate;
       const jx = (Math.random() - 0.5) * 6, jy = (Math.random() - 0.5) * 6;
@@ -78,8 +99,11 @@ function updateFxEmitters(dt) {
     }
     // Custom trail: an always-visible fading RIBBON streaming from the tail whenever
     // the ship moves (see drawPlayerTrails). This is NOT the nitro flame — nitro is
-    // handled independently above. We only record the tail path here.
-    if (trailRgb) {
+    // handled independently above. We only record the tail path here. Skipped whole
+    // in Low FX, where trails aren't drawn — no point recording the path.
+    if (lowFx) {
+      if (p._trail && p._trail.length) p._trail.length = 0;
+    } else if (trailRgb) {
       p._trail = p._trail || [];
       if (spd > 12) {
         const last = p._trail[p._trail.length - 1];
@@ -115,7 +139,7 @@ function updateFxEmitters(dt) {
     const hpFrac = (p.health == null ? 1 : p.health / Math.max(1, p.maxHealth || CAR_TUNING.baseHealth));
     if (hpFrac < 0.38) {
       p._smokeT = (p._smokeT || 0) + dt;
-      const srate = hpFrac < 0.18 ? 0.05 : 0.1;
+      const srate = (hpFrac < 0.18 ? 0.05 : 0.1) / emitScl;
       while (p._smokeT >= srate) {
         p._smokeT -= srate;
         const L = 0.7 + Math.random() * 0.5;
@@ -145,9 +169,11 @@ function updateFx(dt) {
 
 function drawFx(ctx, layer) {
   if (!G.fx.length) return;
+  const bucket = frameLayerBucket('fx', G.fx, layer);
+  if (!bucket.length) return;
   ctx.save();
-  for (const p of G.fx) {
-    if ((p.layer || 0) !== (layer || 0)) continue;
+  for (let i = 0; i < bucket.length; i++) {
+    const p = bucket[i];
     const t = 1 - p.life / p.maxLife;
     const a = Math.max(0, (1 - t) * (p.a0 || 0.8));
     if (a <= 0.01) continue;
@@ -172,6 +198,7 @@ function drawFx(ctx, layer) {
 
 // ---- Persistent skid marks --------------------------------------------------
 function addSkidSegment(x1, y1, x2, y2, layer, w) {
+  if (lowFxOn()) return; // skid marks are disabled in Low FX
   const d2 = (x2-x1)*(x2-x1) + (y2-y1)*(y2-y1);
   if (d2 < 1 || d2 > 3600) return; // skip degenerate / teleport segments
   const life = 7;
@@ -188,10 +215,12 @@ function updateSkidMarks(dt) {
 
 function drawSkidMarks(ctx, layer) {
   if (!G.skidMarks.length) return;
+  const bucket = frameLayerBucket('skid', G.skidMarks, layer);
+  if (!bucket.length) return;
   ctx.save();
   ctx.lineCap = 'round';
-  for (const s of G.skidMarks) {
-    if ((s.layer || 0) !== (layer || 0)) continue;
+  for (let i = 0; i < bucket.length; i++) {
+    const s = bucket[i];
     const a = Math.min(1, s.life / s.maxLife) * 0.42;
     ctx.strokeStyle = `rgba(8,8,14,${a})`;
     ctx.lineWidth = s.w;

@@ -1524,24 +1524,26 @@ function drawObstacles(ctx, layer) {
 
 function drawImpactParticles(ctx, layer) {
   if (G.snowParticles.length) {
-    G.snowParticles.forEach(p => {
-      if ((p.layer || 0) !== (layer || 0)) return;
+    const snow = frameLayerBucket('snow', G.snowParticles, layer);
+    for (let i = 0; i < snow.length; i++) {
+      const p = snow[i];
       const a = Math.max(0, p.life / p.maxLife);
       ctx.fillStyle = 'rgba(248,250,252,' + (0.85 * a) + ')';
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
       ctx.fill();
-    });
+    }
   }
   if (G.brickShards.length) {
-    G.brickShards.forEach(b => {
-      if ((b.layer || 0) !== (layer || 0)) return;
+    const brick = frameLayerBucket('brick', G.brickShards, layer);
+    for (let i = 0; i < brick.length; i++) {
+      const b = brick[i];
       const a = Math.max(0, b.life / b.maxLife);
       ctx.fillStyle = 'rgba(194,65,12,' + (0.88 * a) + ')';
       ctx.beginPath();
       ctx.rect(b.x - b.r, b.y - b.r, b.r * 2, b.r * 2);
       ctx.fill();
-    });
+    }
   }
 }
 
@@ -2132,7 +2134,10 @@ function getPlayerDecals(p) {
 function getPlayerDecalClip(p, shape, drawW, drawH) {
   const decals = getPlayerDecals(p);
   if (!decals.length) return null;
-  const key = shape + '|' + Math.round(drawW) + 'x' + Math.round(drawH) + '|' + JSON.stringify(decals);
+  // Key on an integer version (bumped by bumpDecalVer whenever decals actually
+  // change) instead of JSON.stringify-ing the decal list — those srcs are 128px+
+  // PNG data URLs, so serializing them every frame per player was pure waste.
+  const key = shape + '|' + Math.round(drawW) + 'x' + Math.round(drawH) + '|' + (p._decalVer || 0);
   if (p._decalKey === key && p._decalClip) return p._decalClip;
   if (!p._decalImgs) p._decalImgs = {};
   let allReady = true;
@@ -2179,47 +2184,59 @@ function getPlayerDecalClip(p, shape, drawW, drawH) {
 // tail. Points are recorded in updateFxEmitters; the head (nearest the ship) is
 // brightest/thickest and the tail fades to nothing. Independent of the nitro flame.
 function drawPlayerTrails(ctx, layer) {
+  if (lowFxOn()) return; // custom trails are a Low FX casualty
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  Object.values(G.players).forEach(p => {
-    if (!p) return;
+  const players = framePlayers();
+  for (let pi = 0; pi < players.length; pi++) {
+    const p = players[pi];
+    if (!p) continue;
     const boosted = (p.trailBoost || 0) > 0;
-    if (!p.trailColor && !boosted) return;
+    if (!p.trailColor && !boosted) continue;
     const pts = p._trail;
-    if (!pts || pts.length < 2) return;
+    if (!pts || pts.length < 2) continue;
     const rgb = p.trailColor ? hexToRgb(p.trailColor) : [250, 204, 21];
-    if (!rgb) return;
+    if (!rgb) continue;
     // Boosting fattens the ribbon for a second (the booster-pad effect).
     const widthMul = boosted ? 2.6 : 1;
     const alphaMul = boosted ? 1.4 : 1;
     const n = pts.length;
+    // Precompute the "rgba(r,g,b," prefix once per player instead of rebuilding
+    // the whole template string (and a .toFixed alloc) for every segment.
+    const rgbPrefix = 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',';
     for (let i = 1; i < n; i++) {
       const a = pts[i - 1], b = pts[i];
       if ((b.l || 0) !== (layer || 0)) continue;
       const f = i / (n - 1);           // 0 at tail .. 1 at head (near ship)
-      ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${Math.min(1, 0.55 * f * alphaMul).toFixed(3)})`;
+      // Round alpha to 3 dp with integer math (cheaper than Number.toFixed).
+      const alpha = Math.round(Math.min(1, 0.55 * f * alphaMul) * 1000) / 1000;
+      ctx.strokeStyle = rgbPrefix + alpha + ')';
       ctx.lineWidth = (1.5 + 8 * f) * widthMul;
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
       ctx.stroke();
     }
-  });
+  }
   ctx.restore();
 }
 
 function drawPlayers(ctx, targetLayer) {
+  if (!G.raceStarted) return;
   const me = G.players[G.myId];
   const myLayer = me ? getPlayerLayer(me) : 0;
-  Object.values(G.players).forEach(p => {
-    if (!G.raceStarted) return;
+  const lowFx = lowFxOn();
+  // Only this layer's players (pre-bucketed once per frame) rather than scanning
+  // and layer-filtering the whole roster once per layer.
+  const bucket = frameLayerBucket('players', framePlayers(), targetLayer);
+  for (let bi = 0; bi < bucket.length; bi++) {
+    const p = bucket[bi];
     const typeCfg = getCarTypeCfg(p.carType);
     const shape = typeCfg.shape;
     const drawW = shape === 'puncher' ? CAR_H : CAR_W;
     const drawH = shape === 'baller' ? CAR_H : CAR_H;
     const playerLayer = getPlayerLayer(p);
-    if (playerLayer !== targetLayer) return;
     const onBridge = playerLayer > 0;
     const sameLayerAsMe = playerLayer === myLayer;
 
@@ -2313,7 +2330,9 @@ function drawPlayers(ctx, targetLayer) {
     ctx.fillStyle = p.id === G.myId ? p.color : p.color+'cc';
     drawCarSilhouette(ctx, shape, drawW, drawH);
     // Top-light: subtle front-to-back sheen so hulls read as 3D shapes.
-    {
+    // Skipped in Low FX — a per-car gradient allocation + extra silhouette fill
+    // every frame is one of the pricier cosmetic passes.
+    if (!lowFx) {
       const sheen = ctx.createLinearGradient(0, -drawH / 2, 0, drawH / 2);
       sheen.addColorStop(0, 'rgba(255,255,255,0.30)');
       sheen.addColorStop(0.45, 'rgba(255,255,255,0.04)');
@@ -2424,7 +2443,7 @@ function drawPlayers(ctx, targetLayer) {
       }
     }
     ctx.restore();
-  });
+  }
 }
 
 function drawMinimap() {
@@ -2503,7 +2522,7 @@ function drawMinimap() {
     }
   }
 
-  Object.values(G.players).forEach(p=>{
+  framePlayers().forEach(p=>{
     if(!G.raceStarted)return;
     if (p.id === G.myId) {
       // Local player: glowing ring so you never lose yourself on busy maps.
@@ -2536,7 +2555,7 @@ function updateMissiles(dt) {
     if (!m.locked) {
       // Acquire a lock only after a rival stays within range for missileLockTime.
       let nearId = null, nearD = Infinity;
-      Object.values(G.players).forEach(p => {
+      framePlayers().forEach(p => {
         if (p.id === m.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (m.layer || 0)) return;
         const d = dist(m.x, m.y, p.x, p.y);
         if (d < nearD) { nearD = d; nearId = p.id; }
@@ -2576,7 +2595,7 @@ function updateMissiles(dt) {
     m.x += m.vx * dt; m.y += m.vy * dt; m.angle = Math.atan2(m.vy, m.vx);
     if (G.track.gates && G.track.gates.length) tryGateTeleport(m, m.x - m.vx * dt, m.y - m.vy * dt, dt);
     // Victim-authoritative impact: hits any rival this client simulates.
-    for (const p of Object.values(G.players)) {
+    for (const p of framePlayers()) {
       if (p.id === m.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (m.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;
       if (dist(m.x, m.y, p.x, p.y) < 20 + T.missileRadius) {
@@ -2657,7 +2676,7 @@ function updateShells(dt) {
   G.shells = G.shells.filter(s => {
     const speed = T.shellSpeed * ss;
     let nearId = null, nearD = Infinity;
-    Object.values(G.players).forEach(p => {
+    framePlayers().forEach(p => {
       if (p.id === s.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (s.layer || 0)) return;
       const d = dist(s.x, s.y, p.x, p.y);
       if (d < nearD) { nearD = d; nearId = p.id; }
@@ -2673,7 +2692,7 @@ function updateShells(dt) {
     const vl = Math.hypot(s.vx, s.vy) || 1; s.vx = s.vx / vl * speed; s.vy = s.vy / vl * speed;
     s.x += s.vx * dt; s.y += s.vy * dt; s.angle = Math.atan2(s.vy, s.vx);
     if (G.track.gates && G.track.gates.length) tryGateTeleport(s, s.x - s.vx * dt, s.y - s.vy * dt, dt);
-    for (const p of Object.values(G.players)) {
+    for (const p of framePlayers()) {
       if (p.id === s.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (s.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;
       if (dist(s.x, s.y, p.x, p.y) < 20 + T.shellRadius) {
@@ -2705,7 +2724,7 @@ function updateBalls(dt) {
     const vl = Math.hypot(b.vx, b.vy) || 1; b.vx = b.vx / vl * speed; b.vy = b.vy / vl * speed;
     b.x += b.vx * dt; b.y += b.vy * dt;
     if (G.track.gates && G.track.gates.length) tryGateTeleport(b, b.x - b.vx * dt, b.y - b.vy * dt, dt);
-    for (const p of Object.values(G.players)) {
+    for (const p of framePlayers()) {
       if (p.id === b.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (b.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;
       if (dist(b.x, b.y, p.x, p.y) < 20 + T.ballRadius) {
@@ -2733,7 +2752,7 @@ function updateBullets(dt) {
     b.x += b.vx * dt; b.y += b.vy * dt;
     if (G.track.gates && G.track.gates.length) tryGateTeleport(b, b.x - b.vx * dt, b.y - b.vy * dt, dt);
     if (bounceProjectileOffWall(b, T.bulletRadius) && (b.bounceCount = (b.bounceCount || 0) + 1) > T.bulletBounces) return false;
-    for (const p of Object.values(G.players)) {
+    for (const p of framePlayers()) {
       if (p.id === b.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (b.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;   // victim-authoritative
       if (dist(b.x, b.y, p.x, p.y) < 18 + T.bulletRadius) {
@@ -2777,7 +2796,7 @@ function updateGhouls(dt) {
     const t = g.idxF - Math.floor(g.idxF);
     g.x = a.x + (b.x - a.x) * t; g.y = a.y + (b.y - a.y) * t;
     const halfW = trackHalfWidthAtIdx(i0);
-    for (const p of Object.values(G.players)) {
+    for (const p of framePlayers()) {
       if (p.id === g.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (g.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;   // victim-authoritative
       if (g.hit[p.id]) continue;
@@ -2795,7 +2814,7 @@ function updateGhouls(dt) {
 // Dragger Drain tether: bleed health (and Coil battery) from tethered rivals while
 // they stay in range of the drainer. Resolved on the victim's own client + bots.
 function applyDrainEffects(dt) {
-  for (const p of Object.values(G.players)) {
+  for (const p of framePlayers()) {
     if ((p.drain || 0) <= 0) continue;
     if (p.id !== G.myId && !p.isBot) continue;
     const owner = G.players[p.drainedBy];
@@ -2843,14 +2862,14 @@ function deathrayBlockDist(owner) {
 }
 
 function applyDeathrayEffects(dt) {
-  for (const owner of Object.values(G.players)) {
+  for (const owner of framePlayers()) {
     if ((owner.deathray || 0) <= 0) continue;
     if (owner.id === G.myId || owner.isBot) owner.deathray = Math.max(0, owner.deathray - dt);
     const ax = Math.cos(owner.angle), ay = Math.sin(owner.angle);
     const px = -ay, py = ax;
     const blockDist = deathrayBlockDist(owner);     // beam stops at first wall/obstacle
     const fp = getCarTypeCfg(owner.carType).firePower || 1;  // FIREPOWER scales the beam
-    for (const v of Object.values(G.players)) {
+    for (const v of framePlayers()) {
       if (v.id === owner.id || v.finished || (v.deathRespawn || 0) > 0 || (v.layer || 0) !== (owner.layer || 0)) continue;
       if (v.id !== G.myId && !v.isBot) continue;   // victim-authoritative
       const dx = v.x - owner.x, dy = v.y - owner.y;
@@ -3009,7 +3028,7 @@ function drawGhouls(ctx) {
 // Needle Deathray — fixed forward beam from any ship currently firing.
 function drawDeathrays(ctx) {
   const t = Date.now() / 40;
-  for (const owner of Object.values(G.players)) {
+  for (const owner of framePlayers()) {
     if ((owner.deathray || 0) <= 0) continue;
     const ax = Math.cos(owner.angle), ay = Math.sin(owner.angle);
     const len = deathrayBlockDist(owner);          // clip to the first wall/obstacle
@@ -3033,7 +3052,7 @@ function drawDeathrays(ctx) {
 // Dragger Drain — energy tether from drainer to each tethered victim.
 function drawDrainBeams(ctx) {
   const t = Date.now() / 100;
-  for (const v of Object.values(G.players)) {
+  for (const v of framePlayers()) {
     if ((v.drain || 0) <= 0 || !v.drainedBy) continue;
     const owner = G.players[v.drainedBy];
     if (!owner) continue;
@@ -3079,7 +3098,7 @@ function drawDrainAim(ctx) {
   ctx.setLineDash([]);
   // Highlight the ship the drain would latch onto.
   let bestId = null, bestAlong = Infinity;
-  for (const p of Object.values(G.players)) {
+  for (const p of framePlayers()) {
     if (p.id === G.myId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (me.layer || 0)) continue;
     const dx = p.x - me.x, dy = p.y - me.y;
     const along = dx * ax + dy * ay;
@@ -3153,7 +3172,7 @@ function updateHud() {
   }
 
   // Position
-  const players = Object.values(G.players).filter(p=>!p.finished);
+  const players = framePlayers().filter(p=>!p.finished);
   players.sort((a,b)=>(b.lap-a.lap)||(b.lapProgress-a.lapProgress));
   const pos = players.findIndex(p=>p.id===G.myId)+1;
   const suffixes=['st','nd','rd'];
@@ -3268,7 +3287,7 @@ function updateLeaderboard(me) {
   if (!board) return;
   const cpTotal = (G.track && Array.isArray(G.track.checkpoints)) ? G.track.checkpoints.length : 0;
   const laps = G.totalLaps || 3;
-  const order = Object.values(G.players).slice().sort((a, b) => {
+  const order = framePlayers().slice().sort((a, b) => {
     if (a.finished && b.finished) return (a.finishTime || 0) - (b.finishTime || 0);
     if (a.finished) return -1;
     if (b.finished) return 1;
