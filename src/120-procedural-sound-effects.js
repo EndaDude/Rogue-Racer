@@ -453,7 +453,8 @@ function useItem() {
   playItemUse(item);
   const effect = { type:'item_used', id:G.myId, item };
   if (item === 'boost') { me.boosting = (me.upgrades || []).includes('overdrive') ? 4.5 : 3; }
-  else if (item === 'shield') { me.shielded = true; }
+  else if (item === 'shield') { me.shieldTime = CAR_TUNING.shieldDuration; me.shielded = true; }
+  else if (item === 'autopilot') { me.autopilot = CAR_TUNING.autopilotDuration; }
   else if (item === 'ghost') { me.ghostMode = 4; }
   else if (item === 'repair') {
     me.health = Math.min(me.maxHealth || CAR_TUNING.baseHealth, (me.health || 0) + 35);
@@ -767,8 +768,8 @@ function handleItemEffect(data) {
     const me = G.players[G.myId];
     if (me) {
       const typeCfg = getCarTypeCfg(me.carType);
-      if (me.shielded) { me.shielded=false; }
-      else applyDamage(me, CAR_TUNING.missileDamage / Math.max(0.5, typeCfg.weaponResist || 1), 'missile');
+      // Shield absorbs the hit for its whole duration — applyDamage no-ops while shielded.
+      applyDamage(me, CAR_TUNING.missileDamage / Math.max(0.5, typeCfg.weaponResist || 1), 'missile');
     }
   } else if (data.item==='oil') {
     // handled via oil_placed
@@ -994,6 +995,19 @@ function applyCarSpecials(me, dt, io) {
   me.speed = Math.hypot(me.vx, me.vy);
 }
 
+// Linked checkpoints: gates sharing a non-zero `link` id are the alternative gates
+// on a split (one per fork). They are authored consecutively, so a "group" is the
+// maximal run of consecutive gates that share the current gate's link. Crossing ANY
+// gate in the group clears the whole group. Unlinked gates (link 0/undefined) are
+// groups of one, preserving the classic must-pass-in-sequence behaviour.
+function checkpointGroupEnd(cps, start) {
+  const link = cps[start] && cps[start].link;
+  if (!link) return start + 1;
+  let end = start + 1;
+  while (end < cps.length && cps[end] && cps[end].link === link) end++;
+  return end;
+}
+
 function updateMyPlayer(dt) {
   const me = G.players[G.myId];
   if (!me || me.finished) return;
@@ -1030,9 +1044,13 @@ function updateMyPlayer(dt) {
       const cps = G.track.checkpoints;
       let placed = false;
       if (cps && cps.length && (me.nextCheckpoint || 0) > 0) {
-        // Send the player back to the last checkpoint they cleared, facing
-        // forward, on that checkpoint's layer.
-        const cp = cps[(me.nextCheckpoint - 1) % cps.length];
+        // Send the player back to the last checkpoint they actually cleared (the
+        // specific fork gate on a split, not just its group), facing forward, on
+        // that checkpoint's layer.
+        const cpIdx = (me.lastCpCrossed != null && cps[me.lastCpCrossed])
+          ? me.lastCpCrossed
+          : ((me.nextCheckpoint - 1) % cps.length);
+        const cp = cps[cpIdx];
         if (cp) {
           me.x = cp.x; me.y = cp.y;
           me.angle = Math.atan2(cp.ty || 0, cp.tx || 1);
@@ -1112,16 +1130,39 @@ function updateMyPlayer(dt) {
   let steerInput = (kbHeld('steerRight') ? 1 : 0) - (kbHeld('steerLeft') ? 1 : 0);
   // Analog controller steering overrides the digital keys when it pushes harder.
   if (G.pad && G.pad.connected && Math.abs(G.pad.steer) > Math.abs(steerInput)) steerInput = G.pad.steer;
-  const throttleHeld = kbHeld('throttle') ? 1 : 0;
+  const throttleHeld0 = kbHeld('throttle') ? 1 : 0;
   const brakeHeld = kbHeld('brake') ? 1 : 0;
   // Pressure-sensitive throttle/brake amount: controller triggers scale the force
   // 0..1; keyboard is full power. Trigger value overrides keys when engaged.
+  let throttleHeld = throttleHeld0;
   let throttleAmount = throttleHeld ? 1 : 0;
   if (G.pad && G.pad.connected && (G.pad.throttle || 0) > 0) throttleAmount = G.pad.throttle;
   let brakeAmount = brakeHeld ? 1 : 0;
   if (G.pad && G.pad.connected && (G.pad.brake || 0) > 0) brakeAmount = G.pad.brake;
   let shiftHeld = kbHeld('velocityLock');
   let isDrifting = kbHeld('drift');
+  // Autopilot: while active the car drives itself along the track toward a look-ahead
+  // point, overriding steering and throttle (you can still be hit — it just steers).
+  // It eases off on tight corners so it holds the line instead of flying off.
+  if ((me.autopilot || 0) > 0) {
+    me.autopilot = Math.max(0, me.autopilot - dt);
+    const apSp = G.track && G.track.spline;
+    if (apSp && apSp.length > 2) {
+      const apN = apSp.length;
+      const apI0 = pointOnTrack(me.x, me.y, apSp).idx % apN;
+      const apLook = Math.max(4, Math.round(apN * 0.03));
+      const apTgt = apSp[(apI0 + apLook) % apN];
+      const apDesired = Math.atan2(apTgt.y - me.y, apTgt.x - me.x);
+      const apErr = angleDiff(me.angle, apDesired);
+      steerInput = Math.max(-1, Math.min(1, apErr * 2.4));
+      const apCurv = Math.abs(angleDiff(_botTangentAt(apSp, apI0), _botTangentAt(apSp, apI0 + apLook)));
+      throttleAmount = apCurv > 0.5 ? 0.55 : 1;
+      throttleHeld = 1;
+      brakeAmount = 0;
+      shiftHeld = false;
+      isDrifting = false;
+    }
+  }
   // Baller Ball: a hit disables control — inputs go dead but momentum carries you.
   let noControlActive = false;
   if ((me.noControl || 0) > 0) {
@@ -1337,6 +1378,7 @@ function updateMyPlayer(dt) {
 
   let nx = me.x + me.vx * dt;
   let ny = me.y + me.vy * dt;
+  const _gateFromX = me.x, _gateFromY = me.y; // frame-start position for gate crossing
 
   // ── Layer fall physics ─────────────────────────────────────────────────────
   // Unsupported layers fall with acceleration-like behavior.
@@ -1372,6 +1414,7 @@ function updateMyPlayer(dt) {
     while (me.layerFallProgress >= 1) {
       me.layer--;
       me.layerFallProgress -= 1;
+      if (me.layer <= 0) { me.layer = 0; me.layerFallProgress = 0; me.layerFallSpeed = 0; me.airTime = 0; break; }
     }
   }
 
@@ -1512,8 +1555,16 @@ function updateMyPlayer(dt) {
         const toward = signed >= 0 ? -1 : 1;
         me.vx += nxv * toward * force * dt;
         me.vy += nyv * toward * force * dt;
+      } else if ((me.layer || 0) > 0) {
+        // Elevated deck with no wall on this side: there's nothing holding the car on.
+        // It slides off the edge (NO push-back toward centre) and the layer-fall physics
+        // above drops it a deck at a time. Only a gentle slide-scrub so momentum carries
+        // it clear of the deck footprint instead of being nudged back onto the deck.
+        const slide = Math.max(0.9, 1 - 0.2 * dt);
+        me.vx *= slide;
+        me.vy *= slide;
       } else {
-        // Default track edge (no painted wall): grind/push back toward centre.
+        // Default track edge on the ground (no painted wall): grind/push back toward centre.
         const force = 120;
         const toward = signed >= 0 ? -1 : 1;
         me.vx += nxv * toward * force * dt;
@@ -1526,7 +1577,10 @@ function updateMyPlayer(dt) {
       me._wallContact = false;
     }
 
-    if ((mode === 'default' || mode === 'bouncy') && !((me.inflate || 0) > 0)) {
+    // On an elevated deck an unwalled edge is an open drop — keep the car's momentum so
+    // it slides clear of the deck and falls, instead of scrubbing it to a halt on the lip.
+    const elevatedOpenEdge = (me.layer || 0) > 0 && mode === 'default';
+    if ((mode === 'default' || mode === 'bouncy') && !elevatedOpenEdge && !((me.inflate || 0) > 0)) {
       // Drifters keep more speed on dirt/off-track than other ships.
       const drifterDirt = me.carType === 'drifter';
       const heavySlow = drifterDirt ? CAR_TUNING.offTrackHeavySlowDrifter : CAR_TUNING.offTrackHeavySlow;
@@ -1582,13 +1636,13 @@ function updateMyPlayer(dt) {
         continue;
       }
       if (obs.type === 'boost_pad' && d < hitR) {
-        // Launch strip: hard shove along the pad's arrow plus a short nitro
-        // window so the flame/vignette kick in.
+        // Booster strip: no solid collision — you drive straight through it. It shoves
+        // you along the pad's arrow, and instead of a nitro flame it fattens your
+        // trail for a second.
         const dir = ((obs.rot || 0) * Math.PI) / 180;
         me.vx += Math.cos(dir) * 620 * speedScale * dt;
         me.vy += Math.sin(dir) * 620 * speedScale * dt;
-        me.boosting = Math.max(me.boosting || 0, 0.55);
-        if (Math.random() < 0.4) spawnFxBurst(me.x, me.y, me.layer || 0, 'sparks', Math.cos(dir), Math.sin(dir));
+        me.trailBoost = Math.max(me.trailBoost || 0, 1);
         continue;
       }
       if (obs.type === 'repair_pad' && d < hitR) {
@@ -1600,7 +1654,8 @@ function updateMyPlayer(dt) {
       }
       if (d < hitR) {
         if (me.shielded) {
-          me.shielded = false;
+          // Shield is active: smash the obstacle aside and take no damage. It is NOT
+          // consumed here — it blocks every hit for the whole shield duration.
           disableObstacle(oi, 10, true);
         } else {
           if (obs.type === 'snow_pile') {
@@ -1828,6 +1883,9 @@ function updateMyPlayer(dt) {
     });
   }
   if (me.ghostMode > 0) me.ghostMode -= dt;
+  if (me.trailBoost > 0) { me.trailBoost -= dt; if (me.trailBoost < 0) me.trailBoost = 0; }
+  if (me.shieldTime > 0) { me.shieldTime -= dt; if (me.shieldTime <= 0) { me.shieldTime = 0; me.shielded = false; } }
+  else me.shielded = false;
 
   const fwdNowX = Math.cos(me.angle), fwdNowY = Math.sin(me.angle);
   const rightNowX = -fwdNowY, rightNowY = fwdNowX;
@@ -1880,6 +1938,8 @@ function updateMyPlayer(dt) {
   }
 
   me.x = nx; me.y = ny;
+  // Portal gates: if we just drove across one, teleport to its linked partner.
+  if (G.track && G.track.gates && G.track.gates.length) tryGateTeleport(me, _gateFromX, _gateFromY, dt);
 
   // Lap clock (only ticks while the race is live, so it's pause-immune),
   // top-speed stat and best-lap ghost recording.
@@ -1888,26 +1948,32 @@ function updateMyPlayer(dt) {
   if (!me.finished) ghostRecordSample(me);
 
   // Ordered checkpoint gates (custom maps): must pass in sequence to validate lap.
+  // Gates sharing a non-zero `link` id form an "any-of" group (the alternative gates
+  // on a split) — crossing EITHER one clears the whole group (see checkpointGroupEnd).
   if (G.track && G.track.checkpoints && G.track.checkpoints.length) {
+    const cps = G.track.checkpoints;
     if (me.nextCheckpoint == null) me.nextCheckpoint = 0;
-    if (me.checkpointsDoneThisLap == null) me.checkpointsDoneThisLap = (me.nextCheckpoint >= G.track.checkpoints.length);
-    if (me.nextCheckpoint < G.track.checkpoints.length) {
-      const cp = G.track.checkpoints[me.nextCheckpoint];
-      if (cp && (me.layer || 0) === (cp.layer || 0)) {
+    if (me.checkpointsDoneThisLap == null) me.checkpointsDoneThisLap = (me.nextCheckpoint >= cps.length);
+    if (me.nextCheckpoint < cps.length) {
+      const groupEnd = checkpointGroupEnd(cps, me.nextCheckpoint);
+      let crossedIdx = -1;
+      for (let ci = me.nextCheckpoint; ci < groupEnd; ci++) {
+        const cp = cps[ci];
+        if (!cp || (me.layer || 0) !== (cp.layer || 0)) continue;
         const sidePrev = (ox - cp.x) * cp.tx + (oy - cp.y) * cp.ty;
         const sideNow  = (me.x - cp.x) * cp.tx + (me.y - cp.y) * cp.ty;
         const lateral  = Math.abs((me.x - cp.x) * cp.nx + (me.y - cp.y) * cp.ny);
+        // Gates validate from either direction — crossing the gate plane within its
+        // width counts regardless of travel direction.
         const crossed = (sidePrev === 0 || sideNow === 0 || sidePrev * sideNow < 0);
-        // Checkpoints validate from either direction — crossing the gate plane
-        // within its width counts regardless of which way you're travelling.
-        if (crossed && lateral <= cp.halfW * 1.3) {
-          me.nextCheckpoint++;
-          me.lastCheckpointTime = G.raceStartTime ? (Date.now() - G.raceStartTime) : 0;
-          spawnCheckpointConfetti(me.nextCheckpoint - 1, G.track.checkpoints.length);
-          if (me.nextCheckpoint >= G.track.checkpoints.length) {
-            me.checkpointsDoneThisLap = true;
-          }
-        }
+        if (crossed && lateral <= cp.halfW * 1.3) { crossedIdx = ci; break; }
+      }
+      if (crossedIdx >= 0) {
+        me.lastCpCrossed = crossedIdx;
+        me.nextCheckpoint = groupEnd;
+        me.lastCheckpointTime = G.raceStartTime ? (Date.now() - G.raceStartTime) : 0;
+        spawnCheckpointConfetti(crossedIdx, cps.length);
+        if (me.nextCheckpoint >= cps.length) me.checkpointsDoneThisLap = true;
       }
     }
   }
@@ -2002,6 +2068,7 @@ function updateMyPlayer(dt) {
 
     me.lap++;
     me.nextCheckpoint = 0;
+    me.lastCpCrossed = null;
     me.checkpointsDoneThisLap = false;
     me._lapArmed = false; // must go around the track again before the line counts
     me.lapProgress = prog;
@@ -2260,6 +2327,10 @@ function applyContinuousDamage(player, hp, cause) {
 
 function applyDamage(player, rawDamage, cause) {
   if (!player || player.finished || player.deathRespawn > 0 || player.invuln > 0) return false;
+  // Active shield blocks ALL incoming hits for its full duration (never consumed by a
+  // single hit, so it can no longer be an insta-kill trap). Self-inflicted costs (e.g.
+  // the Needle deathray) subtract health directly and never route through here.
+  if (player.shielded) return false;
   const dmg = Math.max(1, rawDamage || 0);
   // Rotor: physical hits chip the front propeller; enough damage breaks it.
   if (player.carType === 'rotor' && !player.propBroken && cause !== 'overcharge' && cause !== 'arc' && cause !== 'drain' && cause !== 'deathray') {

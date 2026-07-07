@@ -79,7 +79,7 @@ function makePlayer(id, name, color, x, y, angle, carType) {
     checkpointsDoneThisLap:false,
     lastCheckpointTime:0, lastLapTime:0,
     finished:false, finishTime:0,
-    stun:0, ghostMode:0, shielded:false, boosting:0, oilSlick:0,
+    stun:0, ghostMode:0, shielded:false, shieldTime:0, autopilot:0, boosting:0, oilSlick:0, trailBoost:0,
     heldItem:null,
     upgrades:[],
     drifting:false,

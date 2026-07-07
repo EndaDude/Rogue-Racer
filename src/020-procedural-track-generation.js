@@ -12,6 +12,53 @@ function segIntersects(ax,ay,bx,by,cx,cy,dx,dy) {
   return t>0 && t<1 && u>0 && u<1;
 }
 
+// ---- Portal gates ----------------------------------------------------------
+// Find the linked partner of a gate (another gate sharing the same non-zero link).
+function gatePartner(gate) {
+  const gs = G.track && G.track.gates;
+  if (!gs || !gate || !gate.link) return null;
+  for (const g of gs) if (g !== gate && g.link === gate.link) return g;
+  return null;
+}
+// If `ent` moved from (prevX,prevY) to (ent.x,ent.y) across a linked gate's doorway,
+// teleport it to the partner gate and rotate its velocity/heading by the angle between
+// the two gates ("2 different angles switch direction accordingly"). Works for players
+// and projectiles alike (anything with x/y and optionally vx/vy/angle/layer).
+function tryGateTeleport(ent, prevX, prevY, dt) {
+  const gs = G.track && G.track.gates;
+  if (!gs || !gs.length || !ent) return false;
+  if ((ent._gateCd || 0) > 0) { ent._gateCd = Math.max(0, ent._gateCd - (dt || 0)); return false; }
+  for (const g of gs) {
+    const partner = gatePartner(g);
+    if (!partner) continue;
+    const hw = (g.w || TRACK_W) * 0.5;
+    // Doorway segment is perpendicular to the gate's through-direction (g.angle).
+    const px = Math.cos(g.angle + Math.PI / 2), py = Math.sin(g.angle + Math.PI / 2);
+    const ax = g.x + px * hw, ay = g.y + py * hw;
+    const bx = g.x - px * hw, by = g.y - py * hw;
+    if (!segIntersects(prevX, prevY, ent.x, ent.y, ax, ay, bx, by)) continue;
+    const delta = partner.angle - g.angle;
+    const cs = Math.cos(delta), sn = Math.sin(delta);
+    if (typeof ent.vx === 'number' && typeof ent.vy === 'number') {
+      const vx = ent.vx * cs - ent.vy * sn;
+      const vy = ent.vx * sn + ent.vy * cs;
+      ent.vx = vx; ent.vy = vy;
+    }
+    if (typeof ent.angle === 'number') ent.angle = ent.angle + delta;
+    // Exit on the side of the partner matching the direction of travel through gate A.
+    const mvx = ent.x - prevX, mvy = ent.y - prevY;
+    const dir = (mvx * Math.cos(g.angle) + mvy * Math.sin(g.angle)) >= 0 ? 1 : -1;
+    const fx = Math.cos(partner.angle) * dir, fy = Math.sin(partner.angle) * dir;
+    ent.x = partner.x + fx * 18;
+    ent.y = partner.y + fy * 18;
+    if (typeof ent.layer === 'number' && Number.isFinite(partner.layer)) ent.layer = partner.layer;
+    ent._gateCd = 0.5;
+    if (typeof spawnFxBurst === 'function') spawnFxBurst(ent.x, ent.y, ent.layer || 0, 'sparks');
+    return true;
+  }
+  return false;
+}
+
 // Returns true if idx falls inside the bridge range (handles wrap-around)
 function idxInBridge(idx, b, n) {
   if (b.startIdx <= b.endIdx) return idx >= b.startIdx && idx <= b.endIdx;

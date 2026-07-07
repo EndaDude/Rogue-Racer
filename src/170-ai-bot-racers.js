@@ -45,6 +45,8 @@ function setBotDifficulty(v) {
 function botRollItem(b) {
   const chosen = POWERUPS_LIST[Math.floor(Math.random() * POWERUPS_LIST.length)];
   let id = chosen.id;
+  // Autopilot is a no-op for bots (they already drive the line) — swap it for boost.
+  if (id === 'autopilot') id = 'boost';
   const uniq = CAR_UNIQUE_POWERUPS[b.carType];
   if (uniq && Math.random() < 0.25) id = uniq.id;
   return id;
@@ -132,7 +134,7 @@ function botUseItem(b) {
   if (!item) return;
   playItemUse(item);
   if (item === 'boost') { b.boosting = 2.6; return; }
-  if (item === 'shield') { b.shielded = true; return; }
+  if (item === 'shield') { b.shieldTime = CAR_TUNING.shieldDuration; b.shielded = true; return; }
   if (item === 'ghost') { b.ghostMode = 4; return; }
   if (item === 'repair') {
     b.health = Math.min(b.maxHealth || CAR_TUNING.baseHealth, (b.health || 0) + 35);
@@ -283,7 +285,7 @@ function botCollideObstacles(b) {
     if (obs.type === 'ice_track' || obs.type === 'flowing_water') continue; // surfaces, not walls
     const hitR = (obs.r || 12) * (obs.scale || 1) + CAR_TUNING.botObstaclePad;
     if (dist(b.x, b.y, obs.x, obs.y) >= hitR) continue;
-    if (b.shielded) { b.shielded = false; disableObstacle(oi, 10, true); continue; }
+    if (b.shielded) { disableObstacle(oi, 10, true); continue; }
     if (obs.type === 'cone') {
       obs.vx = (obs.vx || 0) + (obs.x - b.x) * 3 + (b.vx || 0) * 0.3;
       obs.vy = (obs.vy || 0) + (obs.y - b.y) * 3 + (b.vy || 0) * 0.3;
@@ -371,6 +373,8 @@ function updateBots(dt) {
     if ((b.arcBurst || 0) > 0) b.arcBurst = Math.max(0, b.arcBurst - dt);
     if ((b.ghoulSlow || 0) > 0) b.ghoulSlow = Math.max(0, b.ghoulSlow - dt);
     if ((b.noControl || 0) > 0) b.noControl = Math.max(0, b.noControl - dt);
+    if ((b.shieldTime || 0) > 0) { b.shieldTime = Math.max(0, b.shieldTime - dt); b.shielded = b.shieldTime > 0; }
+    else if (b.shielded) b.shielded = false;
     if (b.carType === 'coil') {
       // Bots can't hug walls to charge, so they trickle a battery to power the arc storm.
       b.battery = Math.min(CAR_TUNING.coilBatteryMax, (b.battery || 0) + 14 * dt);
@@ -489,11 +493,18 @@ function updateBots(dt) {
     }
 
     // Checkpoints (display only — bots follow the track, so proximity suffices).
+    // Honour linked gates: passing near ANY gate in the current link group clears it.
     if (G.track.checkpoints && G.track.checkpoints.length && (b.nextCheckpoint || 0) < G.track.checkpoints.length) {
-      const cp = G.track.checkpoints[b.nextCheckpoint || 0];
-      if (cp && dist(b.x, b.y, cp.x, cp.y) < (cp.halfW || TRACK_W) * 1.5) {
-        b.nextCheckpoint = (b.nextCheckpoint || 0) + 1;
-        b.lastCheckpointTime = G.raceStartTime ? (Date.now() - G.raceStartTime) : 0;
+      const cps = G.track.checkpoints;
+      const start = b.nextCheckpoint || 0;
+      const groupEnd = checkpointGroupEnd(cps, start);
+      for (let ci = start; ci < groupEnd; ci++) {
+        const cp = cps[ci];
+        if (cp && dist(b.x, b.y, cp.x, cp.y) < (cp.halfW || TRACK_W) * 1.5) {
+          b.nextCheckpoint = groupEnd;
+          b.lastCheckpointTime = G.raceStartTime ? (Date.now() - G.raceStartTime) : 0;
+          break;
+        }
       }
     }
     // Power-ups: bots physically grab item boxes they pass, hold them briefly, then use

@@ -399,6 +399,42 @@
     text-align: center;
   }
   .powerup-badge.active { border-color: var(--gold); color: var(--gold); }
+  #effect-timers {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none;
+    z-index: 6;
+  }
+  #effect-timers .fx-timer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(9, 12, 20, 0.72);
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: var(--radius);
+    padding: 3px 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #e5e7eb;
+    min-width: 78px;
+  }
+  #effect-timers .fx-timer .fx-bar {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.14);
+    overflow: hidden;
+  }
+  #effect-timers .fx-timer .fx-bar > i {
+    display: block;
+    height: 100%;
+    border-radius: 2px;
+  }
   #canvas-wrap { flex: 1; position: relative; overflow: hidden; }
   #gameCanvas { display: block; width: 100%; height: 100%; transform: translateZ(0); will-change: transform; backface-visibility: hidden; }
   #checkpoint-strip {
@@ -1592,6 +1628,7 @@
             <button class="me-type-btn" id="me-mode-wall" title="Paint wall behavior on track edges">Walls</button>
             <button class="me-type-btn" id="me-mode-obstacle" title="Place obstacles">Obstacles</button>
             <button class="me-type-btn" id="me-mode-powerup" title="Place item boxes">Items</button>
+            <button class="me-type-btn" id="me-mode-gate" title="Place linked portal gates">Gates</button>
             <button class="me-type-btn" id="me-mode-erase" title="Remove placed objects">Erase</button>
           </div>
           <div class="me-grp" id="me-grp-node">
@@ -1601,6 +1638,7 @@
             <button class="me-type-btn" data-type="river" title="River track">River</button>
             <button class="me-type-btn" data-type="void" title="Void (fall gap)">Void</button>
             <button class="me-check-btn" id="me-node-checkpoint" title="Checkpoint gate on this node">Checkpoint</button>
+            <button class="me-check-btn" id="me-node-cp-link" title="Cycle this checkpoint's link group — two gates on opposite forks of a split that share a link only need ONE crossed to keep going" disabled>Link: –</button>
             <button class="me-check-btn" id="me-node-slope" title="Layer slope threshold on this node">Slope</button>
             <button class="me-type-btn" id="me-node-slope-rot-left" title="Rotate slope up-direction left">↺</button>
             <span id="me-node-slope-angle" style="font-size:.7rem;color:var(--muted);min-width:34px;text-align:center">0°</span>
@@ -1640,6 +1678,23 @@
             <span class="me-field">
               <label for="me-wall-bounce">Bounce</label>
               <input id="me-wall-bounce" type="number" min="0.2" max="2.0" step="0.05" value="1.0">
+            </span>
+          </div>
+          <div class="me-grp" id="me-grp-gate" hidden>
+            <span class="me-grp-title">Gate</span>
+            <span class="me-field" title="Gates sharing a link teleport to each other">
+              <label for="me-gate-link">Link</label>
+              <input id="me-gate-link" type="number" min="1" max="6" step="1" value="1">
+            </span>
+            <span class="me-field" title="Through-direction of the gate">
+              <label for="me-gate-angle-range">Angle</label>
+              <input id="me-gate-angle-range" type="range" min="-180" max="180" step="1" value="0">
+              <input id="me-gate-angle" type="number" min="-180" max="180" step="1" value="0">
+            </span>
+            <span class="me-field" title="Doorway width / length of the gate">
+              <label for="me-gate-width-range">Length</label>
+              <input id="me-gate-width-range" type="range" min="40" max="220" step="2" value="80">
+              <input id="me-gate-width" type="number" min="40" max="220" step="2" value="80">
             </span>
           </div>
           <div class="me-grp" id="me-grp-obstacle" hidden>
@@ -1741,6 +1796,7 @@
     </div>
     <div id="event-feed" aria-hidden="true"></div>
     <div id="checkpoint-strip" aria-hidden="true"></div>
+    <div id="effect-timers" aria-hidden="true"></div>
     <div id="controls-hint">
       W/↑ Accelerate &nbsp; S/↓ Brake<br>
       A/← Turn left &nbsp; D/→ Turn right<br>

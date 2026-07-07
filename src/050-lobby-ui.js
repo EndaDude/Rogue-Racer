@@ -303,7 +303,7 @@ let _libDragTrack = null;
 function _cleanMapForQueue(map) {
   return {
     name: map.name, waypoints: map.waypoints, obstacles: map.obstacles || [],
-    powerups: map.powerups || [], wallRegions: map.wallRegions || [],
+    powerups: map.powerups || [], wallRegions: map.wallRegions || [], gates: map.gates || [],
     trackModel: map.trackModel === 'v2' ? 'v2' : 'v1', branches: Array.isArray(map.branches) ? map.branches : [],
     laps: map.laps, version: map.version || 3, created: map.created,
   };
@@ -759,7 +759,7 @@ function resetPlayersForRace() {
     p.nextCheckpoint=0;
     p.checkpointsDoneThisLap=false;
     p.lastCheckpointTime=0; p.lastLapTime=0;
-    p.finished=false; p.finishTime=0; p.finishElapsedMs=0; p.stun=0; p.boosting=0; p.ghostMode=0; p.shielded=false; p.oilSlick=0;
+    p.finished=false; p.finishTime=0; p.finishElapsedMs=0; p.stun=0; p.boosting=0; p.ghostMode=0; p.shielded=false; p.shieldTime=0; p.autopilot=0; p.trailBoost=0; p.oilSlick=0;
     p.heldItem=null; p.upgrades=[];
     p.rampIgnore={};
     p.driftSteerSign=0; p.driftFlipTimer=0; p.driftFlipCount=0;
@@ -800,7 +800,7 @@ function hostLaunchRace(selectedMap) {
   clearPostRaceTimer();
   const seed = Date.now() % 100000;
   G.track = selectedMap
-    ? generateTrackFromWaypoints(selectedMap.waypoints, seed, selectedMap.obstacles || [], selectedMap.powerups || [], selectedMap.wallRegions || [])
+    ? generateTrackFromWaypoints(selectedMap.waypoints, seed, selectedMap.obstacles || [], selectedMap.powerups || [], selectedMap.wallRegions || [], selectedMap.gates || [])
     : generateTrack(seed);
   if (selectedMap) recordTrackHistory(selectedMap);
   G.totalLaps = resolveRaceLaps(selectedMap);

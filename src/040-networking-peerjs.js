@@ -187,9 +187,9 @@ function onData(data, fromId) {
     G.players = data.players;
     Object.values(G.players).forEach(normalizePlayerState);
     G.track = data.selectedMap
-      ? generateTrackFromWaypoints(data.selectedMap.waypoints, data.seed, data.selectedMap.obstacles || [], data.selectedMap.powerups || [], data.selectedMap.wallRegions || [])
+      ? generateTrackFromWaypoints(data.selectedMap.waypoints, data.seed, data.selectedMap.obstacles || [], data.selectedMap.powerups || [], data.selectedMap.wallRegions || [], data.selectedMap.gates || [])
       : data.customMap
-      ? generateTrackFromWaypoints(data.customMap.waypoints, data.seed, data.customMap.obstacles || [], data.customMap.powerups || [], data.customMap.wallRegions || [])
+      ? generateTrackFromWaypoints(data.customMap.waypoints, data.seed, data.customMap.obstacles || [], data.customMap.powerups || [], data.customMap.wallRegions || [], data.customMap.gates || [])
       : generateTrack(data.seed);
     const _histMap = data.selectedMap || data.customMap;
     if (_histMap) recordTrackHistory(_histMap);

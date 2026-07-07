@@ -94,6 +94,20 @@ function updateFxEmitters(dt) {
         p._trailDecay -= 0.018;
         if (p._trail.length > 0 && (spd <= 12 || p._trail.length > 14)) p._trail.shift();
       }
+    } else if ((p.trailBoost || 0) > 0) {
+      // Booster: even racers without a custom trail get a brief ribbon while boosted.
+      p._trail = p._trail || [];
+      if (spd > 12) {
+        const last = p._trail[p._trail.length - 1];
+        if (!last || Math.hypot(rearX - last.x, rearY - last.y) > 6) {
+          p._trail.push({ x: rearX, y: rearY, l: p.layer || 0 });
+        }
+      }
+      p._trailDecay = (p._trailDecay || 0) + dt;
+      while (p._trailDecay >= 0.018) {
+        p._trailDecay -= 0.018;
+        if (p._trail.length > 0 && (spd <= 12 || p._trail.length > 14)) p._trail.shift();
+      }
     } else if (p._trail && p._trail.length) {
       p._trail.length = 0;
     }

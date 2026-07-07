@@ -6,6 +6,10 @@ const ME = {
   obstacles: [],
   powerups: [],
   wallRegions: [],
+  gates: [],          // portal gates: [{x,y,angle,link,w,layer}]
+  gateAngle: 0,       // through-direction (radians) for next placed gate
+  gateLink: 1,        // link id for next placed gate (pairs share a link)
+  gateW: TRACK_W,     // doorway width/length for next placed gate
   trackModel: 'v1',   // 'v1' = classic single loop, 'v2' = branching splits
   branches: [],       // V2 only: [{ id, fromIdx, toIdx, nodes:[...], parent }]
   selectedBranch: null,   // V2: owner main-node index whose fork node is selected (null = main loop)
@@ -48,7 +52,7 @@ function meRebuildSpline() {
   }
 }
 
-function meDefaultNode(x,y){ return {x,y,type:'road',width:TRACK_W,checkpoint:false,slope:false,slopeDir:0,supportLayer:0}; }
+function meDefaultNode(x,y){ return {x,y,type:'road',width:TRACK_W,checkpoint:false,slope:false,slopeDir:0,supportLayer:0,link:0}; }
 
 // ---- V2 branching helpers ----
 let _meBranchSeq = 1;
@@ -89,6 +93,7 @@ function meNormalizeEditorNode(p){
     x:+p.x, y:+p.y,
     type:['road','bridge','bridge3','void','ice','river'].includes(p.type)?p.type:'road',
     checkpoint:!!p.checkpoint,
+    link: Number.isFinite(+p.link) ? Math.max(0, Math.round(+p.link)) : 0,
     slope:!!p.slope,
     slopeDir:Number.isFinite(+p.slopeDir) ? +p.slopeDir : 0,
     supportLayer: Number.isFinite(+p.supportLayer) ? Math.round(+p.supportLayer) : 0,
@@ -317,6 +322,16 @@ function meHitTestPowerup(cx, cy) {
   return -1;
 }
 
+function meHitTestGate(cx, cy) {
+  for (let i = ME.gates.length - 1; i >= 0; i--) {
+    const g = ME.gates[i];
+    const sx = meWtoX(g.x), sy = meWtoY(g.y);
+    const rr = Math.max(8, 14 * ME.zoom);
+    if ((cx - sx) ** 2 + (cy - sy) ** 2 <= rr * rr) return i;
+  }
+  return -1;
+}
+
 function meUpsertWallRegion(seg, mode, side, force, bounce, branch) {
   if (seg == null || seg < 0) return;
   const sameBranch = (w) => branch
@@ -363,9 +378,18 @@ function meRefreshNodeSettings() {
   lbl.textContent = branchSel ? `Fork node · on node ${ME.selectedBranch} (${ME.selectedBranchPath === 0 ? 'left' : 'right'})` : `Node: ${ME.selectedIdx}`;
   wr.disabled=false; wn.disabled=false;
   wr.value=String(w); wn.value=String(w);
-  // Checkpoints are lap gates — main loop only (a fork you didn't take would block the
-  // lap). Slope + support-layer apply to fork nodes too, so forks get real elevation.
-  if (cpBtn) { cpBtn.classList.toggle('active', !branchSel && !!n.checkpoint); cpBtn.disabled = branchSel; }
+  // Checkpoints work on main-loop AND fork nodes: put a gate on each fork of a split
+  // and give both the same Link group so crossing EITHER one validates the lap. Slope +
+  // support-layer apply to fork nodes too, so forks get real elevation.
+  if (cpBtn) { cpBtn.classList.toggle('active', !!n.checkpoint); cpBtn.disabled = false; }
+  {
+    const cpLinkBtn = document.getElementById('me-node-cp-link');
+    if (cpLinkBtn) {
+      cpLinkBtn.disabled = !n.checkpoint;
+      cpLinkBtn.classList.toggle('active', !!n.checkpoint && !!n.link);
+      cpLinkBtn.textContent = 'Link: ' + (n.checkpoint && n.link ? n.link : '\u2013');
+    }
+  }
   if (slopeBtn) { slopeBtn.classList.toggle('active', !!n.slope); slopeBtn.disabled = false; }
   if (slopeAng) {
     const deg = Math.round((((n.slopeDir || 0) * 180 / Math.PI) % 360 + 360) % 360);
@@ -402,8 +426,17 @@ function meSetSelectedWidth(width){
 }
 
 function meToggleSelectedCheckpoint(){
-  if(ME.selectedIdx<0||ME.selectedIdx>=ME.wpts.length) return;
-  ME.wpts[ME.selectedIdx].checkpoint = !ME.wpts[ME.selectedIdx].checkpoint;
+  const n = meActiveNode(); if(!n) return;
+  n.checkpoint = !n.checkpoint;
+  if (!n.checkpoint) n.link = 0;
+  meRefreshNodeSettings();
+  meDraw();
+}
+// Cycle the selected checkpoint's link group (0 = unlinked, 1..4 = a split's shared
+// group). Two gates on opposite forks with the same link only need ONE crossed.
+function meCycleSelectedCpLink(){
+  const n = meActiveNode(); if(!n || !n.checkpoint) return;
+  n.link = ((Math.max(0, Math.round(+n.link || 0))) + 1) % 5;
   meRefreshNodeSettings();
   meDraw();
 }
@@ -613,7 +646,7 @@ function meDraw() {
       ctx.beginPath();ctx.arc(sx,sy,r+9,0,Math.PI*2);
       ctx.strokeStyle='rgba(251,191,36,0.95)';ctx.lineWidth=2;ctx.stroke();
       ctx.fillStyle='#fbbf24';ctx.font='bold 8px system-ui';
-      ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText('CP',sx,sy+r+3);
+      ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(pt.link?`CP\u00b7L${pt.link}`:'CP',sx,sy+r+3);
     }
     if(pt.slope){
       const ang = Number.isFinite(pt.slopeDir) ? pt.slopeDir : 0;
@@ -691,6 +724,13 @@ function meDraw() {
           ctx.strokeStyle = 'rgba(10,10,15,0.95)';
           ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(bx, by); ctx.stroke();
         }
+        if (nd.checkpoint) {
+          ctx.beginPath(); ctx.arc(sx, sy, r + 9, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(251,191,36,0.95)'; ctx.lineWidth = 2; ctx.stroke();
+          ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 8px system-ui';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+          ctx.fillText(nd.link ? `CP\u00b7L${nd.link}` : 'CP', sx, sy + r + 3);
+        }
         if (ME.selectedBranch === i && ME.selectedBranchPath === pi && ME.selectedBranchNode === k) {
           ctx.beginPath(); ctx.arc(sx, sy, r + 5, 0, Math.PI * 2);
           ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2; ctx.stroke();
@@ -742,6 +782,26 @@ function meDraw() {
       ctx.beginPath();
       ctx.arc(0, 0, rr, 0, Math.PI * 2);
       ctx.fill();
+    } else if (o.type === 'boost_pad') {
+      const s = Math.max(8, rr * 0.9);
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.moveTo(s * 0.8, 0);
+      ctx.lineTo(-s * 0.4, s * 1.4);
+      ctx.lineTo(-s * 0.4, -s * 1.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#eab308';
+      ctx.stroke();
+    } else if (o.type === 'repair_pad') {
+      const s = Math.max(7, rr * 0.85);
+      ctx.fillStyle = '#22c55e';
+      ctx.fillRect(-s, -s, s * 2, s * 2);
+      ctx.strokeStyle = '#15803d';
+      ctx.strokeRect(-s, -s, s * 2, s * 2);
+      ctx.fillStyle = '#f0fdf4';
+      ctx.fillRect(-s * 0.6, -s * 0.18, s * 1.2, s * 0.36);
+      ctx.fillRect(-s * 0.18, -s * 0.6, s * 0.36, s * 1.2);
     } else if (o.type === 'wall') {
       ctx.fillStyle = '#4b5563';
       ctx.beginPath();
@@ -785,6 +845,43 @@ function meDraw() {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('L' + (Math.round(p.layer || 0)), sx, sy - rr - 8);
+  });
+
+  // Portal gates
+  const gatePalette = ['#38bdf8', '#f472b6', '#a3e635', '#fbbf24', '#c084fc', '#fb7185'];
+  ME.gates.forEach(g => {
+    const sx = meWtoX(g.x), sy = meWtoY(g.y);
+    const col = gatePalette[((g.link || 1) - 1) % gatePalette.length];
+    const hw = Math.max(10, (g.w || TRACK_W) * 0.5 * ME.zoom);
+    const px = Math.cos((g.angle || 0) + Math.PI / 2), py = Math.sin((g.angle || 0) + Math.PI / 2);
+    const dx = Math.cos(g.angle || 0), dy = Math.sin(g.angle || 0);
+    ctx.save();
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(sx + px * hw, sy + py * hw);
+    ctx.lineTo(sx - px * hw, sy - py * hw);
+    ctx.stroke();
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+    ctx.fill();
+    // through-direction arrow
+    const ax = sx + dx * 18, ay = sy + dy * 18;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ax, ay);
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax - dx * 7 - dy * 4, ay - dy * 7 + dx * 4);
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax - dx * 7 + dy * 4, ay - dy * 7 - dx * 4);
+    ctx.stroke();
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('#' + (g.link || 1), sx, sy - hw - 8);
+    ctx.restore();
   });
 
   // Wall-painted segment overlays
@@ -908,7 +1005,13 @@ function meInitEditor(){
   const modeWallBtn = document.getElementById('me-mode-wall');
   const modeObstacleBtn = document.getElementById('me-mode-obstacle');
   const modePowerupBtn = document.getElementById('me-mode-powerup');
+  const modeGateBtn = document.getElementById('me-mode-gate');
   const modeEraseBtn = document.getElementById('me-mode-erase');
+  const gateLinkInp = document.getElementById('me-gate-link');
+  const gateAngleRange = document.getElementById('me-gate-angle-range');
+  const gateAngleNum = document.getElementById('me-gate-angle');
+  const gateWidthRange = document.getElementById('me-gate-width-range');
+  const gateWidthNum = document.getElementById('me-gate-width');
   const wallModeSel = document.getElementById('me-wall-mode');
   const wallSideSel = document.getElementById('me-wall-side');
   const wallForceInp = document.getElementById('me-wall-force');
@@ -926,20 +1029,24 @@ function meInitEditor(){
     modeWallBtn.classList.toggle('active', ME.mode === 'wall');
     modeObstacleBtn.classList.toggle('active', ME.mode === 'obstacle');
     modePowerupBtn.classList.toggle('active', ME.mode === 'powerup');
+    if (modeGateBtn) modeGateBtn.classList.toggle('active', ME.mode === 'gate');
     modeEraseBtn.classList.toggle('active', ME.mode === 'erase');
     // Contextual toolbar: only the active mode's controls are visible.
     const grpNode = document.getElementById('me-grp-node');
     const grpWall = document.getElementById('me-grp-wall');
     const grpObs  = document.getElementById('me-grp-obstacle');
+    const grpGate = document.getElementById('me-grp-gate');
     if (grpNode) grpNode.hidden = ME.mode !== 'waypoint';
     if (grpWall) grpWall.hidden = ME.mode !== 'wall';
     if (grpObs)  grpObs.hidden  = !(ME.mode === 'obstacle' || ME.mode === 'powerup');
+    if (grpGate) grpGate.hidden = ME.mode !== 'gate';
     const hint = document.getElementById('me-mode-hint');
     if (hint) hint.textContent = {
       waypoint: 'Click to add track nodes · drag to move · click a node to edit its type / width / layer.',
       wall:     'Click a track edge segment to paint the selected wall behavior · right-click removes it.',
       obstacle: 'Click the track to place — the layer is auto-detected from the nearest node. Right-click erases.',
       powerup:  'Click the track to drop an item box — layer auto-detected. Right-click erases.',
+      gate:     'Click to drop a portal gate. Two gates with the same Link teleport between each other; different angles rotate travel. Right-click erases.',
       erase:    'Click any placed obstacle or item box to remove it.',
     }[ME.mode] || '';
   }
@@ -952,6 +1059,8 @@ function meInitEditor(){
     btn.addEventListener('click',()=>meSetSelectedType(btn.dataset.type));
   });
   document.getElementById('me-node-checkpoint').onclick = meToggleSelectedCheckpoint;
+  { const _cpLinkBtn = document.getElementById('me-node-cp-link');
+    if (_cpLinkBtn) _cpLinkBtn.onclick = meCycleSelectedCpLink; }
   const splitBtnEl = document.getElementById('me-node-split');
   if (splitBtnEl) splitBtnEl.onclick = meSplitSelected;
   const wr=document.getElementById('me-node-width-range');
@@ -962,6 +1071,7 @@ function meInitEditor(){
   modeWallBtn.onclick=()=>{ ME.mode='wall'; refreshModeButtons(); };
   modeObstacleBtn.onclick=()=>{ ME.mode='obstacle'; refreshModeButtons(); };
   modePowerupBtn.onclick=()=>{ ME.mode='powerup'; refreshModeButtons(); };
+  if (modeGateBtn) modeGateBtn.onclick=()=>{ ME.mode='gate'; refreshModeButtons(); };
   modeEraseBtn.onclick=()=>{ ME.mode='erase'; refreshModeButtons(); };
   document.getElementById('me-node-slope').onclick = meToggleSelectedSlope;
   document.getElementById('me-node-slope-rot-left').onclick = ()=>meRotateSelectedSlope(-15);
@@ -985,6 +1095,11 @@ function meInitEditor(){
   obstacleRotNum.oninput=()=>{ obstacleRotRange.value = obstacleRotNum.value; ME.obstacleRot = parseFloat(obstacleRotNum.value) || 0; };
   obstacleScaleRange.oninput=()=>{ obstacleScaleNum.value = obstacleScaleRange.value; ME.obstacleScale = Math.max(0.4, Math.min(2.2, (parseFloat(obstacleScaleRange.value) || 100) / 100)); };
   obstacleScaleNum.oninput=()=>{ obstacleScaleRange.value = obstacleScaleNum.value; ME.obstacleScale = Math.max(0.4, Math.min(2.2, (parseFloat(obstacleScaleNum.value) || 100) / 100)); };
+  if (gateLinkInp) gateLinkInp.oninput=()=>{ ME.gateLink = Math.max(1, Math.min(6, Math.round(+gateLinkInp.value) || 1)); };
+  if (gateAngleRange) gateAngleRange.oninput=()=>{ gateAngleNum.value = gateAngleRange.value; ME.gateAngle = (parseFloat(gateAngleRange.value) || 0) * Math.PI / 180; };
+  if (gateAngleNum) gateAngleNum.oninput=()=>{ gateAngleRange.value = gateAngleNum.value; ME.gateAngle = (parseFloat(gateAngleNum.value) || 0) * Math.PI / 180; };
+  if (gateWidthRange) gateWidthRange.oninput=()=>{ gateWidthNum.value = gateWidthRange.value; ME.gateW = Math.max(40, Math.min(220, parseFloat(gateWidthRange.value) || TRACK_W)); };
+  if (gateWidthNum) gateWidthNum.oninput=()=>{ gateWidthRange.value = gateWidthNum.value; ME.gateW = Math.max(40, Math.min(220, parseFloat(gateWidthNum.value) || TRACK_W)); };
   wallModeSel.value = ME.wallMode || 'solid';
   wallSideSel.value = ME.wallSide || 'both';
   wallForceInp.value = String(ME.wallForce || 120);
@@ -994,6 +1109,11 @@ function meInitEditor(){
   obstacleRotNum.value = String(ME.obstacleRot || 0);
   obstacleScaleRange.value = String(Math.round((ME.obstacleScale || 1) * 100));
   obstacleScaleNum.value = String(Math.round((ME.obstacleScale || 1) * 100));
+  if (gateLinkInp) gateLinkInp.value = String(ME.gateLink || 1);
+  if (gateAngleRange) gateAngleRange.value = String(Math.round((ME.gateAngle || 0) * 180 / Math.PI));
+  if (gateAngleNum) gateAngleNum.value = String(Math.round((ME.gateAngle || 0) * 180 / Math.PI));
+  if (gateWidthRange) gateWidthRange.value = String(Math.round(ME.gateW || TRACK_W));
+  if (gateWidthNum) gateWidthNum.value = String(Math.round(ME.gateW || TRACK_W));
   refreshModeButtons();
 
   if (runRegressionBtn) {
@@ -1011,6 +1131,12 @@ function meInitEditor(){
     const r=canvas.getBoundingClientRect(),cx=e.clientX-r.left,cy=e.clientY-r.top;
     if(e.button===1){ME.isPanning=true;ME.lastMX=cx;ME.lastMY=cy;e.preventDefault();return;}
     if(e.button===2){
+      const hg=meHitTestGate(cx,cy);
+      if(hg>=0){
+        ME.gates.splice(hg,1);
+        meDraw();
+        e.preventDefault();return;
+      }
       const hp=meHitTestPowerup(cx,cy);
       if(hp>=0){
         ME.powerups.splice(hp,1);
@@ -1114,7 +1240,19 @@ function meInitEditor(){
       meDraw();
       return;
     }
+    if (ME.mode === 'gate') {
+      const gwx = meXtoW(cx), gwy = meYtoW(cy);
+      ME.gates.push({ x: gwx, y: gwy, angle: ME.gateAngle || 0, link: ME.gateLink || 1, w: ME.gateW || TRACK_W, layer: meAutoLayerAt(gwx, gwy) });
+      meDraw();
+      return;
+    }
     if (ME.mode === 'erase') {
+      const hg=meHitTestGate(cx,cy);
+      if (hg >= 0) {
+        ME.gates.splice(hg,1);
+        meDraw();
+        return;
+      }
       const hp=meHitTestPowerup(cx,cy);
       if (hp >= 0) {
         ME.powerups.splice(hp,1);
@@ -1236,7 +1374,7 @@ document.getElementById('me-back-btn').onclick=()=>{
 };
 document.getElementById('me-new-btn').onclick=()=>{
   if(ME.wpts.length>0&&!confirm('Discard current map?'))return;
-  ME.wpts=[];ME.spline=[];ME.splineW=[];ME.obstacles=[];ME.powerups=[];ME.wallRegions=[];ME.panX=0;ME.panY=0;ME.selectedIdx=-1;
+  ME.wpts=[];ME.spline=[];ME.splineW=[];ME.obstacles=[];ME.powerups=[];ME.wallRegions=[];ME.gates=[];ME.panX=0;ME.panY=0;ME.selectedIdx=-1;
   ME.obstacleRot = 0; ME.obstacleScale = 1;
   document.getElementById('me-map-name').value='My Track';
   meRefreshNodeSettings();
@@ -1248,7 +1386,7 @@ document.getElementById('me-test-btn').onclick=()=>startTrackTest();
 // session (no network room needed). ESC or the results button returns here.
 function startTrackTest(){
   if(ME.wpts.length<4){alert('Place at least 4 waypoints first.');return;}
-  G.customMap={name:document.getElementById('me-map-name').value||'Test Track',waypoints:[...ME.wpts],obstacles:[...ME.obstacles],powerups:[...ME.powerups],wallRegions:[...ME.wallRegions],trackModel:ME.trackModel||'v1',branches:meCloneBranches(ME.branches)};
+  G.customMap={name:document.getElementById('me-map-name').value||'Test Track',waypoints:[...ME.wpts],obstacles:[...ME.obstacles],powerups:[...ME.powerups],wallRegions:[...ME.wallRegions],gates:[...ME.gates],trackModel:ME.trackModel||'v1',branches:meCloneBranches(ME.branches)};
   saveMaps();
   G._testMode=true;
   G.isHost=true;
@@ -1259,7 +1397,7 @@ function startTrackTest(){
   G.players={}; G.players[G.myId]=me;
   spawnBots(getBotCount()); // AI opponents for the solo test session
   const seed=Date.now()%100000;
-  G.track=generateTrackFromWaypoints(G.customMap.waypoints,seed,G.customMap.obstacles||[],G.customMap.powerups||[],G.customMap.wallRegions||[]);
+  G.track=generateTrackFromWaypoints(G.customMap.waypoints,seed,G.customMap.obstacles||[],G.customMap.powerups||[],G.customMap.wallRegions||[],G.customMap.gates||[]);
   recordTrackHistory(G.customMap);
   G.totalLaps=Math.max(1,Math.min(20,Math.round((G.customMap.laps)||1)));
   resetPlayersForRace();
@@ -1298,7 +1436,7 @@ document.getElementById('me-fetch-btn').onclick=meFetchMapList;
 function meCurrentMapData(){
   return {
     name: (document.getElementById('me-map-name').value || 'My Track').trim(),
-    waypoints: ME.wpts, obstacles: ME.obstacles, powerups: ME.powerups, wallRegions: ME.wallRegions,
+    waypoints: ME.wpts, obstacles: ME.obstacles, powerups: ME.powerups, wallRegions: ME.wallRegions, gates: ME.gates,
     trackModel: ME.trackModel || 'v1', branches: meCloneBranches(ME.branches),
     version: 3, created: new Date().toISOString().slice(0,10),
   };
@@ -1466,6 +1604,16 @@ function meLoadMapData(data){
       return rec;
     })
     : [];
+  ME.gates = Array.isArray(data.gates)
+    ? data.gates.map(g => ({
+      x:+g.x,
+      y:+g.y,
+      angle: Number.isFinite(+g.angle) ? +g.angle : 0,
+      link: Math.max(1, Math.min(6, Math.round(+g.link || 1))),
+      w: Math.max(40, Math.min(220, +g.w || TRACK_W)),
+      layer: Number.isFinite(+g.layer) ? Math.round(+g.layer) : 0,
+    }))
+    : [];
   ME.trackModel = (data.trackModel === 'v2') ? 'v2' : 'v1';
   ME.branches = meNormalizeBranches(data.branches);
   ME.selectedBranch = null; ME.selectedBranchPath = 0; ME.selectedBranchNode = -1;
@@ -1551,10 +1699,19 @@ function buildPathGeom(seq) {
 // Waypoints with type 'void' create no-road/fall zones.
 // Waypoints with type 'ice'/'river' paint continuous track surface effects.
 // Elevated support spans are authored via waypoint supportLayer values.
-function generateTrackFromWaypoints(waypoints, obsSeed, manualObstacles, manualPowerups, manualWallRegions) {
+function generateTrackFromWaypoints(waypoints, obsSeed, manualObstacles, manualPowerups, manualWallRegions, manualGates) {
   const rng=mulberry32(obsSeed||42);
   const pts=(Array.isArray(waypoints) ? waypoints : []).map(p => ({ ...p }));
   const N=pts.length;
+  // Portal gates: linked pairs (same non-zero `link`) that teleport whatever crosses
+  // them to their partner, rotating heading/velocity by the angle between the two gates.
+  const gates=(Array.isArray(manualGates) ? manualGates : []).map(g => ({
+    x:+g.x, y:+g.y,
+    angle: Number.isFinite(+g.angle) ? +g.angle : 0,
+    link: Math.max(0, Math.round(+g.link || 0)),
+    w: Math.max(40, Math.min(220, +g.w || TRACK_W)),
+    layer: Math.round(+g.layer || 0),
+  }));
   // Migrate legacy single `branch` to the two-fork `branches` model.
   pts.forEach(p => { if (p && Array.isArray(p.branch) && !Array.isArray(p.branches)) { p.branches = [p.branch]; delete p.branch; } });
   const hadLegacyBridgeTypes = pts.some(p => p && (p.type === 'bridge' || p.type === 'bridge3'));
@@ -1634,22 +1791,54 @@ function generateTrackFromWaypoints(waypoints, obsSeed, manualObstacles, manualP
     return f;
   };
   for (let i = 0; i < N; i++) {
-    if (!pts[i].checkpoint) continue;
     const ri = (i * 16) % sn;
-    const p = spline[ri];
-    const pPrev = spline[(ri - 1 + sn) % sn];
-    const pNext = spline[(ri + 1) % sn];
-    let tx = pNext.x - pPrev.x, ty = pNext.y - pPrev.y;
-    const tl = Math.sqrt(tx*tx + ty*ty) || 1;
-    tx /= tl; ty /= tl;
-    const nx = -ty, ny = tx;
-    checkpoints.push({
-      idx: ri,
-      x: p.x, y: p.y,
-      tx, ty, nx, ny,
-      halfW: (splineWidth[ri] || TRACK_W) * 1.05,
-      layer: floorAtIdxLocal(ri),
-    });
+    if (pts[i].checkpoint) {
+      const p = spline[ri];
+      const pPrev = spline[(ri - 1 + sn) % sn];
+      const pNext = spline[(ri + 1) % sn];
+      let tx = pNext.x - pPrev.x, ty = pNext.y - pPrev.y;
+      const tl = Math.sqrt(tx*tx + ty*ty) || 1;
+      tx /= tl; ty /= tl;
+      const nx = -ty, ny = tx;
+      checkpoints.push({
+        idx: ri,
+        x: p.x, y: p.y,
+        tx, ty, nx, ny,
+        halfW: (splineWidth[ri] || TRACK_W) * 1.05,
+        layer: floorAtIdxLocal(ri),
+        link: Math.max(0, Math.round(+pts[i].link || 0)),
+      });
+    }
+    // Fork-branch gates: checkpoints authored on this node's fork paths. Two gates on
+    // opposite forks that share a `link` are pushed consecutively here, so the race
+    // logic treats them as one "any-of" group (cross either to clear the split). Branch
+    // node positions are exact, so the gate geometry comes straight from them.
+    const brs = pts[i] && Array.isArray(pts[i].branches) ? pts[i].branches : null;
+    if (brs && brs.length) {
+      brs.forEach(path => {
+        if (!Array.isArray(path) || !path.length) return;
+        for (let k = 0; k < path.length; k++) {
+          const bn = path[k];
+          if (!bn || !bn.checkpoint) continue;
+          const prev = k === 0 ? pts[i] : path[k - 1];
+          const next = k === path.length - 1 ? pts[(i + 1) % N] : path[k + 1];
+          let btx = next.x - prev.x, bty = next.y - prev.y;
+          const btl = Math.sqrt(btx*btx + bty*bty) || 1; btx /= btl; bty /= btl;
+          const bnx = -bty, bny = btx;
+          const lv = Number.isFinite(+bn.supportLayer) ? Math.round(+bn.supportLayer) : 0;
+          const hw = Math.max(40, Math.min(180, +bn.width || TRACK_W)) * 1.05;
+          checkpoints.push({
+            idx: ri,
+            x: bn.x, y: bn.y,
+            tx: btx, ty: bty, nx: bnx, ny: bny,
+            halfW: hw,
+            layer: lv,
+            link: Math.max(0, Math.round(+bn.link || 0)),
+            branch: true,
+          });
+        }
+      });
+    }
   }
 
   // Authored slope thresholds: the up direction is derived automatically from the
@@ -1870,7 +2059,7 @@ function generateTrackFromWaypoints(waypoints, obsSeed, manualObstacles, manualP
     });
   }
 
-  return {spline,splineWidth,splineSurface,obstacles,items,oilSlicks:[],bridges,voidZones,splineVoid,splineHidden,checkpoints,slopes,wallRegions,forkWallRegions,branchSplines,driveSpline,driveWidth,driveSurface,driveVoid,driveFloor,driveMainIdx,driveSegs,numLoops:1,legacySlopeConversionApplied:hadLegacyBridgeTypes};
+  return {spline,splineWidth,splineSurface,obstacles,items,oilSlicks:[],bridges,voidZones,splineVoid,splineHidden,checkpoints,slopes,wallRegions,forkWallRegions,branchSplines,driveSpline,driveWidth,driveSurface,driveVoid,driveFloor,driveMainIdx,driveSegs,gates,numLoops:1,legacySlopeConversionApplied:hadLegacyBridgeTypes};
 }
 
 function runLayerSystemRegressionTests() {

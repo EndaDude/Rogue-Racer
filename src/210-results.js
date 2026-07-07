@@ -296,7 +296,7 @@ document.getElementById('play-again-btn').onclick = ()=>{
     // reset and relaunch — preserve custom map if one is loaded
     const seed = Date.now()%100000;
     G.track = G.customMap
-      ? generateTrackFromWaypoints(G.customMap.waypoints, seed, G.customMap.obstacles || [], G.customMap.powerups || [], G.customMap.wallRegions || [])
+      ? generateTrackFromWaypoints(G.customMap.waypoints, seed, G.customMap.obstacles || [], G.customMap.powerups || [], G.customMap.wallRegions || [], G.customMap.gates || [])
       : generateTrack(seed);
     if (G.customMap) recordTrackHistory(G.customMap);
     Object.values(G.players).forEach((p,i)=>{
@@ -304,7 +304,7 @@ document.getElementById('play-again-btn').onclick = ()=>{
       p.x=sp.x;p.y=sp.y;p.angle=sp.angle;
       p.lap=1;p.lapProgress=0;p.speed=0;p.vx=0;p.vy=0;
       p.maxHealth=carMaxHealth(p.carType);p.health=p.maxHealth;p.deathRespawn=0;p.invuln=0;
-      p.finished=false;p.stun=0;p.boosting=0;p.ghostMode=0;p.shielded=false;p.oilSlick=0;
+      p.finished=false;p.stun=0;p.boosting=0;p.ghostMode=0;p.shielded=false;p.shieldTime=0;p.autopilot=0;p.trailBoost=0;p.oilSlick=0;
       p.heldItem=null;p.upgrades=[];
       p.drifting=false; p.driftTrailTimer=0;
       p.driftBoostStack=0; p.driftShakePhase=0;

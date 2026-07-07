@@ -106,7 +106,7 @@ function _trackFileName(rec) {
 function _serializeTrack(rec) {
   return {
     name: rec.name, waypoints: rec.waypoints, obstacles: rec.obstacles,
-    powerups: rec.powerups, wallRegions: rec.wallRegions, laps: rec.laps,
+    powerups: rec.powerups, wallRegions: rec.wallRegions, gates: rec.gates, laps: rec.laps,
     version: rec.version || 3, created: rec.created,
   };
 }
@@ -341,6 +341,7 @@ function normalizeTrackRecord(map, extra) {
     obstacles: Array.isArray(m.obstacles) ? m.obstacles : [],
     powerups: Array.isArray(m.powerups) ? m.powerups : [],
     wallRegions: Array.isArray(m.wallRegions) ? m.wallRegions : [],
+    gates: Array.isArray(m.gates) ? m.gates : [],
     laps: Math.max(1, Math.min(20, Math.round(lapsRaw))),
     version: m.version || 3,
     created: m.created || new Date().toISOString().slice(0, 10),
@@ -390,7 +391,7 @@ function exportTrackRecord(rec) {
   if (!rec) return;
   const data = {
     name: rec.name, waypoints: rec.waypoints, obstacles: rec.obstacles,
-    powerups: rec.powerups, wallRegions: rec.wallRegions, laps: rec.laps,
+    powerups: rec.powerups, wallRegions: rec.wallRegions, gates: rec.gates, laps: rec.laps,
     version: rec.version || 3, created: rec.created,
   };
   const a = document.createElement('a');

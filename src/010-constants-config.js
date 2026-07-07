@@ -4,7 +4,7 @@
 // Game (HTML) version. This ships independently of the desktop app via the
 // self-updating loader, so bump it whenever you publish a game update; it shows
 // on the terminal so you can confirm which build actually loaded.
-const GAME_VERSION = '0.1.14';
+const GAME_VERSION = '0.1.15';
 const TOTAL_LAPS = 3;
 const PLAYER_COLORS = ['#a855f7','#06b6d4','#fbbf24','#22c55e','#ef4444','#f97316'];
 const CAR_W = 14, CAR_H = 22;
@@ -122,6 +122,8 @@ const CAR_TUNING = {
   riverTrackPush: 200,
   riverTrackDrag: 0.22,
   powerupRespawnSec: 30,
+  shieldDuration: 5,      // Shield now blocks ALL hits for this many seconds (was one-shot)
+  autopilotDuration: 5,   // Autopilot drives the car along the racing line for this long
 
   obstacleHitRadiusPad: 2,
   obstacleBounceRestitution: 0.9,
@@ -609,7 +611,8 @@ function speedClassScale(key) {
 
 const POWERUPS_LIST = [
   { id:'boost', name:'Nitro', icon:'⚡', desc:'Massive speed surge for 3 sec', color:'#fbbf24' },
-  { id:'shield', name:'Shield', icon:'🛡️', desc:'Block next obstacle hit', color:'#06b6d4' },
+  { id:'shield', name:'Shield', icon:'🛡️', desc:'Block ALL hits for 5 sec', color:'#06b6d4' },
+  { id:'autopilot', name:'Autopilot', icon:'🤖', desc:'Auto-drives the racing line for 5 sec', color:'#38bdf8' },
   { id:'missile', name:'Missile', icon:'🚀', desc:'Stun nearest opponent', color:'#ef4444' },
   { id:'mine', name:'Mine', icon:'🧨', desc:'Drop an explosive mine behind you', color:'#f97316' },
   { id:'pulse', name:'Pulse', icon:'💥', desc:'Blast nearby racers with a shockwave', color:'#fb7185' },

@@ -405,6 +405,42 @@
     text-align: center;
   }
   .powerup-badge.active { border-color: var(--gold); color: var(--gold); }
+  #effect-timers {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none;
+    z-index: 6;
+  }
+  #effect-timers .fx-timer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(9, 12, 20, 0.72);
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: var(--radius);
+    padding: 3px 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #e5e7eb;
+    min-width: 78px;
+  }
+  #effect-timers .fx-timer .fx-bar {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.14);
+    overflow: hidden;
+  }
+  #effect-timers .fx-timer .fx-bar > i {
+    display: block;
+    height: 100%;
+    border-radius: 2px;
+  }
   #canvas-wrap { flex: 1; position: relative; overflow: hidden; }
   #gameCanvas { display: block; width: 100%; height: 100%; transform: translateZ(0); will-change: transform; backface-visibility: hidden; }
   #checkpoint-strip {
@@ -1598,6 +1634,7 @@
             <button class="me-type-btn" id="me-mode-wall" title="Paint wall behavior on track edges">Walls</button>
             <button class="me-type-btn" id="me-mode-obstacle" title="Place obstacles">Obstacles</button>
             <button class="me-type-btn" id="me-mode-powerup" title="Place item boxes">Items</button>
+            <button class="me-type-btn" id="me-mode-gate" title="Place linked portal gates">Gates</button>
             <button class="me-type-btn" id="me-mode-erase" title="Remove placed objects">Erase</button>
           </div>
           <div class="me-grp" id="me-grp-node">
@@ -1607,6 +1644,7 @@
             <button class="me-type-btn" data-type="river" title="River track">River</button>
             <button class="me-type-btn" data-type="void" title="Void (fall gap)">Void</button>
             <button class="me-check-btn" id="me-node-checkpoint" title="Checkpoint gate on this node">Checkpoint</button>
+            <button class="me-check-btn" id="me-node-cp-link" title="Cycle this checkpoint's link group — two gates on opposite forks of a split that share a link only need ONE crossed to keep going" disabled>Link: –</button>
             <button class="me-check-btn" id="me-node-slope" title="Layer slope threshold on this node">Slope</button>
             <button class="me-type-btn" id="me-node-slope-rot-left" title="Rotate slope up-direction left">↺</button>
             <span id="me-node-slope-angle" style="font-size:.7rem;color:var(--muted);min-width:34px;text-align:center">0°</span>
@@ -1646,6 +1684,23 @@
             <span class="me-field">
               <label for="me-wall-bounce">Bounce</label>
               <input id="me-wall-bounce" type="number" min="0.2" max="2.0" step="0.05" value="1.0">
+            </span>
+          </div>
+          <div class="me-grp" id="me-grp-gate" hidden>
+            <span class="me-grp-title">Gate</span>
+            <span class="me-field" title="Gates sharing a link teleport to each other">
+              <label for="me-gate-link">Link</label>
+              <input id="me-gate-link" type="number" min="1" max="6" step="1" value="1">
+            </span>
+            <span class="me-field" title="Through-direction of the gate">
+              <label for="me-gate-angle-range">Angle</label>
+              <input id="me-gate-angle-range" type="range" min="-180" max="180" step="1" value="0">
+              <input id="me-gate-angle" type="number" min="-180" max="180" step="1" value="0">
+            </span>
+            <span class="me-field" title="Doorway width / length of the gate">
+              <label for="me-gate-width-range">Length</label>
+              <input id="me-gate-width-range" type="range" min="40" max="220" step="2" value="80">
+              <input id="me-gate-width" type="number" min="40" max="220" step="2" value="80">
             </span>
           </div>
           <div class="me-grp" id="me-grp-obstacle" hidden>
@@ -1747,6 +1802,7 @@
     </div>
     <div id="event-feed" aria-hidden="true"></div>
     <div id="checkpoint-strip" aria-hidden="true"></div>
+    <div id="effect-timers" aria-hidden="true"></div>
     <div id="controls-hint">
       W/↑ Accelerate &nbsp; S/↓ Brake<br>
       A/← Turn left &nbsp; D/→ Turn right<br>
@@ -1841,7 +1897,7 @@
 // Game (HTML) version. This ships independently of the desktop app via the
 // self-updating loader, so bump it whenever you publish a game update; it shows
 // on the terminal so you can confirm which build actually loaded.
-const GAME_VERSION = '0.1.14';
+const GAME_VERSION = '0.1.15';
 const TOTAL_LAPS = 3;
 const PLAYER_COLORS = ['#a855f7','#06b6d4','#fbbf24','#22c55e','#ef4444','#f97316'];
 const CAR_W = 14, CAR_H = 22;
@@ -1959,6 +2015,8 @@ const CAR_TUNING = {
   riverTrackPush: 200,
   riverTrackDrag: 0.22,
   powerupRespawnSec: 30,
+  shieldDuration: 5,      // Shield now blocks ALL hits for this many seconds (was one-shot)
+  autopilotDuration: 5,   // Autopilot drives the car along the racing line for this long
 
   obstacleHitRadiusPad: 2,
   obstacleBounceRestitution: 0.9,
@@ -2446,7 +2504,8 @@ function speedClassScale(key) {
 
 const POWERUPS_LIST = [
   { id:'boost', name:'Nitro', icon:'⚡', desc:'Massive speed surge for 3 sec', color:'#fbbf24' },
-  { id:'shield', name:'Shield', icon:'🛡️', desc:'Block next obstacle hit', color:'#06b6d4' },
+  { id:'shield', name:'Shield', icon:'🛡️', desc:'Block ALL hits for 5 sec', color:'#06b6d4' },
+  { id:'autopilot', name:'Autopilot', icon:'🤖', desc:'Auto-drives the racing line for 5 sec', color:'#38bdf8' },
   { id:'missile', name:'Missile', icon:'🚀', desc:'Stun nearest opponent', color:'#ef4444' },
   { id:'mine', name:'Mine', icon:'🧨', desc:'Drop an explosive mine behind you', color:'#f97316' },
   { id:'pulse', name:'Pulse', icon:'💥', desc:'Blast nearby racers with a shockwave', color:'#fb7185' },
@@ -2514,6 +2573,53 @@ function segIntersects(ax,ay,bx,by,cx,cy,dx,dy) {
   const t = ((cx-ax)*d2y - (cy-ay)*d2x) / cross;
   const u = ((cx-ax)*d1y - (cy-ay)*d1x) / cross;
   return t>0 && t<1 && u>0 && u<1;
+}
+
+// ---- Portal gates ----------------------------------------------------------
+// Find the linked partner of a gate (another gate sharing the same non-zero link).
+function gatePartner(gate) {
+  const gs = G.track && G.track.gates;
+  if (!gs || !gate || !gate.link) return null;
+  for (const g of gs) if (g !== gate && g.link === gate.link) return g;
+  return null;
+}
+// If `ent` moved from (prevX,prevY) to (ent.x,ent.y) across a linked gate's doorway,
+// teleport it to the partner gate and rotate its velocity/heading by the angle between
+// the two gates ("2 different angles switch direction accordingly"). Works for players
+// and projectiles alike (anything with x/y and optionally vx/vy/angle/layer).
+function tryGateTeleport(ent, prevX, prevY, dt) {
+  const gs = G.track && G.track.gates;
+  if (!gs || !gs.length || !ent) return false;
+  if ((ent._gateCd || 0) > 0) { ent._gateCd = Math.max(0, ent._gateCd - (dt || 0)); return false; }
+  for (const g of gs) {
+    const partner = gatePartner(g);
+    if (!partner) continue;
+    const hw = (g.w || TRACK_W) * 0.5;
+    // Doorway segment is perpendicular to the gate's through-direction (g.angle).
+    const px = Math.cos(g.angle + Math.PI / 2), py = Math.sin(g.angle + Math.PI / 2);
+    const ax = g.x + px * hw, ay = g.y + py * hw;
+    const bx = g.x - px * hw, by = g.y - py * hw;
+    if (!segIntersects(prevX, prevY, ent.x, ent.y, ax, ay, bx, by)) continue;
+    const delta = partner.angle - g.angle;
+    const cs = Math.cos(delta), sn = Math.sin(delta);
+    if (typeof ent.vx === 'number' && typeof ent.vy === 'number') {
+      const vx = ent.vx * cs - ent.vy * sn;
+      const vy = ent.vx * sn + ent.vy * cs;
+      ent.vx = vx; ent.vy = vy;
+    }
+    if (typeof ent.angle === 'number') ent.angle = ent.angle + delta;
+    // Exit on the side of the partner matching the direction of travel through gate A.
+    const mvx = ent.x - prevX, mvy = ent.y - prevY;
+    const dir = (mvx * Math.cos(g.angle) + mvy * Math.sin(g.angle)) >= 0 ? 1 : -1;
+    const fx = Math.cos(partner.angle) * dir, fy = Math.sin(partner.angle) * dir;
+    ent.x = partner.x + fx * 18;
+    ent.y = partner.y + fy * 18;
+    if (typeof ent.layer === 'number' && Number.isFinite(partner.layer)) ent.layer = partner.layer;
+    ent._gateCd = 0.5;
+    if (typeof spawnFxBurst === 'function') spawnFxBurst(ent.x, ent.y, ent.layer || 0, 'sparks');
+    return true;
+  }
+  return false;
 }
 
 // Returns true if idx falls inside the bridge range (handles wrap-around)
@@ -3068,7 +3174,7 @@ function makePlayer(id, name, color, x, y, angle, carType) {
     checkpointsDoneThisLap:false,
     lastCheckpointTime:0, lastLapTime:0,
     finished:false, finishTime:0,
-    stun:0, ghostMode:0, shielded:false, boosting:0, oilSlick:0,
+    stun:0, ghostMode:0, shielded:false, shieldTime:0, autopilot:0, boosting:0, oilSlick:0, trailBoost:0,
     heldItem:null,
     upgrades:[],
     drifting:false,
@@ -3397,9 +3503,9 @@ function onData(data, fromId) {
     G.players = data.players;
     Object.values(G.players).forEach(normalizePlayerState);
     G.track = data.selectedMap
-      ? generateTrackFromWaypoints(data.selectedMap.waypoints, data.seed, data.selectedMap.obstacles || [], data.selectedMap.powerups || [], data.selectedMap.wallRegions || [])
+      ? generateTrackFromWaypoints(data.selectedMap.waypoints, data.seed, data.selectedMap.obstacles || [], data.selectedMap.powerups || [], data.selectedMap.wallRegions || [], data.selectedMap.gates || [])
       : data.customMap
-      ? generateTrackFromWaypoints(data.customMap.waypoints, data.seed, data.customMap.obstacles || [], data.customMap.powerups || [], data.customMap.wallRegions || [])
+      ? generateTrackFromWaypoints(data.customMap.waypoints, data.seed, data.customMap.obstacles || [], data.customMap.powerups || [], data.customMap.wallRegions || [], data.customMap.gates || [])
       : generateTrack(data.seed);
     const _histMap = data.selectedMap || data.customMap;
     if (_histMap) recordTrackHistory(_histMap);
@@ -4155,7 +4261,7 @@ let _libDragTrack = null;
 function _cleanMapForQueue(map) {
   return {
     name: map.name, waypoints: map.waypoints, obstacles: map.obstacles || [],
-    powerups: map.powerups || [], wallRegions: map.wallRegions || [],
+    powerups: map.powerups || [], wallRegions: map.wallRegions || [], gates: map.gates || [],
     trackModel: map.trackModel === 'v2' ? 'v2' : 'v1', branches: Array.isArray(map.branches) ? map.branches : [],
     laps: map.laps, version: map.version || 3, created: map.created,
   };
@@ -4611,7 +4717,7 @@ function resetPlayersForRace() {
     p.nextCheckpoint=0;
     p.checkpointsDoneThisLap=false;
     p.lastCheckpointTime=0; p.lastLapTime=0;
-    p.finished=false; p.finishTime=0; p.finishElapsedMs=0; p.stun=0; p.boosting=0; p.ghostMode=0; p.shielded=false; p.oilSlick=0;
+    p.finished=false; p.finishTime=0; p.finishElapsedMs=0; p.stun=0; p.boosting=0; p.ghostMode=0; p.shielded=false; p.shieldTime=0; p.autopilot=0; p.trailBoost=0; p.oilSlick=0;
     p.heldItem=null; p.upgrades=[];
     p.rampIgnore={};
     p.driftSteerSign=0; p.driftFlipTimer=0; p.driftFlipCount=0;
@@ -4652,7 +4758,7 @@ function hostLaunchRace(selectedMap) {
   clearPostRaceTimer();
   const seed = Date.now() % 100000;
   G.track = selectedMap
-    ? generateTrackFromWaypoints(selectedMap.waypoints, seed, selectedMap.obstacles || [], selectedMap.powerups || [], selectedMap.wallRegions || [])
+    ? generateTrackFromWaypoints(selectedMap.waypoints, seed, selectedMap.obstacles || [], selectedMap.powerups || [], selectedMap.wallRegions || [], selectedMap.gates || [])
     : generateTrack(seed);
   if (selectedMap) recordTrackHistory(selectedMap);
   G.totalLaps = resolveRaceLaps(selectedMap);
@@ -5658,7 +5764,7 @@ function _trackFileName(rec) {
 function _serializeTrack(rec) {
   return {
     name: rec.name, waypoints: rec.waypoints, obstacles: rec.obstacles,
-    powerups: rec.powerups, wallRegions: rec.wallRegions, laps: rec.laps,
+    powerups: rec.powerups, wallRegions: rec.wallRegions, gates: rec.gates, laps: rec.laps,
     version: rec.version || 3, created: rec.created,
   };
 }
@@ -5893,6 +5999,7 @@ function normalizeTrackRecord(map, extra) {
     obstacles: Array.isArray(m.obstacles) ? m.obstacles : [],
     powerups: Array.isArray(m.powerups) ? m.powerups : [],
     wallRegions: Array.isArray(m.wallRegions) ? m.wallRegions : [],
+    gates: Array.isArray(m.gates) ? m.gates : [],
     laps: Math.max(1, Math.min(20, Math.round(lapsRaw))),
     version: m.version || 3,
     created: m.created || new Date().toISOString().slice(0, 10),
@@ -5942,7 +6049,7 @@ function exportTrackRecord(rec) {
   if (!rec) return;
   const data = {
     name: rec.name, waypoints: rec.waypoints, obstacles: rec.obstacles,
-    powerups: rec.powerups, wallRegions: rec.wallRegions, laps: rec.laps,
+    powerups: rec.powerups, wallRegions: rec.wallRegions, gates: rec.gates, laps: rec.laps,
     version: rec.version || 3, created: rec.created,
   };
   const a = document.createElement('a');
@@ -7578,7 +7685,8 @@ function useItem() {
   playItemUse(item);
   const effect = { type:'item_used', id:G.myId, item };
   if (item === 'boost') { me.boosting = (me.upgrades || []).includes('overdrive') ? 4.5 : 3; }
-  else if (item === 'shield') { me.shielded = true; }
+  else if (item === 'shield') { me.shieldTime = CAR_TUNING.shieldDuration; me.shielded = true; }
+  else if (item === 'autopilot') { me.autopilot = CAR_TUNING.autopilotDuration; }
   else if (item === 'ghost') { me.ghostMode = 4; }
   else if (item === 'repair') {
     me.health = Math.min(me.maxHealth || CAR_TUNING.baseHealth, (me.health || 0) + 35);
@@ -7892,8 +8000,8 @@ function handleItemEffect(data) {
     const me = G.players[G.myId];
     if (me) {
       const typeCfg = getCarTypeCfg(me.carType);
-      if (me.shielded) { me.shielded=false; }
-      else applyDamage(me, CAR_TUNING.missileDamage / Math.max(0.5, typeCfg.weaponResist || 1), 'missile');
+      // Shield absorbs the hit for its whole duration — applyDamage no-ops while shielded.
+      applyDamage(me, CAR_TUNING.missileDamage / Math.max(0.5, typeCfg.weaponResist || 1), 'missile');
     }
   } else if (data.item==='oil') {
     // handled via oil_placed
@@ -8119,6 +8227,19 @@ function applyCarSpecials(me, dt, io) {
   me.speed = Math.hypot(me.vx, me.vy);
 }
 
+// Linked checkpoints: gates sharing a non-zero `link` id are the alternative gates
+// on a split (one per fork). They are authored consecutively, so a "group" is the
+// maximal run of consecutive gates that share the current gate's link. Crossing ANY
+// gate in the group clears the whole group. Unlinked gates (link 0/undefined) are
+// groups of one, preserving the classic must-pass-in-sequence behaviour.
+function checkpointGroupEnd(cps, start) {
+  const link = cps[start] && cps[start].link;
+  if (!link) return start + 1;
+  let end = start + 1;
+  while (end < cps.length && cps[end] && cps[end].link === link) end++;
+  return end;
+}
+
 function updateMyPlayer(dt) {
   const me = G.players[G.myId];
   if (!me || me.finished) return;
@@ -8155,9 +8276,13 @@ function updateMyPlayer(dt) {
       const cps = G.track.checkpoints;
       let placed = false;
       if (cps && cps.length && (me.nextCheckpoint || 0) > 0) {
-        // Send the player back to the last checkpoint they cleared, facing
-        // forward, on that checkpoint's layer.
-        const cp = cps[(me.nextCheckpoint - 1) % cps.length];
+        // Send the player back to the last checkpoint they actually cleared (the
+        // specific fork gate on a split, not just its group), facing forward, on
+        // that checkpoint's layer.
+        const cpIdx = (me.lastCpCrossed != null && cps[me.lastCpCrossed])
+          ? me.lastCpCrossed
+          : ((me.nextCheckpoint - 1) % cps.length);
+        const cp = cps[cpIdx];
         if (cp) {
           me.x = cp.x; me.y = cp.y;
           me.angle = Math.atan2(cp.ty || 0, cp.tx || 1);
@@ -8237,16 +8362,39 @@ function updateMyPlayer(dt) {
   let steerInput = (kbHeld('steerRight') ? 1 : 0) - (kbHeld('steerLeft') ? 1 : 0);
   // Analog controller steering overrides the digital keys when it pushes harder.
   if (G.pad && G.pad.connected && Math.abs(G.pad.steer) > Math.abs(steerInput)) steerInput = G.pad.steer;
-  const throttleHeld = kbHeld('throttle') ? 1 : 0;
+  const throttleHeld0 = kbHeld('throttle') ? 1 : 0;
   const brakeHeld = kbHeld('brake') ? 1 : 0;
   // Pressure-sensitive throttle/brake amount: controller triggers scale the force
   // 0..1; keyboard is full power. Trigger value overrides keys when engaged.
+  let throttleHeld = throttleHeld0;
   let throttleAmount = throttleHeld ? 1 : 0;
   if (G.pad && G.pad.connected && (G.pad.throttle || 0) > 0) throttleAmount = G.pad.throttle;
   let brakeAmount = brakeHeld ? 1 : 0;
   if (G.pad && G.pad.connected && (G.pad.brake || 0) > 0) brakeAmount = G.pad.brake;
   let shiftHeld = kbHeld('velocityLock');
   let isDrifting = kbHeld('drift');
+  // Autopilot: while active the car drives itself along the track toward a look-ahead
+  // point, overriding steering and throttle (you can still be hit — it just steers).
+  // It eases off on tight corners so it holds the line instead of flying off.
+  if ((me.autopilot || 0) > 0) {
+    me.autopilot = Math.max(0, me.autopilot - dt);
+    const apSp = G.track && G.track.spline;
+    if (apSp && apSp.length > 2) {
+      const apN = apSp.length;
+      const apI0 = pointOnTrack(me.x, me.y, apSp).idx % apN;
+      const apLook = Math.max(4, Math.round(apN * 0.03));
+      const apTgt = apSp[(apI0 + apLook) % apN];
+      const apDesired = Math.atan2(apTgt.y - me.y, apTgt.x - me.x);
+      const apErr = angleDiff(me.angle, apDesired);
+      steerInput = Math.max(-1, Math.min(1, apErr * 2.4));
+      const apCurv = Math.abs(angleDiff(_botTangentAt(apSp, apI0), _botTangentAt(apSp, apI0 + apLook)));
+      throttleAmount = apCurv > 0.5 ? 0.55 : 1;
+      throttleHeld = 1;
+      brakeAmount = 0;
+      shiftHeld = false;
+      isDrifting = false;
+    }
+  }
   // Baller Ball: a hit disables control — inputs go dead but momentum carries you.
   let noControlActive = false;
   if ((me.noControl || 0) > 0) {
@@ -8462,6 +8610,7 @@ function updateMyPlayer(dt) {
 
   let nx = me.x + me.vx * dt;
   let ny = me.y + me.vy * dt;
+  const _gateFromX = me.x, _gateFromY = me.y; // frame-start position for gate crossing
 
   // ── Layer fall physics ─────────────────────────────────────────────────────
   // Unsupported layers fall with acceleration-like behavior.
@@ -8497,6 +8646,7 @@ function updateMyPlayer(dt) {
     while (me.layerFallProgress >= 1) {
       me.layer--;
       me.layerFallProgress -= 1;
+      if (me.layer <= 0) { me.layer = 0; me.layerFallProgress = 0; me.layerFallSpeed = 0; me.airTime = 0; break; }
     }
   }
 
@@ -8637,8 +8787,16 @@ function updateMyPlayer(dt) {
         const toward = signed >= 0 ? -1 : 1;
         me.vx += nxv * toward * force * dt;
         me.vy += nyv * toward * force * dt;
+      } else if ((me.layer || 0) > 0) {
+        // Elevated deck with no wall on this side: there's nothing holding the car on.
+        // It slides off the edge (NO push-back toward centre) and the layer-fall physics
+        // above drops it a deck at a time. Only a gentle slide-scrub so momentum carries
+        // it clear of the deck footprint instead of being nudged back onto the deck.
+        const slide = Math.max(0.9, 1 - 0.2 * dt);
+        me.vx *= slide;
+        me.vy *= slide;
       } else {
-        // Default track edge (no painted wall): grind/push back toward centre.
+        // Default track edge on the ground (no painted wall): grind/push back toward centre.
         const force = 120;
         const toward = signed >= 0 ? -1 : 1;
         me.vx += nxv * toward * force * dt;
@@ -8651,7 +8809,10 @@ function updateMyPlayer(dt) {
       me._wallContact = false;
     }
 
-    if ((mode === 'default' || mode === 'bouncy') && !((me.inflate || 0) > 0)) {
+    // On an elevated deck an unwalled edge is an open drop — keep the car's momentum so
+    // it slides clear of the deck and falls, instead of scrubbing it to a halt on the lip.
+    const elevatedOpenEdge = (me.layer || 0) > 0 && mode === 'default';
+    if ((mode === 'default' || mode === 'bouncy') && !elevatedOpenEdge && !((me.inflate || 0) > 0)) {
       // Drifters keep more speed on dirt/off-track than other ships.
       const drifterDirt = me.carType === 'drifter';
       const heavySlow = drifterDirt ? CAR_TUNING.offTrackHeavySlowDrifter : CAR_TUNING.offTrackHeavySlow;
@@ -8707,13 +8868,13 @@ function updateMyPlayer(dt) {
         continue;
       }
       if (obs.type === 'boost_pad' && d < hitR) {
-        // Launch strip: hard shove along the pad's arrow plus a short nitro
-        // window so the flame/vignette kick in.
+        // Booster strip: no solid collision — you drive straight through it. It shoves
+        // you along the pad's arrow, and instead of a nitro flame it fattens your
+        // trail for a second.
         const dir = ((obs.rot || 0) * Math.PI) / 180;
         me.vx += Math.cos(dir) * 620 * speedScale * dt;
         me.vy += Math.sin(dir) * 620 * speedScale * dt;
-        me.boosting = Math.max(me.boosting || 0, 0.55);
-        if (Math.random() < 0.4) spawnFxBurst(me.x, me.y, me.layer || 0, 'sparks', Math.cos(dir), Math.sin(dir));
+        me.trailBoost = Math.max(me.trailBoost || 0, 1);
         continue;
       }
       if (obs.type === 'repair_pad' && d < hitR) {
@@ -8725,7 +8886,8 @@ function updateMyPlayer(dt) {
       }
       if (d < hitR) {
         if (me.shielded) {
-          me.shielded = false;
+          // Shield is active: smash the obstacle aside and take no damage. It is NOT
+          // consumed here — it blocks every hit for the whole shield duration.
           disableObstacle(oi, 10, true);
         } else {
           if (obs.type === 'snow_pile') {
@@ -8953,6 +9115,9 @@ function updateMyPlayer(dt) {
     });
   }
   if (me.ghostMode > 0) me.ghostMode -= dt;
+  if (me.trailBoost > 0) { me.trailBoost -= dt; if (me.trailBoost < 0) me.trailBoost = 0; }
+  if (me.shieldTime > 0) { me.shieldTime -= dt; if (me.shieldTime <= 0) { me.shieldTime = 0; me.shielded = false; } }
+  else me.shielded = false;
 
   const fwdNowX = Math.cos(me.angle), fwdNowY = Math.sin(me.angle);
   const rightNowX = -fwdNowY, rightNowY = fwdNowX;
@@ -9005,6 +9170,8 @@ function updateMyPlayer(dt) {
   }
 
   me.x = nx; me.y = ny;
+  // Portal gates: if we just drove across one, teleport to its linked partner.
+  if (G.track && G.track.gates && G.track.gates.length) tryGateTeleport(me, _gateFromX, _gateFromY, dt);
 
   // Lap clock (only ticks while the race is live, so it's pause-immune),
   // top-speed stat and best-lap ghost recording.
@@ -9013,26 +9180,32 @@ function updateMyPlayer(dt) {
   if (!me.finished) ghostRecordSample(me);
 
   // Ordered checkpoint gates (custom maps): must pass in sequence to validate lap.
+  // Gates sharing a non-zero `link` id form an "any-of" group (the alternative gates
+  // on a split) — crossing EITHER one clears the whole group (see checkpointGroupEnd).
   if (G.track && G.track.checkpoints && G.track.checkpoints.length) {
+    const cps = G.track.checkpoints;
     if (me.nextCheckpoint == null) me.nextCheckpoint = 0;
-    if (me.checkpointsDoneThisLap == null) me.checkpointsDoneThisLap = (me.nextCheckpoint >= G.track.checkpoints.length);
-    if (me.nextCheckpoint < G.track.checkpoints.length) {
-      const cp = G.track.checkpoints[me.nextCheckpoint];
-      if (cp && (me.layer || 0) === (cp.layer || 0)) {
+    if (me.checkpointsDoneThisLap == null) me.checkpointsDoneThisLap = (me.nextCheckpoint >= cps.length);
+    if (me.nextCheckpoint < cps.length) {
+      const groupEnd = checkpointGroupEnd(cps, me.nextCheckpoint);
+      let crossedIdx = -1;
+      for (let ci = me.nextCheckpoint; ci < groupEnd; ci++) {
+        const cp = cps[ci];
+        if (!cp || (me.layer || 0) !== (cp.layer || 0)) continue;
         const sidePrev = (ox - cp.x) * cp.tx + (oy - cp.y) * cp.ty;
         const sideNow  = (me.x - cp.x) * cp.tx + (me.y - cp.y) * cp.ty;
         const lateral  = Math.abs((me.x - cp.x) * cp.nx + (me.y - cp.y) * cp.ny);
+        // Gates validate from either direction — crossing the gate plane within its
+        // width counts regardless of travel direction.
         const crossed = (sidePrev === 0 || sideNow === 0 || sidePrev * sideNow < 0);
-        // Checkpoints validate from either direction — crossing the gate plane
-        // within its width counts regardless of which way you're travelling.
-        if (crossed && lateral <= cp.halfW * 1.3) {
-          me.nextCheckpoint++;
-          me.lastCheckpointTime = G.raceStartTime ? (Date.now() - G.raceStartTime) : 0;
-          spawnCheckpointConfetti(me.nextCheckpoint - 1, G.track.checkpoints.length);
-          if (me.nextCheckpoint >= G.track.checkpoints.length) {
-            me.checkpointsDoneThisLap = true;
-          }
-        }
+        if (crossed && lateral <= cp.halfW * 1.3) { crossedIdx = ci; break; }
+      }
+      if (crossedIdx >= 0) {
+        me.lastCpCrossed = crossedIdx;
+        me.nextCheckpoint = groupEnd;
+        me.lastCheckpointTime = G.raceStartTime ? (Date.now() - G.raceStartTime) : 0;
+        spawnCheckpointConfetti(crossedIdx, cps.length);
+        if (me.nextCheckpoint >= cps.length) me.checkpointsDoneThisLap = true;
       }
     }
   }
@@ -9127,6 +9300,7 @@ function updateMyPlayer(dt) {
 
     me.lap++;
     me.nextCheckpoint = 0;
+    me.lastCpCrossed = null;
     me.checkpointsDoneThisLap = false;
     me._lapArmed = false; // must go around the track again before the line counts
     me.lapProgress = prog;
@@ -9385,6 +9559,10 @@ function applyContinuousDamage(player, hp, cause) {
 
 function applyDamage(player, rawDamage, cause) {
   if (!player || player.finished || player.deathRespawn > 0 || player.invuln > 0) return false;
+  // Active shield blocks ALL incoming hits for its full duration (never consumed by a
+  // single hit, so it can no longer be an insta-kill trap). Self-inflicted costs (e.g.
+  // the Needle deathray) subtract health directly and never route through here.
+  if (player.shielded) return false;
   const dmg = Math.max(1, rawDamage || 0);
   // Rotor: physical hits chip the front propeller; enough damage breaks it.
   if (player.carType === 'rotor' && !player.propBroken && cause !== 'overcharge' && cause !== 'arc' && cause !== 'drain' && cause !== 'deathray') {
@@ -9773,6 +9951,20 @@ function updateFxEmitters(dt) {
       }
       // Continuously retract the tail so the ribbon fades out behind and vanishes
       // when idle; while moving fast the head is refilled faster than it drains.
+      p._trailDecay = (p._trailDecay || 0) + dt;
+      while (p._trailDecay >= 0.018) {
+        p._trailDecay -= 0.018;
+        if (p._trail.length > 0 && (spd <= 12 || p._trail.length > 14)) p._trail.shift();
+      }
+    } else if ((p.trailBoost || 0) > 0) {
+      // Booster: even racers without a custom trail get a brief ribbon while boosted.
+      p._trail = p._trail || [];
+      if (spd > 12) {
+        const last = p._trail[p._trail.length - 1];
+        if (!last || Math.hypot(rearX - last.x, rearY - last.y) > 6) {
+          p._trail.push({ x: rearX, y: rearY, l: p.layer || 0 });
+        }
+      }
       p._trailDecay = (p._trailDecay || 0) + dt;
       while (p._trailDecay >= 0.018) {
         p._trailDecay -= 0.018;
@@ -10290,6 +10482,8 @@ function setBotDifficulty(v) {
 function botRollItem(b) {
   const chosen = POWERUPS_LIST[Math.floor(Math.random() * POWERUPS_LIST.length)];
   let id = chosen.id;
+  // Autopilot is a no-op for bots (they already drive the line) — swap it for boost.
+  if (id === 'autopilot') id = 'boost';
   const uniq = CAR_UNIQUE_POWERUPS[b.carType];
   if (uniq && Math.random() < 0.25) id = uniq.id;
   return id;
@@ -10377,7 +10571,7 @@ function botUseItem(b) {
   if (!item) return;
   playItemUse(item);
   if (item === 'boost') { b.boosting = 2.6; return; }
-  if (item === 'shield') { b.shielded = true; return; }
+  if (item === 'shield') { b.shieldTime = CAR_TUNING.shieldDuration; b.shielded = true; return; }
   if (item === 'ghost') { b.ghostMode = 4; return; }
   if (item === 'repair') {
     b.health = Math.min(b.maxHealth || CAR_TUNING.baseHealth, (b.health || 0) + 35);
@@ -10528,7 +10722,7 @@ function botCollideObstacles(b) {
     if (obs.type === 'ice_track' || obs.type === 'flowing_water') continue; // surfaces, not walls
     const hitR = (obs.r || 12) * (obs.scale || 1) + CAR_TUNING.botObstaclePad;
     if (dist(b.x, b.y, obs.x, obs.y) >= hitR) continue;
-    if (b.shielded) { b.shielded = false; disableObstacle(oi, 10, true); continue; }
+    if (b.shielded) { disableObstacle(oi, 10, true); continue; }
     if (obs.type === 'cone') {
       obs.vx = (obs.vx || 0) + (obs.x - b.x) * 3 + (b.vx || 0) * 0.3;
       obs.vy = (obs.vy || 0) + (obs.y - b.y) * 3 + (b.vy || 0) * 0.3;
@@ -10616,6 +10810,8 @@ function updateBots(dt) {
     if ((b.arcBurst || 0) > 0) b.arcBurst = Math.max(0, b.arcBurst - dt);
     if ((b.ghoulSlow || 0) > 0) b.ghoulSlow = Math.max(0, b.ghoulSlow - dt);
     if ((b.noControl || 0) > 0) b.noControl = Math.max(0, b.noControl - dt);
+    if ((b.shieldTime || 0) > 0) { b.shieldTime = Math.max(0, b.shieldTime - dt); b.shielded = b.shieldTime > 0; }
+    else if (b.shielded) b.shielded = false;
     if (b.carType === 'coil') {
       // Bots can't hug walls to charge, so they trickle a battery to power the arc storm.
       b.battery = Math.min(CAR_TUNING.coilBatteryMax, (b.battery || 0) + 14 * dt);
@@ -10734,11 +10930,18 @@ function updateBots(dt) {
     }
 
     // Checkpoints (display only — bots follow the track, so proximity suffices).
+    // Honour linked gates: passing near ANY gate in the current link group clears it.
     if (G.track.checkpoints && G.track.checkpoints.length && (b.nextCheckpoint || 0) < G.track.checkpoints.length) {
-      const cp = G.track.checkpoints[b.nextCheckpoint || 0];
-      if (cp && dist(b.x, b.y, cp.x, cp.y) < (cp.halfW || TRACK_W) * 1.5) {
-        b.nextCheckpoint = (b.nextCheckpoint || 0) + 1;
-        b.lastCheckpointTime = G.raceStartTime ? (Date.now() - G.raceStartTime) : 0;
+      const cps = G.track.checkpoints;
+      const start = b.nextCheckpoint || 0;
+      const groupEnd = checkpointGroupEnd(cps, start);
+      for (let ci = start; ci < groupEnd; ci++) {
+        const cp = cps[ci];
+        if (cp && dist(b.x, b.y, cp.x, cp.y) < (cp.halfW || TRACK_W) * 1.5) {
+          b.nextCheckpoint = groupEnd;
+          b.lastCheckpointTime = G.raceStartTime ? (Date.now() - G.raceStartTime) : 0;
+          break;
+        }
       }
     }
     // Power-ups: bots physically grab item boxes they pass, hold them briefly, then use
@@ -11218,6 +11421,7 @@ function render(dt) {
     drawForkWalls(ctx, layer);
     drawObstacles(ctx, layer);
     drawItems(ctx, layer);
+    drawGates(ctx, layer);
     drawOilSlicks(ctx, layer);
     drawMines(ctx, layer);
     drawImpactParticles(ctx, layer);
@@ -11415,7 +11619,7 @@ function drawCheckpoints(ctx, layerToDraw) {
     ctx.font = 'bold 11px system-ui';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.fillText(`CP${i+1}`, cp.x, cp.y - 8);
+    ctx.fillText(cp.link ? `CP${i+1}·L${cp.link}` : `CP${i+1}`, cp.x, cp.y - 8);
   });
 }
 
@@ -11561,7 +11765,10 @@ function overLayerDeck(x, y, layer) {
   const t = G.track;
   if (!t) return true;
   if (t.driveSpline && t.driveFloor && t.driveSegs && t.driveSpline.length >= 2) {
-    const near = pointOnDriveSegments(x, y, (i, j) => (t.driveFloor[i] || 0) === layer && (t.driveFloor[j] || 0) === layer);
+    // A void sample is a hole, not a deck — exclude it so running off an elevated void
+    // reads as airborne (and falls) instead of falsely counting as still on the deck.
+    const dv = (Array.isArray(t.driveVoid) && t.driveVoid.length === t.driveSpline.length) ? t.driveVoid : null;
+    const near = pointOnDriveSegments(x, y, (i, j) => (t.driveFloor[i] || 0) === layer && (t.driveFloor[j] || 0) === layer && (!dv || (!dv[i] && !dv[j])));
     if (!Number.isFinite(near.dist)) return false;
     return near.dist <= (near.halfW || TRACK_W) + 70;
   }
@@ -12364,6 +12571,30 @@ function drawObstacles(ctx, layer) {
         ctx.lineTo(rr * 1.1, i * rr * 0.42);
         ctx.stroke();
       }
+    } else if (obs.type==='boost_pad') {
+      // Yellow symmetrical obtuse triangle — the wide flat base sits behind and the
+      // apex points the way it boosts you (obs.rot is the boost direction = +x here).
+      const s = Math.max(10, rr * 0.9);
+      ctx.fillStyle='#facc15';
+      ctx.beginPath();
+      ctx.moveTo(s * 0.8, 0);
+      ctx.lineTo(-s * 0.4, s * 1.4);
+      ctx.lineTo(-s * 0.4, -s * 1.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle='#eab308';
+      ctx.lineWidth=2;
+      ctx.stroke();
+    } else if (obs.type==='repair_pad') {
+      const s = Math.max(9, rr * 0.85);
+      ctx.fillStyle='#22c55e';
+      ctx.fillRect(-s, -s, s * 2, s * 2);
+      ctx.strokeStyle='#15803d';
+      ctx.lineWidth=2;
+      ctx.strokeRect(-s, -s, s * 2, s * 2);
+      ctx.fillStyle='#f0fdf4';
+      ctx.fillRect(-s * 0.6, -s * 0.18, s * 1.2, s * 0.36);
+      ctx.fillRect(-s * 0.18, -s * 0.6, s * 0.36, s * 1.2);
     } else {
       ctx.fillStyle='#f97316';
       ctx.beginPath();
@@ -12426,6 +12657,52 @@ function drawItems(ctx, layer) {
     ctx.textAlign='center';
     ctx.textBaseline='middle';
     ctx.fillText('?',0,0);
+    ctx.restore();
+  });
+}
+
+function drawGates(ctx, layer) {
+  const gs = G.track && G.track.gates;
+  if (!gs || !gs.length) return;
+  const t = Date.now() / 1000;
+  const palette = ['#38bdf8', '#f472b6', '#a3e635', '#fbbf24', '#c084fc', '#fb7185'];
+  gs.forEach(g => {
+    if ((g.layer || 0) !== layer) return;
+    const col = palette[((g.link || 1) - 1) % palette.length];
+    const hw = (g.w || TRACK_W) * 0.5;
+    const px = Math.cos(g.angle + Math.PI / 2), py = Math.sin(g.angle + Math.PI / 2);
+    const pulse = Math.sin(t * 3 + (g.link || 0)) * 0.25 + 0.7;
+    ctx.save();
+    // Doorway line (perpendicular to travel direction)
+    ctx.strokeStyle = col;
+    ctx.globalAlpha = pulse;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(g.x + px * hw, g.y + py * hw);
+    ctx.lineTo(g.x - px * hw, g.y - py * hw);
+    ctx.stroke();
+    // Swirl core
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    // Direction arrow (through-direction = g.angle)
+    const dx = Math.cos(g.angle), dy = Math.sin(g.angle);
+    ctx.strokeStyle = col;
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(g.x - dx * 10, g.y - dy * 10);
+    ctx.lineTo(g.x + dx * 16, g.y + dy * 16);
+    ctx.stroke();
+    const ax = g.x + dx * 16, ay = g.y + dy * 16;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax - dx * 8 - dy * 5, ay - dy * 8 + dx * 5);
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax - dx * 8 + dy * 5, ay - dy * 8 - dx * 5);
+    ctx.stroke();
     ctx.restore();
   });
 }
@@ -12993,18 +13270,23 @@ function drawPlayerTrails(ctx, layer) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   Object.values(G.players).forEach(p => {
-    if (!p || !p.trailColor) return;
+    if (!p) return;
+    const boosted = (p.trailBoost || 0) > 0;
+    if (!p.trailColor && !boosted) return;
     const pts = p._trail;
     if (!pts || pts.length < 2) return;
-    const rgb = hexToRgb(p.trailColor);
+    const rgb = p.trailColor ? hexToRgb(p.trailColor) : [250, 204, 21];
     if (!rgb) return;
+    // Boosting fattens the ribbon for a second (the booster-pad effect).
+    const widthMul = boosted ? 2.6 : 1;
+    const alphaMul = boosted ? 1.4 : 1;
     const n = pts.length;
     for (let i = 1; i < n; i++) {
       const a = pts[i - 1], b = pts[i];
       if ((b.l || 0) !== (layer || 0)) continue;
       const f = i / (n - 1);           // 0 at tail .. 1 at head (near ship)
-      ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(0.55 * f).toFixed(3)})`;
-      ctx.lineWidth = 1.5 + 8 * f;
+      ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${Math.min(1, 0.55 * f * alphaMul).toFixed(3)})`;
+      ctx.lineWidth = (1.5 + 8 * f) * widthMul;
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
@@ -13379,12 +13661,13 @@ function updateMissiles(dt) {
     }
     const vl = Math.hypot(m.vx, m.vy) || 1; m.vx = m.vx / vl * speed; m.vy = m.vy / vl * speed;
     m.x += m.vx * dt; m.y += m.vy * dt; m.angle = Math.atan2(m.vy, m.vx);
+    if (G.track.gates && G.track.gates.length) tryGateTeleport(m, m.x - m.vx * dt, m.y - m.vy * dt, dt);
     // Victim-authoritative impact: hits any rival this client simulates.
     for (const p of Object.values(G.players)) {
       if (p.id === m.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (m.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;
       if (dist(m.x, m.y, p.x, p.y) < 20 + T.missileRadius) {
-        if (p.id === G.myId && p.shielded) { p.shielded = false; }
+        if (p.id === G.myId && p.shielded) { /* shield deflects it — not consumed */ }
         else {
           applyDamage(p, (m.dmg || T.missileDamage) / Math.max(0.5, getCarTypeCfg(p.carType).weaponResist || 1), 'missile');
           if (p.isBot) { p.stun = Math.max(p.stun || 0, 1.1); p._speed = (p._speed || 0) * 0.3; }
@@ -13476,11 +13759,12 @@ function updateShells(dt) {
     if (bounceProjectileOffWall(s, T.shellRadius) && (s.bounceCount = (s.bounceCount || 0) + 1) > T.shellBounces) return false;
     const vl = Math.hypot(s.vx, s.vy) || 1; s.vx = s.vx / vl * speed; s.vy = s.vy / vl * speed;
     s.x += s.vx * dt; s.y += s.vy * dt; s.angle = Math.atan2(s.vy, s.vx);
+    if (G.track.gates && G.track.gates.length) tryGateTeleport(s, s.x - s.vx * dt, s.y - s.vy * dt, dt);
     for (const p of Object.values(G.players)) {
       if (p.id === s.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (s.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;
       if (dist(s.x, s.y, p.x, p.y) < 20 + T.shellRadius) {
-        if (p.id === G.myId && p.shielded) { p.shielded = false; }
+        if (p.id === G.myId && p.shielded) { /* shield deflects it — not consumed */ }
         else {
           applyDamage(p, T.shellDamage / Math.max(0.5, getCarTypeCfg(p.carType).crashResist || 1), 'shell');
           if (p.isBot) { p.stun = Math.max(p.stun || 0, 0.6); p._speed = (p._speed || 0) * 0.5; }
@@ -13507,11 +13791,12 @@ function updateBalls(dt) {
     if (bounceProjectileOffWall(b, T.ballRadius) && (b.bounceCount = (b.bounceCount || 0) + 1) > T.ballBounces) return false;
     const vl = Math.hypot(b.vx, b.vy) || 1; b.vx = b.vx / vl * speed; b.vy = b.vy / vl * speed;
     b.x += b.vx * dt; b.y += b.vy * dt;
+    if (G.track.gates && G.track.gates.length) tryGateTeleport(b, b.x - b.vx * dt, b.y - b.vy * dt, dt);
     for (const p of Object.values(G.players)) {
       if (p.id === b.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (b.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;
       if (dist(b.x, b.y, p.x, p.y) < 20 + T.ballRadius) {
-        if (p.id === G.myId && p.shielded) { p.shielded = false; }
+        if (p.id === G.myId && p.shielded) { /* shield deflects it — not consumed */ }
         else {
           applyDamage(p, T.ballDamage / Math.max(0.5, getCarTypeCfg(p.carType).weaponResist || 1), 'ball');
           p.noControl = Math.max(p.noControl || 0, T.ballControlLossSec);
@@ -13533,12 +13818,13 @@ function updateBullets(dt) {
   G.bullets = G.bullets.filter(b => {
     if (b.layer === undefined) b.layer = 0;
     b.x += b.vx * dt; b.y += b.vy * dt;
+    if (G.track.gates && G.track.gates.length) tryGateTeleport(b, b.x - b.vx * dt, b.y - b.vy * dt, dt);
     if (bounceProjectileOffWall(b, T.bulletRadius) && (b.bounceCount = (b.bounceCount || 0) + 1) > T.bulletBounces) return false;
     for (const p of Object.values(G.players)) {
       if (p.id === b.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (b.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;   // victim-authoritative
       if (dist(b.x, b.y, p.x, p.y) < 18 + T.bulletRadius) {
-        if (p.id === G.myId && p.shielded) { p.shielded = false; }
+        if (p.id === G.myId && p.shielded) { /* shield deflects it — not consumed */ }
         else {
           applyDamage(p, (b.dmg || T.bulletDamage) / Math.max(0.5, getCarTypeCfg(p.carType).weaponResist || 1), 'bullet');
           if (p.isBot) p.stun = Math.max(p.stun || 0, 0.2);
@@ -14016,7 +14302,36 @@ function updateHud() {
   updateLeaderboard(me);
   updateUpgradePauseOverlay();
   updateSpectateBar();
+  updateEffectTimers(me);
 }
+
+// Active-effect countdown chips (top-left of the play area): show remaining time on
+// timed power-ups/abilities as an icon + shrinking bar + seconds readout.
+function updateEffectTimers(me) {
+  const host = document.getElementById('effect-timers');
+  if (!host) return;
+  const specs = [
+    { key: 'boosting',   id: 'boost',     name: 'NITRO',     color: '#fbbf24', max: 4.5, emoji: '⚡' },
+    { key: 'shieldTime', id: 'shield',    name: 'SHIELD',    color: '#06b6d4', max: CAR_TUNING.shieldDuration, emoji: '🛡️' },
+    { key: 'autopilot',  id: 'autopilot', name: 'AUTOPILOT', color: '#38bdf8', max: CAR_TUNING.autopilotDuration, emoji: '🤖' },
+    { key: 'ghostMode',  id: 'ghost',     name: 'GHOST',     color: '#c084fc', max: 4, emoji: '👻' },
+  ];
+  let html = '';
+  for (const s of specs) {
+    const v = me ? (me[s.key] || 0) : 0;
+    if (v <= 0.05) continue;
+    const frac = Math.max(0, Math.min(1, v / s.max));
+    const icon = iconSvg(s.id, 14) || s.emoji;
+    html += `<div class="fx-timer" style="border-left-color:${s.color}">`
+      + `<span style="color:${s.color};display:inline-flex;align-items:center">${icon}</span>`
+      + `<span>${s.name}</span>`
+      + `<span class="fx-bar"><i style="width:${(frac * 100).toFixed(0)}%;background:${s.color}"></i></span>`
+      + `<span style="color:${s.color};min-width:26px;text-align:right">${v.toFixed(1)}s</span>`
+      + `</div>`;
+  }
+  if (host.innerHTML !== html) host.innerHTML = html;
+}
+
 
 function formatRaceClock(ms) {
   if (!ms || ms < 0) ms = 0;
@@ -14512,7 +14827,7 @@ document.getElementById('play-again-btn').onclick = ()=>{
     // reset and relaunch — preserve custom map if one is loaded
     const seed = Date.now()%100000;
     G.track = G.customMap
-      ? generateTrackFromWaypoints(G.customMap.waypoints, seed, G.customMap.obstacles || [], G.customMap.powerups || [], G.customMap.wallRegions || [])
+      ? generateTrackFromWaypoints(G.customMap.waypoints, seed, G.customMap.obstacles || [], G.customMap.powerups || [], G.customMap.wallRegions || [], G.customMap.gates || [])
       : generateTrack(seed);
     if (G.customMap) recordTrackHistory(G.customMap);
     Object.values(G.players).forEach((p,i)=>{
@@ -14520,7 +14835,7 @@ document.getElementById('play-again-btn').onclick = ()=>{
       p.x=sp.x;p.y=sp.y;p.angle=sp.angle;
       p.lap=1;p.lapProgress=0;p.speed=0;p.vx=0;p.vy=0;
       p.maxHealth=carMaxHealth(p.carType);p.health=p.maxHealth;p.deathRespawn=0;p.invuln=0;
-      p.finished=false;p.stun=0;p.boosting=0;p.ghostMode=0;p.shielded=false;p.oilSlick=0;
+      p.finished=false;p.stun=0;p.boosting=0;p.ghostMode=0;p.shielded=false;p.shieldTime=0;p.autopilot=0;p.trailBoost=0;p.oilSlick=0;
       p.heldItem=null;p.upgrades=[];
       p.drifting=false; p.driftTrailTimer=0;
       p.driftBoostStack=0; p.driftShakePhase=0;
@@ -14666,6 +14981,10 @@ const ME = {
   obstacles: [],
   powerups: [],
   wallRegions: [],
+  gates: [],          // portal gates: [{x,y,angle,link,w,layer}]
+  gateAngle: 0,       // through-direction (radians) for next placed gate
+  gateLink: 1,        // link id for next placed gate (pairs share a link)
+  gateW: TRACK_W,     // doorway width/length for next placed gate
   trackModel: 'v1',   // 'v1' = classic single loop, 'v2' = branching splits
   branches: [],       // V2 only: [{ id, fromIdx, toIdx, nodes:[...], parent }]
   selectedBranch: null,   // V2: owner main-node index whose fork node is selected (null = main loop)
@@ -14708,7 +15027,7 @@ function meRebuildSpline() {
   }
 }
 
-function meDefaultNode(x,y){ return {x,y,type:'road',width:TRACK_W,checkpoint:false,slope:false,slopeDir:0,supportLayer:0}; }
+function meDefaultNode(x,y){ return {x,y,type:'road',width:TRACK_W,checkpoint:false,slope:false,slopeDir:0,supportLayer:0,link:0}; }
 
 // ---- V2 branching helpers ----
 let _meBranchSeq = 1;
@@ -14749,6 +15068,7 @@ function meNormalizeEditorNode(p){
     x:+p.x, y:+p.y,
     type:['road','bridge','bridge3','void','ice','river'].includes(p.type)?p.type:'road',
     checkpoint:!!p.checkpoint,
+    link: Number.isFinite(+p.link) ? Math.max(0, Math.round(+p.link)) : 0,
     slope:!!p.slope,
     slopeDir:Number.isFinite(+p.slopeDir) ? +p.slopeDir : 0,
     supportLayer: Number.isFinite(+p.supportLayer) ? Math.round(+p.supportLayer) : 0,
@@ -14977,6 +15297,16 @@ function meHitTestPowerup(cx, cy) {
   return -1;
 }
 
+function meHitTestGate(cx, cy) {
+  for (let i = ME.gates.length - 1; i >= 0; i--) {
+    const g = ME.gates[i];
+    const sx = meWtoX(g.x), sy = meWtoY(g.y);
+    const rr = Math.max(8, 14 * ME.zoom);
+    if ((cx - sx) ** 2 + (cy - sy) ** 2 <= rr * rr) return i;
+  }
+  return -1;
+}
+
 function meUpsertWallRegion(seg, mode, side, force, bounce, branch) {
   if (seg == null || seg < 0) return;
   const sameBranch = (w) => branch
@@ -15023,9 +15353,18 @@ function meRefreshNodeSettings() {
   lbl.textContent = branchSel ? `Fork node · on node ${ME.selectedBranch} (${ME.selectedBranchPath === 0 ? 'left' : 'right'})` : `Node: ${ME.selectedIdx}`;
   wr.disabled=false; wn.disabled=false;
   wr.value=String(w); wn.value=String(w);
-  // Checkpoints are lap gates — main loop only (a fork you didn't take would block the
-  // lap). Slope + support-layer apply to fork nodes too, so forks get real elevation.
-  if (cpBtn) { cpBtn.classList.toggle('active', !branchSel && !!n.checkpoint); cpBtn.disabled = branchSel; }
+  // Checkpoints work on main-loop AND fork nodes: put a gate on each fork of a split
+  // and give both the same Link group so crossing EITHER one validates the lap. Slope +
+  // support-layer apply to fork nodes too, so forks get real elevation.
+  if (cpBtn) { cpBtn.classList.toggle('active', !!n.checkpoint); cpBtn.disabled = false; }
+  {
+    const cpLinkBtn = document.getElementById('me-node-cp-link');
+    if (cpLinkBtn) {
+      cpLinkBtn.disabled = !n.checkpoint;
+      cpLinkBtn.classList.toggle('active', !!n.checkpoint && !!n.link);
+      cpLinkBtn.textContent = 'Link: ' + (n.checkpoint && n.link ? n.link : '\u2013');
+    }
+  }
   if (slopeBtn) { slopeBtn.classList.toggle('active', !!n.slope); slopeBtn.disabled = false; }
   if (slopeAng) {
     const deg = Math.round((((n.slopeDir || 0) * 180 / Math.PI) % 360 + 360) % 360);
@@ -15062,8 +15401,17 @@ function meSetSelectedWidth(width){
 }
 
 function meToggleSelectedCheckpoint(){
-  if(ME.selectedIdx<0||ME.selectedIdx>=ME.wpts.length) return;
-  ME.wpts[ME.selectedIdx].checkpoint = !ME.wpts[ME.selectedIdx].checkpoint;
+  const n = meActiveNode(); if(!n) return;
+  n.checkpoint = !n.checkpoint;
+  if (!n.checkpoint) n.link = 0;
+  meRefreshNodeSettings();
+  meDraw();
+}
+// Cycle the selected checkpoint's link group (0 = unlinked, 1..4 = a split's shared
+// group). Two gates on opposite forks with the same link only need ONE crossed.
+function meCycleSelectedCpLink(){
+  const n = meActiveNode(); if(!n || !n.checkpoint) return;
+  n.link = ((Math.max(0, Math.round(+n.link || 0))) + 1) % 5;
   meRefreshNodeSettings();
   meDraw();
 }
@@ -15273,7 +15621,7 @@ function meDraw() {
       ctx.beginPath();ctx.arc(sx,sy,r+9,0,Math.PI*2);
       ctx.strokeStyle='rgba(251,191,36,0.95)';ctx.lineWidth=2;ctx.stroke();
       ctx.fillStyle='#fbbf24';ctx.font='bold 8px system-ui';
-      ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText('CP',sx,sy+r+3);
+      ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText(pt.link?`CP\u00b7L${pt.link}`:'CP',sx,sy+r+3);
     }
     if(pt.slope){
       const ang = Number.isFinite(pt.slopeDir) ? pt.slopeDir : 0;
@@ -15351,6 +15699,13 @@ function meDraw() {
           ctx.strokeStyle = 'rgba(10,10,15,0.95)';
           ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(bx, by); ctx.stroke();
         }
+        if (nd.checkpoint) {
+          ctx.beginPath(); ctx.arc(sx, sy, r + 9, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(251,191,36,0.95)'; ctx.lineWidth = 2; ctx.stroke();
+          ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 8px system-ui';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+          ctx.fillText(nd.link ? `CP\u00b7L${nd.link}` : 'CP', sx, sy + r + 3);
+        }
         if (ME.selectedBranch === i && ME.selectedBranchPath === pi && ME.selectedBranchNode === k) {
           ctx.beginPath(); ctx.arc(sx, sy, r + 5, 0, Math.PI * 2);
           ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2; ctx.stroke();
@@ -15402,6 +15757,26 @@ function meDraw() {
       ctx.beginPath();
       ctx.arc(0, 0, rr, 0, Math.PI * 2);
       ctx.fill();
+    } else if (o.type === 'boost_pad') {
+      const s = Math.max(8, rr * 0.9);
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.moveTo(s * 0.8, 0);
+      ctx.lineTo(-s * 0.4, s * 1.4);
+      ctx.lineTo(-s * 0.4, -s * 1.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#eab308';
+      ctx.stroke();
+    } else if (o.type === 'repair_pad') {
+      const s = Math.max(7, rr * 0.85);
+      ctx.fillStyle = '#22c55e';
+      ctx.fillRect(-s, -s, s * 2, s * 2);
+      ctx.strokeStyle = '#15803d';
+      ctx.strokeRect(-s, -s, s * 2, s * 2);
+      ctx.fillStyle = '#f0fdf4';
+      ctx.fillRect(-s * 0.6, -s * 0.18, s * 1.2, s * 0.36);
+      ctx.fillRect(-s * 0.18, -s * 0.6, s * 0.36, s * 1.2);
     } else if (o.type === 'wall') {
       ctx.fillStyle = '#4b5563';
       ctx.beginPath();
@@ -15445,6 +15820,43 @@ function meDraw() {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('L' + (Math.round(p.layer || 0)), sx, sy - rr - 8);
+  });
+
+  // Portal gates
+  const gatePalette = ['#38bdf8', '#f472b6', '#a3e635', '#fbbf24', '#c084fc', '#fb7185'];
+  ME.gates.forEach(g => {
+    const sx = meWtoX(g.x), sy = meWtoY(g.y);
+    const col = gatePalette[((g.link || 1) - 1) % gatePalette.length];
+    const hw = Math.max(10, (g.w || TRACK_W) * 0.5 * ME.zoom);
+    const px = Math.cos((g.angle || 0) + Math.PI / 2), py = Math.sin((g.angle || 0) + Math.PI / 2);
+    const dx = Math.cos(g.angle || 0), dy = Math.sin(g.angle || 0);
+    ctx.save();
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(sx + px * hw, sy + py * hw);
+    ctx.lineTo(sx - px * hw, sy - py * hw);
+    ctx.stroke();
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+    ctx.fill();
+    // through-direction arrow
+    const ax = sx + dx * 18, ay = sy + dy * 18;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ax, ay);
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax - dx * 7 - dy * 4, ay - dy * 7 + dx * 4);
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax - dx * 7 + dy * 4, ay - dy * 7 - dx * 4);
+    ctx.stroke();
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('#' + (g.link || 1), sx, sy - hw - 8);
+    ctx.restore();
   });
 
   // Wall-painted segment overlays
@@ -15568,7 +15980,13 @@ function meInitEditor(){
   const modeWallBtn = document.getElementById('me-mode-wall');
   const modeObstacleBtn = document.getElementById('me-mode-obstacle');
   const modePowerupBtn = document.getElementById('me-mode-powerup');
+  const modeGateBtn = document.getElementById('me-mode-gate');
   const modeEraseBtn = document.getElementById('me-mode-erase');
+  const gateLinkInp = document.getElementById('me-gate-link');
+  const gateAngleRange = document.getElementById('me-gate-angle-range');
+  const gateAngleNum = document.getElementById('me-gate-angle');
+  const gateWidthRange = document.getElementById('me-gate-width-range');
+  const gateWidthNum = document.getElementById('me-gate-width');
   const wallModeSel = document.getElementById('me-wall-mode');
   const wallSideSel = document.getElementById('me-wall-side');
   const wallForceInp = document.getElementById('me-wall-force');
@@ -15586,20 +16004,24 @@ function meInitEditor(){
     modeWallBtn.classList.toggle('active', ME.mode === 'wall');
     modeObstacleBtn.classList.toggle('active', ME.mode === 'obstacle');
     modePowerupBtn.classList.toggle('active', ME.mode === 'powerup');
+    if (modeGateBtn) modeGateBtn.classList.toggle('active', ME.mode === 'gate');
     modeEraseBtn.classList.toggle('active', ME.mode === 'erase');
     // Contextual toolbar: only the active mode's controls are visible.
     const grpNode = document.getElementById('me-grp-node');
     const grpWall = document.getElementById('me-grp-wall');
     const grpObs  = document.getElementById('me-grp-obstacle');
+    const grpGate = document.getElementById('me-grp-gate');
     if (grpNode) grpNode.hidden = ME.mode !== 'waypoint';
     if (grpWall) grpWall.hidden = ME.mode !== 'wall';
     if (grpObs)  grpObs.hidden  = !(ME.mode === 'obstacle' || ME.mode === 'powerup');
+    if (grpGate) grpGate.hidden = ME.mode !== 'gate';
     const hint = document.getElementById('me-mode-hint');
     if (hint) hint.textContent = {
       waypoint: 'Click to add track nodes · drag to move · click a node to edit its type / width / layer.',
       wall:     'Click a track edge segment to paint the selected wall behavior · right-click removes it.',
       obstacle: 'Click the track to place — the layer is auto-detected from the nearest node. Right-click erases.',
       powerup:  'Click the track to drop an item box — layer auto-detected. Right-click erases.',
+      gate:     'Click to drop a portal gate. Two gates with the same Link teleport between each other; different angles rotate travel. Right-click erases.',
       erase:    'Click any placed obstacle or item box to remove it.',
     }[ME.mode] || '';
   }
@@ -15612,6 +16034,8 @@ function meInitEditor(){
     btn.addEventListener('click',()=>meSetSelectedType(btn.dataset.type));
   });
   document.getElementById('me-node-checkpoint').onclick = meToggleSelectedCheckpoint;
+  { const _cpLinkBtn = document.getElementById('me-node-cp-link');
+    if (_cpLinkBtn) _cpLinkBtn.onclick = meCycleSelectedCpLink; }
   const splitBtnEl = document.getElementById('me-node-split');
   if (splitBtnEl) splitBtnEl.onclick = meSplitSelected;
   const wr=document.getElementById('me-node-width-range');
@@ -15622,6 +16046,7 @@ function meInitEditor(){
   modeWallBtn.onclick=()=>{ ME.mode='wall'; refreshModeButtons(); };
   modeObstacleBtn.onclick=()=>{ ME.mode='obstacle'; refreshModeButtons(); };
   modePowerupBtn.onclick=()=>{ ME.mode='powerup'; refreshModeButtons(); };
+  if (modeGateBtn) modeGateBtn.onclick=()=>{ ME.mode='gate'; refreshModeButtons(); };
   modeEraseBtn.onclick=()=>{ ME.mode='erase'; refreshModeButtons(); };
   document.getElementById('me-node-slope').onclick = meToggleSelectedSlope;
   document.getElementById('me-node-slope-rot-left').onclick = ()=>meRotateSelectedSlope(-15);
@@ -15645,6 +16070,11 @@ function meInitEditor(){
   obstacleRotNum.oninput=()=>{ obstacleRotRange.value = obstacleRotNum.value; ME.obstacleRot = parseFloat(obstacleRotNum.value) || 0; };
   obstacleScaleRange.oninput=()=>{ obstacleScaleNum.value = obstacleScaleRange.value; ME.obstacleScale = Math.max(0.4, Math.min(2.2, (parseFloat(obstacleScaleRange.value) || 100) / 100)); };
   obstacleScaleNum.oninput=()=>{ obstacleScaleRange.value = obstacleScaleNum.value; ME.obstacleScale = Math.max(0.4, Math.min(2.2, (parseFloat(obstacleScaleNum.value) || 100) / 100)); };
+  if (gateLinkInp) gateLinkInp.oninput=()=>{ ME.gateLink = Math.max(1, Math.min(6, Math.round(+gateLinkInp.value) || 1)); };
+  if (gateAngleRange) gateAngleRange.oninput=()=>{ gateAngleNum.value = gateAngleRange.value; ME.gateAngle = (parseFloat(gateAngleRange.value) || 0) * Math.PI / 180; };
+  if (gateAngleNum) gateAngleNum.oninput=()=>{ gateAngleRange.value = gateAngleNum.value; ME.gateAngle = (parseFloat(gateAngleNum.value) || 0) * Math.PI / 180; };
+  if (gateWidthRange) gateWidthRange.oninput=()=>{ gateWidthNum.value = gateWidthRange.value; ME.gateW = Math.max(40, Math.min(220, parseFloat(gateWidthRange.value) || TRACK_W)); };
+  if (gateWidthNum) gateWidthNum.oninput=()=>{ gateWidthRange.value = gateWidthNum.value; ME.gateW = Math.max(40, Math.min(220, parseFloat(gateWidthNum.value) || TRACK_W)); };
   wallModeSel.value = ME.wallMode || 'solid';
   wallSideSel.value = ME.wallSide || 'both';
   wallForceInp.value = String(ME.wallForce || 120);
@@ -15654,6 +16084,11 @@ function meInitEditor(){
   obstacleRotNum.value = String(ME.obstacleRot || 0);
   obstacleScaleRange.value = String(Math.round((ME.obstacleScale || 1) * 100));
   obstacleScaleNum.value = String(Math.round((ME.obstacleScale || 1) * 100));
+  if (gateLinkInp) gateLinkInp.value = String(ME.gateLink || 1);
+  if (gateAngleRange) gateAngleRange.value = String(Math.round((ME.gateAngle || 0) * 180 / Math.PI));
+  if (gateAngleNum) gateAngleNum.value = String(Math.round((ME.gateAngle || 0) * 180 / Math.PI));
+  if (gateWidthRange) gateWidthRange.value = String(Math.round(ME.gateW || TRACK_W));
+  if (gateWidthNum) gateWidthNum.value = String(Math.round(ME.gateW || TRACK_W));
   refreshModeButtons();
 
   if (runRegressionBtn) {
@@ -15671,6 +16106,12 @@ function meInitEditor(){
     const r=canvas.getBoundingClientRect(),cx=e.clientX-r.left,cy=e.clientY-r.top;
     if(e.button===1){ME.isPanning=true;ME.lastMX=cx;ME.lastMY=cy;e.preventDefault();return;}
     if(e.button===2){
+      const hg=meHitTestGate(cx,cy);
+      if(hg>=0){
+        ME.gates.splice(hg,1);
+        meDraw();
+        e.preventDefault();return;
+      }
       const hp=meHitTestPowerup(cx,cy);
       if(hp>=0){
         ME.powerups.splice(hp,1);
@@ -15774,7 +16215,19 @@ function meInitEditor(){
       meDraw();
       return;
     }
+    if (ME.mode === 'gate') {
+      const gwx = meXtoW(cx), gwy = meYtoW(cy);
+      ME.gates.push({ x: gwx, y: gwy, angle: ME.gateAngle || 0, link: ME.gateLink || 1, w: ME.gateW || TRACK_W, layer: meAutoLayerAt(gwx, gwy) });
+      meDraw();
+      return;
+    }
     if (ME.mode === 'erase') {
+      const hg=meHitTestGate(cx,cy);
+      if (hg >= 0) {
+        ME.gates.splice(hg,1);
+        meDraw();
+        return;
+      }
       const hp=meHitTestPowerup(cx,cy);
       if (hp >= 0) {
         ME.powerups.splice(hp,1);
@@ -15896,7 +16349,7 @@ document.getElementById('me-back-btn').onclick=()=>{
 };
 document.getElementById('me-new-btn').onclick=()=>{
   if(ME.wpts.length>0&&!confirm('Discard current map?'))return;
-  ME.wpts=[];ME.spline=[];ME.splineW=[];ME.obstacles=[];ME.powerups=[];ME.wallRegions=[];ME.panX=0;ME.panY=0;ME.selectedIdx=-1;
+  ME.wpts=[];ME.spline=[];ME.splineW=[];ME.obstacles=[];ME.powerups=[];ME.wallRegions=[];ME.gates=[];ME.panX=0;ME.panY=0;ME.selectedIdx=-1;
   ME.obstacleRot = 0; ME.obstacleScale = 1;
   document.getElementById('me-map-name').value='My Track';
   meRefreshNodeSettings();
@@ -15908,7 +16361,7 @@ document.getElementById('me-test-btn').onclick=()=>startTrackTest();
 // session (no network room needed). ESC or the results button returns here.
 function startTrackTest(){
   if(ME.wpts.length<4){alert('Place at least 4 waypoints first.');return;}
-  G.customMap={name:document.getElementById('me-map-name').value||'Test Track',waypoints:[...ME.wpts],obstacles:[...ME.obstacles],powerups:[...ME.powerups],wallRegions:[...ME.wallRegions],trackModel:ME.trackModel||'v1',branches:meCloneBranches(ME.branches)};
+  G.customMap={name:document.getElementById('me-map-name').value||'Test Track',waypoints:[...ME.wpts],obstacles:[...ME.obstacles],powerups:[...ME.powerups],wallRegions:[...ME.wallRegions],gates:[...ME.gates],trackModel:ME.trackModel||'v1',branches:meCloneBranches(ME.branches)};
   saveMaps();
   G._testMode=true;
   G.isHost=true;
@@ -15919,7 +16372,7 @@ function startTrackTest(){
   G.players={}; G.players[G.myId]=me;
   spawnBots(getBotCount()); // AI opponents for the solo test session
   const seed=Date.now()%100000;
-  G.track=generateTrackFromWaypoints(G.customMap.waypoints,seed,G.customMap.obstacles||[],G.customMap.powerups||[],G.customMap.wallRegions||[]);
+  G.track=generateTrackFromWaypoints(G.customMap.waypoints,seed,G.customMap.obstacles||[],G.customMap.powerups||[],G.customMap.wallRegions||[],G.customMap.gates||[]);
   recordTrackHistory(G.customMap);
   G.totalLaps=Math.max(1,Math.min(20,Math.round((G.customMap.laps)||1)));
   resetPlayersForRace();
@@ -15958,7 +16411,7 @@ document.getElementById('me-fetch-btn').onclick=meFetchMapList;
 function meCurrentMapData(){
   return {
     name: (document.getElementById('me-map-name').value || 'My Track').trim(),
-    waypoints: ME.wpts, obstacles: ME.obstacles, powerups: ME.powerups, wallRegions: ME.wallRegions,
+    waypoints: ME.wpts, obstacles: ME.obstacles, powerups: ME.powerups, wallRegions: ME.wallRegions, gates: ME.gates,
     trackModel: ME.trackModel || 'v1', branches: meCloneBranches(ME.branches),
     version: 3, created: new Date().toISOString().slice(0,10),
   };
@@ -16126,6 +16579,16 @@ function meLoadMapData(data){
       return rec;
     })
     : [];
+  ME.gates = Array.isArray(data.gates)
+    ? data.gates.map(g => ({
+      x:+g.x,
+      y:+g.y,
+      angle: Number.isFinite(+g.angle) ? +g.angle : 0,
+      link: Math.max(1, Math.min(6, Math.round(+g.link || 1))),
+      w: Math.max(40, Math.min(220, +g.w || TRACK_W)),
+      layer: Number.isFinite(+g.layer) ? Math.round(+g.layer) : 0,
+    }))
+    : [];
   ME.trackModel = (data.trackModel === 'v2') ? 'v2' : 'v1';
   ME.branches = meNormalizeBranches(data.branches);
   ME.selectedBranch = null; ME.selectedBranchPath = 0; ME.selectedBranchNode = -1;
@@ -16211,10 +16674,19 @@ function buildPathGeom(seq) {
 // Waypoints with type 'void' create no-road/fall zones.
 // Waypoints with type 'ice'/'river' paint continuous track surface effects.
 // Elevated support spans are authored via waypoint supportLayer values.
-function generateTrackFromWaypoints(waypoints, obsSeed, manualObstacles, manualPowerups, manualWallRegions) {
+function generateTrackFromWaypoints(waypoints, obsSeed, manualObstacles, manualPowerups, manualWallRegions, manualGates) {
   const rng=mulberry32(obsSeed||42);
   const pts=(Array.isArray(waypoints) ? waypoints : []).map(p => ({ ...p }));
   const N=pts.length;
+  // Portal gates: linked pairs (same non-zero `link`) that teleport whatever crosses
+  // them to their partner, rotating heading/velocity by the angle between the two gates.
+  const gates=(Array.isArray(manualGates) ? manualGates : []).map(g => ({
+    x:+g.x, y:+g.y,
+    angle: Number.isFinite(+g.angle) ? +g.angle : 0,
+    link: Math.max(0, Math.round(+g.link || 0)),
+    w: Math.max(40, Math.min(220, +g.w || TRACK_W)),
+    layer: Math.round(+g.layer || 0),
+  }));
   // Migrate legacy single `branch` to the two-fork `branches` model.
   pts.forEach(p => { if (p && Array.isArray(p.branch) && !Array.isArray(p.branches)) { p.branches = [p.branch]; delete p.branch; } });
   const hadLegacyBridgeTypes = pts.some(p => p && (p.type === 'bridge' || p.type === 'bridge3'));
@@ -16294,22 +16766,54 @@ function generateTrackFromWaypoints(waypoints, obsSeed, manualObstacles, manualP
     return f;
   };
   for (let i = 0; i < N; i++) {
-    if (!pts[i].checkpoint) continue;
     const ri = (i * 16) % sn;
-    const p = spline[ri];
-    const pPrev = spline[(ri - 1 + sn) % sn];
-    const pNext = spline[(ri + 1) % sn];
-    let tx = pNext.x - pPrev.x, ty = pNext.y - pPrev.y;
-    const tl = Math.sqrt(tx*tx + ty*ty) || 1;
-    tx /= tl; ty /= tl;
-    const nx = -ty, ny = tx;
-    checkpoints.push({
-      idx: ri,
-      x: p.x, y: p.y,
-      tx, ty, nx, ny,
-      halfW: (splineWidth[ri] || TRACK_W) * 1.05,
-      layer: floorAtIdxLocal(ri),
-    });
+    if (pts[i].checkpoint) {
+      const p = spline[ri];
+      const pPrev = spline[(ri - 1 + sn) % sn];
+      const pNext = spline[(ri + 1) % sn];
+      let tx = pNext.x - pPrev.x, ty = pNext.y - pPrev.y;
+      const tl = Math.sqrt(tx*tx + ty*ty) || 1;
+      tx /= tl; ty /= tl;
+      const nx = -ty, ny = tx;
+      checkpoints.push({
+        idx: ri,
+        x: p.x, y: p.y,
+        tx, ty, nx, ny,
+        halfW: (splineWidth[ri] || TRACK_W) * 1.05,
+        layer: floorAtIdxLocal(ri),
+        link: Math.max(0, Math.round(+pts[i].link || 0)),
+      });
+    }
+    // Fork-branch gates: checkpoints authored on this node's fork paths. Two gates on
+    // opposite forks that share a `link` are pushed consecutively here, so the race
+    // logic treats them as one "any-of" group (cross either to clear the split). Branch
+    // node positions are exact, so the gate geometry comes straight from them.
+    const brs = pts[i] && Array.isArray(pts[i].branches) ? pts[i].branches : null;
+    if (brs && brs.length) {
+      brs.forEach(path => {
+        if (!Array.isArray(path) || !path.length) return;
+        for (let k = 0; k < path.length; k++) {
+          const bn = path[k];
+          if (!bn || !bn.checkpoint) continue;
+          const prev = k === 0 ? pts[i] : path[k - 1];
+          const next = k === path.length - 1 ? pts[(i + 1) % N] : path[k + 1];
+          let btx = next.x - prev.x, bty = next.y - prev.y;
+          const btl = Math.sqrt(btx*btx + bty*bty) || 1; btx /= btl; bty /= btl;
+          const bnx = -bty, bny = btx;
+          const lv = Number.isFinite(+bn.supportLayer) ? Math.round(+bn.supportLayer) : 0;
+          const hw = Math.max(40, Math.min(180, +bn.width || TRACK_W)) * 1.05;
+          checkpoints.push({
+            idx: ri,
+            x: bn.x, y: bn.y,
+            tx: btx, ty: bty, nx: bnx, ny: bny,
+            halfW: hw,
+            layer: lv,
+            link: Math.max(0, Math.round(+bn.link || 0)),
+            branch: true,
+          });
+        }
+      });
+    }
   }
 
   // Authored slope thresholds: the up direction is derived automatically from the
@@ -16530,7 +17034,7 @@ function generateTrackFromWaypoints(waypoints, obsSeed, manualObstacles, manualP
     });
   }
 
-  return {spline,splineWidth,splineSurface,obstacles,items,oilSlicks:[],bridges,voidZones,splineVoid,splineHidden,checkpoints,slopes,wallRegions,forkWallRegions,branchSplines,driveSpline,driveWidth,driveSurface,driveVoid,driveFloor,driveMainIdx,driveSegs,numLoops:1,legacySlopeConversionApplied:hadLegacyBridgeTypes};
+  return {spline,splineWidth,splineSurface,obstacles,items,oilSlicks:[],bridges,voidZones,splineVoid,splineHidden,checkpoints,slopes,wallRegions,forkWallRegions,branchSplines,driveSpline,driveWidth,driveSurface,driveVoid,driveFloor,driveMainIdx,driveSegs,gates,numLoops:1,legacySlopeConversionApplied:hadLegacyBridgeTypes};
 }
 
 function runLayerSystemRegressionTests() {

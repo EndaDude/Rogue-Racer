@@ -315,6 +315,7 @@ function render(dt) {
     drawForkWalls(ctx, layer);
     drawObstacles(ctx, layer);
     drawItems(ctx, layer);
+    drawGates(ctx, layer);
     drawOilSlicks(ctx, layer);
     drawMines(ctx, layer);
     drawImpactParticles(ctx, layer);
@@ -512,7 +513,7 @@ function drawCheckpoints(ctx, layerToDraw) {
     ctx.font = 'bold 11px system-ui';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.fillText(`CP${i+1}`, cp.x, cp.y - 8);
+    ctx.fillText(cp.link ? `CP${i+1}·L${cp.link}` : `CP${i+1}`, cp.x, cp.y - 8);
   });
 }
 
@@ -658,7 +659,10 @@ function overLayerDeck(x, y, layer) {
   const t = G.track;
   if (!t) return true;
   if (t.driveSpline && t.driveFloor && t.driveSegs && t.driveSpline.length >= 2) {
-    const near = pointOnDriveSegments(x, y, (i, j) => (t.driveFloor[i] || 0) === layer && (t.driveFloor[j] || 0) === layer);
+    // A void sample is a hole, not a deck — exclude it so running off an elevated void
+    // reads as airborne (and falls) instead of falsely counting as still on the deck.
+    const dv = (Array.isArray(t.driveVoid) && t.driveVoid.length === t.driveSpline.length) ? t.driveVoid : null;
+    const near = pointOnDriveSegments(x, y, (i, j) => (t.driveFloor[i] || 0) === layer && (t.driveFloor[j] || 0) === layer && (!dv || (!dv[i] && !dv[j])));
     if (!Number.isFinite(near.dist)) return false;
     return near.dist <= (near.halfW || TRACK_W) + 70;
   }
@@ -1461,6 +1465,30 @@ function drawObstacles(ctx, layer) {
         ctx.lineTo(rr * 1.1, i * rr * 0.42);
         ctx.stroke();
       }
+    } else if (obs.type==='boost_pad') {
+      // Yellow symmetrical obtuse triangle — the wide flat base sits behind and the
+      // apex points the way it boosts you (obs.rot is the boost direction = +x here).
+      const s = Math.max(10, rr * 0.9);
+      ctx.fillStyle='#facc15';
+      ctx.beginPath();
+      ctx.moveTo(s * 0.8, 0);
+      ctx.lineTo(-s * 0.4, s * 1.4);
+      ctx.lineTo(-s * 0.4, -s * 1.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle='#eab308';
+      ctx.lineWidth=2;
+      ctx.stroke();
+    } else if (obs.type==='repair_pad') {
+      const s = Math.max(9, rr * 0.85);
+      ctx.fillStyle='#22c55e';
+      ctx.fillRect(-s, -s, s * 2, s * 2);
+      ctx.strokeStyle='#15803d';
+      ctx.lineWidth=2;
+      ctx.strokeRect(-s, -s, s * 2, s * 2);
+      ctx.fillStyle='#f0fdf4';
+      ctx.fillRect(-s * 0.6, -s * 0.18, s * 1.2, s * 0.36);
+      ctx.fillRect(-s * 0.18, -s * 0.6, s * 0.36, s * 1.2);
     } else {
       ctx.fillStyle='#f97316';
       ctx.beginPath();
@@ -1523,6 +1551,52 @@ function drawItems(ctx, layer) {
     ctx.textAlign='center';
     ctx.textBaseline='middle';
     ctx.fillText('?',0,0);
+    ctx.restore();
+  });
+}
+
+function drawGates(ctx, layer) {
+  const gs = G.track && G.track.gates;
+  if (!gs || !gs.length) return;
+  const t = Date.now() / 1000;
+  const palette = ['#38bdf8', '#f472b6', '#a3e635', '#fbbf24', '#c084fc', '#fb7185'];
+  gs.forEach(g => {
+    if ((g.layer || 0) !== layer) return;
+    const col = palette[((g.link || 1) - 1) % palette.length];
+    const hw = (g.w || TRACK_W) * 0.5;
+    const px = Math.cos(g.angle + Math.PI / 2), py = Math.sin(g.angle + Math.PI / 2);
+    const pulse = Math.sin(t * 3 + (g.link || 0)) * 0.25 + 0.7;
+    ctx.save();
+    // Doorway line (perpendicular to travel direction)
+    ctx.strokeStyle = col;
+    ctx.globalAlpha = pulse;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(g.x + px * hw, g.y + py * hw);
+    ctx.lineTo(g.x - px * hw, g.y - py * hw);
+    ctx.stroke();
+    // Swirl core
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(g.x, g.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    // Direction arrow (through-direction = g.angle)
+    const dx = Math.cos(g.angle), dy = Math.sin(g.angle);
+    ctx.strokeStyle = col;
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(g.x - dx * 10, g.y - dy * 10);
+    ctx.lineTo(g.x + dx * 16, g.y + dy * 16);
+    ctx.stroke();
+    const ax = g.x + dx * 16, ay = g.y + dy * 16;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax - dx * 8 - dy * 5, ay - dy * 8 + dx * 5);
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax - dx * 8 + dy * 5, ay - dy * 8 - dx * 5);
+    ctx.stroke();
     ctx.restore();
   });
 }
@@ -2090,18 +2164,23 @@ function drawPlayerTrails(ctx, layer) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   Object.values(G.players).forEach(p => {
-    if (!p || !p.trailColor) return;
+    if (!p) return;
+    const boosted = (p.trailBoost || 0) > 0;
+    if (!p.trailColor && !boosted) return;
     const pts = p._trail;
     if (!pts || pts.length < 2) return;
-    const rgb = hexToRgb(p.trailColor);
+    const rgb = p.trailColor ? hexToRgb(p.trailColor) : [250, 204, 21];
     if (!rgb) return;
+    // Boosting fattens the ribbon for a second (the booster-pad effect).
+    const widthMul = boosted ? 2.6 : 1;
+    const alphaMul = boosted ? 1.4 : 1;
     const n = pts.length;
     for (let i = 1; i < n; i++) {
       const a = pts[i - 1], b = pts[i];
       if ((b.l || 0) !== (layer || 0)) continue;
       const f = i / (n - 1);           // 0 at tail .. 1 at head (near ship)
-      ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${(0.55 * f).toFixed(3)})`;
-      ctx.lineWidth = 1.5 + 8 * f;
+      ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${Math.min(1, 0.55 * f * alphaMul).toFixed(3)})`;
+      ctx.lineWidth = (1.5 + 8 * f) * widthMul;
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
@@ -2476,12 +2555,13 @@ function updateMissiles(dt) {
     }
     const vl = Math.hypot(m.vx, m.vy) || 1; m.vx = m.vx / vl * speed; m.vy = m.vy / vl * speed;
     m.x += m.vx * dt; m.y += m.vy * dt; m.angle = Math.atan2(m.vy, m.vx);
+    if (G.track.gates && G.track.gates.length) tryGateTeleport(m, m.x - m.vx * dt, m.y - m.vy * dt, dt);
     // Victim-authoritative impact: hits any rival this client simulates.
     for (const p of Object.values(G.players)) {
       if (p.id === m.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (m.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;
       if (dist(m.x, m.y, p.x, p.y) < 20 + T.missileRadius) {
-        if (p.id === G.myId && p.shielded) { p.shielded = false; }
+        if (p.id === G.myId && p.shielded) { /* shield deflects it — not consumed */ }
         else {
           applyDamage(p, (m.dmg || T.missileDamage) / Math.max(0.5, getCarTypeCfg(p.carType).weaponResist || 1), 'missile');
           if (p.isBot) { p.stun = Math.max(p.stun || 0, 1.1); p._speed = (p._speed || 0) * 0.3; }
@@ -2573,11 +2653,12 @@ function updateShells(dt) {
     if (bounceProjectileOffWall(s, T.shellRadius) && (s.bounceCount = (s.bounceCount || 0) + 1) > T.shellBounces) return false;
     const vl = Math.hypot(s.vx, s.vy) || 1; s.vx = s.vx / vl * speed; s.vy = s.vy / vl * speed;
     s.x += s.vx * dt; s.y += s.vy * dt; s.angle = Math.atan2(s.vy, s.vx);
+    if (G.track.gates && G.track.gates.length) tryGateTeleport(s, s.x - s.vx * dt, s.y - s.vy * dt, dt);
     for (const p of Object.values(G.players)) {
       if (p.id === s.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (s.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;
       if (dist(s.x, s.y, p.x, p.y) < 20 + T.shellRadius) {
-        if (p.id === G.myId && p.shielded) { p.shielded = false; }
+        if (p.id === G.myId && p.shielded) { /* shield deflects it — not consumed */ }
         else {
           applyDamage(p, T.shellDamage / Math.max(0.5, getCarTypeCfg(p.carType).crashResist || 1), 'shell');
           if (p.isBot) { p.stun = Math.max(p.stun || 0, 0.6); p._speed = (p._speed || 0) * 0.5; }
@@ -2604,11 +2685,12 @@ function updateBalls(dt) {
     if (bounceProjectileOffWall(b, T.ballRadius) && (b.bounceCount = (b.bounceCount || 0) + 1) > T.ballBounces) return false;
     const vl = Math.hypot(b.vx, b.vy) || 1; b.vx = b.vx / vl * speed; b.vy = b.vy / vl * speed;
     b.x += b.vx * dt; b.y += b.vy * dt;
+    if (G.track.gates && G.track.gates.length) tryGateTeleport(b, b.x - b.vx * dt, b.y - b.vy * dt, dt);
     for (const p of Object.values(G.players)) {
       if (p.id === b.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (b.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;
       if (dist(b.x, b.y, p.x, p.y) < 20 + T.ballRadius) {
-        if (p.id === G.myId && p.shielded) { p.shielded = false; }
+        if (p.id === G.myId && p.shielded) { /* shield deflects it — not consumed */ }
         else {
           applyDamage(p, T.ballDamage / Math.max(0.5, getCarTypeCfg(p.carType).weaponResist || 1), 'ball');
           p.noControl = Math.max(p.noControl || 0, T.ballControlLossSec);
@@ -2630,12 +2712,13 @@ function updateBullets(dt) {
   G.bullets = G.bullets.filter(b => {
     if (b.layer === undefined) b.layer = 0;
     b.x += b.vx * dt; b.y += b.vy * dt;
+    if (G.track.gates && G.track.gates.length) tryGateTeleport(b, b.x - b.vx * dt, b.y - b.vy * dt, dt);
     if (bounceProjectileOffWall(b, T.bulletRadius) && (b.bounceCount = (b.bounceCount || 0) + 1) > T.bulletBounces) return false;
     for (const p of Object.values(G.players)) {
       if (p.id === b.ownerId || p.finished || (p.deathRespawn || 0) > 0 || (p.layer || 0) !== (b.layer || 0)) continue;
       if (p.id !== G.myId && !p.isBot) continue;   // victim-authoritative
       if (dist(b.x, b.y, p.x, p.y) < 18 + T.bulletRadius) {
-        if (p.id === G.myId && p.shielded) { p.shielded = false; }
+        if (p.id === G.myId && p.shielded) { /* shield deflects it — not consumed */ }
         else {
           applyDamage(p, (b.dmg || T.bulletDamage) / Math.max(0.5, getCarTypeCfg(p.carType).weaponResist || 1), 'bullet');
           if (p.isBot) p.stun = Math.max(p.stun || 0, 0.2);
@@ -3113,7 +3196,36 @@ function updateHud() {
   updateLeaderboard(me);
   updateUpgradePauseOverlay();
   updateSpectateBar();
+  updateEffectTimers(me);
 }
+
+// Active-effect countdown chips (top-left of the play area): show remaining time on
+// timed power-ups/abilities as an icon + shrinking bar + seconds readout.
+function updateEffectTimers(me) {
+  const host = document.getElementById('effect-timers');
+  if (!host) return;
+  const specs = [
+    { key: 'boosting',   id: 'boost',     name: 'NITRO',     color: '#fbbf24', max: 4.5, emoji: '⚡' },
+    { key: 'shieldTime', id: 'shield',    name: 'SHIELD',    color: '#06b6d4', max: CAR_TUNING.shieldDuration, emoji: '🛡️' },
+    { key: 'autopilot',  id: 'autopilot', name: 'AUTOPILOT', color: '#38bdf8', max: CAR_TUNING.autopilotDuration, emoji: '🤖' },
+    { key: 'ghostMode',  id: 'ghost',     name: 'GHOST',     color: '#c084fc', max: 4, emoji: '👻' },
+  ];
+  let html = '';
+  for (const s of specs) {
+    const v = me ? (me[s.key] || 0) : 0;
+    if (v <= 0.05) continue;
+    const frac = Math.max(0, Math.min(1, v / s.max));
+    const icon = iconSvg(s.id, 14) || s.emoji;
+    html += `<div class="fx-timer" style="border-left-color:${s.color}">`
+      + `<span style="color:${s.color};display:inline-flex;align-items:center">${icon}</span>`
+      + `<span>${s.name}</span>`
+      + `<span class="fx-bar"><i style="width:${(frac * 100).toFixed(0)}%;background:${s.color}"></i></span>`
+      + `<span style="color:${s.color};min-width:26px;text-align:right">${v.toFixed(1)}s</span>`
+      + `</div>`;
+  }
+  if (host.innerHTML !== html) host.innerHTML = html;
+}
+
 
 function formatRaceClock(ms) {
   if (!ms || ms < 0) ms = 0;
