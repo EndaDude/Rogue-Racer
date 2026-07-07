@@ -291,7 +291,12 @@ function meAutoTangentAt(wx, wy) {
   if (!bestList) return 0;
   const a = bestList[(bi - 1 + bestList.length) % bestList.length];
   const b = bestList[(bi + 1) % bestList.length];
-  return Math.atan2(b.y - a.y, b.x - a.x);
+  let ang = Math.atan2(b.y - a.y, b.x - a.x);
+  // The main loop's sample list runs opposite the racing direction, while fork
+  // samples run WITH it (owner → branch → next node). Flip only the main so both
+  // report a "racing-forward" tangent.
+  if (bestList === ME.spline) ang += Math.PI;
+  return ang;
 }
 
 // Obstacles that visually READ as a barrier get turned broadside to the road so
@@ -302,10 +307,9 @@ function meAutoObstacleRot(type, wx, wy) {
   const tangDeg = meAutoTangentAt(wx, wy) * 180 / Math.PI;
   const norm = d => Math.round(((d) % 360 + 360) % 360 - 180);
   if (OBS_BLOCKERS.has(type)) return norm(tangDeg + 90);
-  // Along-the-road pieces point in the racing direction. The tangent runs backwards
-  // relative to travel, so flip 180° (matters for the asymmetric boost pad arrow;
-  // symmetric water/ice are unaffected).
-  if (OBS_ALONG.has(type)) return norm(tangDeg + 180);
+  // Along-the-road pieces (boost pad arrow, water, ice) point in the racing
+  // direction — meAutoTangentAt already returns a racing-forward tangent.
+  if (OBS_ALONG.has(type)) return norm(tangDeg);
   return ME.obstacleRot || 0; // round pieces (cone, repair pad): leave as-is
 }
 
