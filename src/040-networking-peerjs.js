@@ -147,7 +147,11 @@ function onData(data, fromId) {
   } else if (data.type === 'chat') {
     if (window.__crtChat) window.__crtChat(data.name || 'Racer', data.text || '', data.color || '#39ff14');
     try { speakChat(data.name || 'Racer', data.text || '', data.voice || null); } catch (_) {}
-  } else if (data.type === 'kicked' && !G.isHost) {
+  } else if (data.type === 'kicked') {
+    if (G.isHost) {
+      if (!(data.id == G.myId)) sendToAll({type: 'kicked', id: data.id});
+      return;
+    }
     try { if (peer) peer.destroy(); } catch(_) {}
     peer = null; hostConn = null;
     if (G._countdownTimer) { clearInterval(G._countdownTimer); G._countdownTimer = null; }
