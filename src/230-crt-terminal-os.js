@@ -819,6 +819,94 @@
     });
   }
 
+  // ---------- debug: live tuning editor (hidden command) ----------
+  // Opens a scrollable list of every numeric CAR_TUNING value with an input box.
+  // Edits are written straight into CAR_TUNING, which the engine reads every frame,
+  // so tweaks take effect instantly — even in the middle of a race. Copy buttons
+  // dump the values as ready-to-paste JS so they can be handed back for the source.
+  function openDebugTuning(){
+    return openWindow('debugtuning', 'DEBUG \u00B7 TUNING', {
+      width: 480, height: 580, minW: 340, minH: 320,
+      onOpen: (w) => {
+        const body = w.body;
+        body.innerHTML = '';
+        body.style.cssText += ';padding:10px;overflow:hidden;display:flex;flex-direction:column;gap:8px;';
+
+        // Snapshot the shipped defaults once so "changed" highlighting and reset work
+        // even after values have been edited and the window reopened.
+        if (!window.__tuningDefaults) {
+          window.__tuningDefaults = {};
+          for (const k in CAR_TUNING) if (typeof CAR_TUNING[k] === 'number') window.__tuningDefaults[k] = CAR_TUNING[k];
+        }
+        const defaults = window.__tuningDefaults;
+        const keys = Object.keys(CAR_TUNING).filter(k => typeof CAR_TUNING[k] === 'number').sort();
+
+        const hint = document.createElement('div');
+        hint.textContent = 'Live tuning \u2014 edits apply instantly, even mid-race. Yellow = changed.';
+        hint.style.cssText = 'font-size:0.64rem;color:#6fdc95;opacity:0.85;letter-spacing:0.03em;';
+
+        const bar = document.createElement('div');
+        bar.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;align-items:center;';
+        const search = document.createElement('input');
+        search.type = 'text'; search.placeholder = 'filter\u2026';
+        search.style.cssText = 'flex:1;min-width:110px;font-family:inherit;font-size:0.72rem;color:#c9ffd8;background:rgba(4,23,12,0.9);border:1px solid #1f7a45;border-radius:4px;padding:5px 8px;';
+        const copyAllBtn = tagWinBtn('Copy All');
+        const copyChangedBtn = tagWinBtn('Copy Changed');
+        const resetBtn = tagWinBtn('Reset All');
+        bar.appendChild(search); bar.appendChild(copyAllBtn); bar.appendChild(copyChangedBtn); bar.appendChild(resetBtn);
+
+        const list = document.createElement('div');
+        list.style.cssText = 'flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:1px;padding-right:4px;';
+
+        const rows = [];
+        keys.forEach(k => {
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:0.7rem;padding:2px 4px;border-radius:3px;';
+          const name = document.createElement('span');
+          name.textContent = k; name.title = k;
+          name.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+          const inp = document.createElement('input');
+          inp.type = 'number'; inp.step = 'any'; inp.value = CAR_TUNING[k];
+          inp.style.cssText = 'width:96px;font-family:inherit;font-size:0.7rem;color:#eafff0;background:rgba(4,23,12,0.9);border:1px solid #1f7a45;border-radius:4px;padding:4px 6px;text-align:right;';
+          const mark = () => {
+            const changed = CAR_TUNING[k] !== defaults[k];
+            name.style.color = changed ? '#ffe08a' : '#c9ffd8';
+            inp.style.borderColor = changed ? '#c9a24a' : '#1f7a45';
+          };
+          inp.addEventListener('input', () => {
+            const v = parseFloat(inp.value);
+            if (Number.isFinite(v)) { CAR_TUNING[k] = v; mark(); }
+          });
+          mark();
+          row.appendChild(name); row.appendChild(inp);
+          list.appendChild(row);
+          rows.push({ k, row, inp, mark });
+        });
+
+        search.addEventListener('input', () => {
+          const q = search.value.trim().toLowerCase();
+          rows.forEach(r => { r.row.style.display = (!q || r.k.toLowerCase().includes(q)) ? '' : 'none'; });
+        });
+
+        const flash = (btn, ok) => { const t = btn.textContent; btn.textContent = ok; setTimeout(() => { btn.textContent = t; }, 1200); };
+        const copy = (text, btn, ok) => { try { navigator.clipboard.writeText(text).then(() => flash(btn, ok)).catch(() => {}); } catch (_) {} };
+        copyAllBtn.addEventListener('click', () => {
+          copy(keys.map(k => '  ' + k + ': ' + CAR_TUNING[k] + ',').join('\n'), copyAllBtn, 'Copied!');
+        });
+        copyChangedBtn.addEventListener('click', () => {
+          const ch = keys.filter(k => CAR_TUNING[k] !== defaults[k]);
+          copy(ch.length ? ch.map(k => '  ' + k + ': ' + CAR_TUNING[k] + ',').join('\n') : '(no changes)', copyChangedBtn, ch.length ? 'Copied!' : 'None');
+        });
+        resetBtn.addEventListener('click', () => {
+          keys.forEach(k => { CAR_TUNING[k] = defaults[k]; });
+          rows.forEach(r => { r.inp.value = CAR_TUNING[r.k]; r.mark(); });
+        });
+
+        body.appendChild(hint); body.appendChild(bar); body.appendChild(list);
+      }
+    });
+  }
+
   // ---------- SYNCED RACE BOOT SEQUENCE ----------
   // A deterministic, seed-driven "diagnostics + launch" animation played on every
   // client so all racers see the exact same quips. Do NOT surface the sync in-game.
@@ -1789,6 +1877,16 @@
       'A multiplayer roguelike racer rendered on an imaginary CRT.',
       'All menus are a terminal. Try: host, join <code>, editor.',
     ], { speed: 12 }) },
+    // Hidden dev command (intentionally absent from `help`). Unlocks the live
+    // tuning editor so every CAR_TUNING value can be tweaked mid-round.
+    debug: { desc: 'live tuning editor', instant: true, run: (a) => {
+      if ((a[0] || '') !== '19812') {
+        print('Unknown command "debug' + (a.length ? ' ' + a.join(' ') : '') + '" use "HELP" for a list of commands.', 'err');
+        return;
+      }
+      print('debug mode unlocked \u2014 live tuning editor', 'hi');
+      openDebugTuning();
+    } },
   };
 
   // A short spinner shown before non-window commands run, matching the help style.

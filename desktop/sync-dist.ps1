@@ -18,7 +18,12 @@ New-Item -ItemType Directory -Force $dist | Out-Null
 
 Copy-Item (Join-Path $here 'bootstrap.html')     (Join-Path $dist 'index.html') -Force
 Copy-Item (Join-Path $root 'rogue-racer.html')   (Join-Path $dist 'game.html')  -Force
-Copy-Item (Join-Path $root 'Audio')              (Join-Path $dist 'Audio') -Recurse -Force
+# Audio is shipped as a Tauri *resource* (installed alongside the app, then mirrored
+# to %LOCALAPPDATA%\Rogue Racer\Audio at runtime), NOT embedded in the frontend
+# bundle. Refresh the copy the bundler reads from src-tauri.
+$srcAudio = Join-Path $here 'src-tauri\Audio'
+if (Test-Path $srcAudio) { Remove-Item $srcAudio -Recurse -Force }
+Copy-Item (Join-Path $root 'Audio') $srcAudio -Recurse -Force
 
 $size = (Get-ChildItem $dist -Recurse | Measure-Object Length -Sum).Sum / 1MB
 "dist ready: {0:N1} MB" -f $size

@@ -48,7 +48,7 @@ function _tauriEnsureMaps() {
   _tauriMapsInit = (async () => {
     try {
       const path = window.__TAURI__.path, fs = window.__TAURI__.fs;
-      const dir = await path.join(await path.appDataDir(), 'Maps');
+      const dir = await path.join(await path.localDataDir(), 'Rogue Racer', 'Maps');
       await fs.mkdir(dir, { recursive: true });
       _tauriMapsDir = dir;
       _localDirHandle = dir;
@@ -221,6 +221,55 @@ async function _engineArrayBufferFromFolder(src) {
     const f = await fh.getFile();
     return await f.arrayBuffer();
   } catch (_) { return null; }
+}
+
+// --- Native desktop (Tauri) external audio folder ---
+// All audio lives in %LOCALAPPDATA%\Rogue Racer\Audio (outside the executable) so
+// it can be updated without a full rebuild. Files are read via the fs plugin and
+// handed to the game as raw bytes (engines) or blob: URLs (sampled <audio>).
+let _tauriAudioDir = null;
+async function _tauriAudioDirPath() {
+  if (_tauriAudioDir) return _tauriAudioDir;
+  const path = window.__TAURI__.path;
+  _tauriAudioDir = await path.join(await path.localDataDir(), 'Rogue Racer', 'Audio');
+  return _tauriAudioDir;
+}
+// relSrc looks like 'Audio/Effects/x.ogg' -> reads Rogue Racer\Audio\Effects\x.ogg.
+async function _tauriAudioBytes(relSrc) {
+  try {
+    const path = window.__TAURI__.path, fs = window.__TAURI__.fs;
+    const dir = await _tauriAudioDirPath();
+    const parts = String(relSrc).replace(/^Audio[\/\\]/, '').split(/[\/\\]/);
+    const fp = await path.join(dir, ...parts);
+    return await fs.readFile(fp); // Uint8Array
+  } catch (_) { return null; }
+}
+const _tauriAudioUrlCache = {};
+async function _tauriAudioObjectUrl(relSrc) {
+  if (_tauriAudioUrlCache[relSrc]) return _tauriAudioUrlCache[relSrc];
+  const bytes = await _tauriAudioBytes(relSrc);
+  if (!bytes) return null;
+  const url = URL.createObjectURL(new Blob([bytes]));
+  _tauriAudioUrlCache[relSrc] = url;
+  return url;
+}
+// Repoint the static <audio> elements (menu music + sampled SFX, declared in
+// 060-game-engine.js) at the external folder. No-op in the browser.
+async function _tauriRetargetAudioElements() {
+  if (!IS_TAURI) return;
+  const map = [
+    [menuMusic,     'Audio/Tracks/menu.ogg'],
+    [builderMusic,  'Audio/Tracks/menu2.ogg'],
+    [countdownVoice,'Audio/Effects/321go.ogg'],
+    [sfxMachineGun, 'Audio/Effects/Machine gun bullet.ogg'],
+    [sfxShell,      'Audio/Effects/shell.ogg'],
+    [sfxShieldLoop, 'Audio/Effects/sheild long.ogg'],
+    [sfxShieldDown, 'Audio/Effects/shield down.ogg'],
+    [sfxShieldHit,  'Audio/Effects/shield hit.ogg'],
+  ];
+  for (const [el, rel] of map) {
+    try { const u = await _tauriAudioObjectUrl(rel); if (u && el) el.src = u; } catch (_) {}
+  }
 }
 
 async function _applyGameRoot(root, remember) {
@@ -407,7 +456,7 @@ function applyAudioSettings() {
   applyMusicMixVolumes();
   countdownVoice.volume = CAR_TUNING.audioCountdownBaseVolume * AUDIO_SETTINGS.fx * AUDIO_SETTINGS.master;
   // Keep the shield-active ambience loop at the correct level if it's playing.
-  try { if (!sfxShieldLoop.paused) sfxShieldLoop.volume = Math.max(0, Math.min(1, 0.55 * AUDIO_SETTINGS.fx * AUDIO_SETTINGS.master)); } catch (_) {}
+  try { if (!sfxShieldLoop.paused) sfxShieldLoop.volume = Math.max(0, Math.min(1, 0.12 * AUDIO_SETTINGS.fx * AUDIO_SETTINGS.master)); } catch (_) {}
   if (touchControlsRoot) {
     touchControlsRoot.style.display = AUDIO_SETTINGS.touchControls ? 'flex' : 'none';
   }
@@ -708,6 +757,21 @@ const ENGINE_TUNING = {
   [ENGINE_SCREAMER_SRC]:        { mode: 'xfade',  loopStart: 0.003, loopEnd: 0.093, xfade: 0.415, rateIdle: 0.30 },
 };
 
+// Per-engine loudness normalization (dialled in with engine-test.html's Volume
+// Normalizer). Each value is the target audible gain for that engine loop; it's
+// applied as a scale factor relative to audioEngineLocalBaseVol so both the local
+// and remote engine volume paths (zoom span, distance falloff) scale together.
+const ENGINE_VOLUME = {
+  [ENGINE_DEFAULT_SRC]:         0.14, // drifter
+  [ENGINE_DRAGGER_SRC]:         0.07,
+  [ENGINE_BOUNCER_PUNCHER_SRC]: 0.06, // puncher / baller
+  [ENGINE_NEEDLE_SRC]:          0.04,
+  [ENGINE_COIL_SRC]:            0.18,
+  [ENGINE_ROTOR_SRC]:           0.10,
+  [ENGINE_HOLO_SRC]:            0.09,
+  [ENGINE_SCREAMER_SRC]:        0.03,
+};
+
 // One decoded buffer "bank" per engine source.
 const engineBuffers = {}; // src -> { buffer, ready, loading, nextRetryAt, loopStart, loopEnd }
 function engineBankFor(src) {
@@ -939,6 +1003,11 @@ function loadEngineBufferFor(src) {
     // Prefer the connected game folder (works from file://), then fall back to the network.
     let arr = await _engineArrayBufferFromFolder(src);
 
+    if (!arr && IS_TAURI) {
+      const bytes = await _tauriAudioBytes(src);
+      if (bytes) arr = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    }
+
     if (!arr) {
       try {
         const resp = await fetch(src);
@@ -999,6 +1068,9 @@ async function decodeAndApplyEngineArrayBuffer(arr) {
 
 // Async preload on startup. Once each decodes, players swap to seamless buffer/crossfade loops.
 preloadAllEngines();
+
+// Native desktop: point the sampled <audio> elements at the external Audio folder.
+if (IS_TAURI) { _tauriRetargetAudioElements(); }
 
 function createEngineNode(id, carType) {
   const wantedSrc = engineSrcForCarType(carType);
@@ -1101,7 +1173,11 @@ function updateEngineAudio() {
     // Subtle tunable engine loudness wobble for more mechanical texture.
     const idSeed = (p.id || '').split('').reduce((s, ch) => s + ch.charCodeAt(0), 0) * 0.017;
     const noise = 1 + Math.sin(nowSec * (Math.PI * 2) * CAR_TUNING.audioEngineVolumeNoiseHz + idSeed) * CAR_TUNING.audioEngineVolumeNoiseAmp;
-    vol = Math.max(0, vol * noise);
+    // Per-engine loudness normalization: scale relative to the shared base volume
+    // so the zoom-span and distance-falloff behavior is preserved.
+    const _engNorm = ENGINE_VOLUME[node.engineSrc];
+    const _engScale = (_engNorm != null) ? (_engNorm / CAR_TUNING.audioEngineLocalBaseVol) : 1;
+    vol = Math.max(0, vol * noise * _engScale);
 
     const mix = Math.max(0, Math.min(1, AUDIO_SETTINGS.master * AUDIO_SETTINGS.fx * CAR_TUNING.audioEngineMixBase));
     if (node.isBuffer) {

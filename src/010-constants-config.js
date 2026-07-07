@@ -156,7 +156,7 @@ const CAR_TUNING = {
   deathExplosionDamage: 42,      // damage a dying car's blast deals to nearby rivals
 
   audioMenuMusicBaseVolume: 0.5,
-  audioCountdownBaseVolume: 0.85,
+  audioCountdownBaseVolume: 0.08,
   audioEngineMixBase: 1.0,
   audioEngineLocalBaseVol: 0.75,
   audioEngineLocalZoomVolSpan: 0.25,

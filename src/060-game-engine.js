@@ -9,8 +9,8 @@ const mmCtx = minimapCanvas.getContext('2d');
 // ---- Menu music ----
 const menuMusic = new Audio('Audio/Tracks/menu.ogg');
 menuMusic.loop = true;
-// menu1 (the main menu theme) is mixed 40% quieter than the shared music base.
-const MENU1_VOLUME_SCALE = 0.6;
+// menu1 (the main menu theme) is scaled down from the shared music base (normalized).
+const MENU1_VOLUME_SCALE = 0.34;
 menuMusic.volume = 0.5 * MENU1_VOLUME_SCALE;
 // Track Builder theme. Crossfades in/out over the main menu music while the map
 // editor is open. The file is authored to loop seamlessly, so plain loop=true is fine.
@@ -23,7 +23,7 @@ let _builderMusicTarget = 0;
 let _builderFadeLast = 0;
 const BUILDER_FADE_PER_SEC = 0.55; // ~1.8s to fully crossfade
 const countdownVoice = new Audio('Audio/Effects/321go.ogg');
-countdownVoice.volume = 0.85;
+countdownVoice.volume = 0.08;
 
 // ---- Sampled combat / shield SFX (played via playSfxSample / fadeShieldLoop in
 // 120-procedural-sound-effects.js). Volume is applied per-play from AUDIO_SETTINGS. ----

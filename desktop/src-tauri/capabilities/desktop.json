@@ -9,7 +9,6 @@
     "main"
   ],
   "permissions": [
-    "updater:default",
-    "window-state:default"
+    "updater:default"
   ]
 }

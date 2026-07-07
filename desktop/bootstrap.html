@@ -27,7 +27,7 @@
     var T = (typeof window !== 'undefined' && window.__TAURI__) || {};
     var http = T.http;
     var fs = T.fs;
-    var AppData = (fs && fs.BaseDirectory) ? fs.BaseDirectory.AppData : undefined;
+    var tpath = T.path;
 
     function setStatus(msg) {
       var el = document.getElementById('status');
@@ -64,18 +64,28 @@
       return null;
     }
 
+    async function cacheFilePath() {
+      var base = await tpath.localDataDir();
+      return await tpath.join(base, 'Rogue Racer', CACHE_FILE);
+    }
+
     async function readCache() {
       try {
-        if (fs && await fs.exists(CACHE_FILE, { baseDir: AppData })) {
-          return await fs.readTextFile(CACHE_FILE, { baseDir: AppData });
+        if (fs && tpath) {
+          var fp = await cacheFilePath();
+          if (await fs.exists(fp)) return await fs.readTextFile(fp);
         }
       } catch (e) { /* ignore */ }
       return null;
     }
 
     async function writeCache(html) {
-      try { if (fs) await fs.writeTextFile(CACHE_FILE, html, { baseDir: AppData }); }
-      catch (e) { /* ignore */ }
+      try {
+        if (!fs || !tpath) return;
+        var dir = await tpath.join(await tpath.localDataDir(), 'Rogue Racer');
+        try { await fs.mkdir(dir, { recursive: true }); } catch (e) { /* ignore */ }
+        await fs.writeTextFile(await cacheFilePath(), html);
+      } catch (e) { /* ignore */ }
     }
 
     async function readBundled() {

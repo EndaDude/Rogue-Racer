@@ -43,7 +43,17 @@ try {
     Remove-Item Env:\TAURI_SIGNING_PRIVATE_KEY_PATH -ErrorAction SilentlyContinue
     $env:CI = "true"
     $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content $key -Raw
-    $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
+    # The signing key is password-protected. Prompt for it here (masked, never
+    # echoed) unless it was already provided via the environment. Set it to a
+    # single space in the env if your key has no password.
+    if ($null -eq $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) {
+        $securePw = Read-Host "Enter updater signing key password" -AsSecureString
+        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePw)
+        try {
+            $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+        }
+        finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+    }
     cargo tauri build
     if ($LASTEXITCODE -ne 0) { throw "cargo tauri build failed" }
 }

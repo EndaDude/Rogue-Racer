@@ -2047,7 +2047,7 @@ const CAR_TUNING = {
   deathExplosionDamage: 42,      // damage a dying car's blast deals to nearby rivals
 
   audioMenuMusicBaseVolume: 0.5,
-  audioCountdownBaseVolume: 0.85,
+  audioCountdownBaseVolume: 0.08,
   audioEngineMixBase: 1.0,
   audioEngineLocalBaseVol: 0.75,
   audioEngineLocalZoomVolSpan: 0.25,
@@ -5003,8 +5003,8 @@ const mmCtx = minimapCanvas.getContext('2d');
 // ---- Menu music ----
 const menuMusic = new Audio('Audio/Tracks/menu.ogg');
 menuMusic.loop = true;
-// menu1 (the main menu theme) is mixed 40% quieter than the shared music base.
-const MENU1_VOLUME_SCALE = 0.6;
+// menu1 (the main menu theme) is scaled down from the shared music base (normalized).
+const MENU1_VOLUME_SCALE = 0.34;
 menuMusic.volume = 0.5 * MENU1_VOLUME_SCALE;
 // Track Builder theme. Crossfades in/out over the main menu music while the map
 // editor is open. The file is authored to loop seamlessly, so plain loop=true is fine.
@@ -5017,7 +5017,7 @@ let _builderMusicTarget = 0;
 let _builderFadeLast = 0;
 const BUILDER_FADE_PER_SEC = 0.55; // ~1.8s to fully crossfade
 const countdownVoice = new Audio('Audio/Effects/321go.ogg');
-countdownVoice.volume = 0.85;
+countdownVoice.volume = 0.08;
 
 // ---- Sampled combat / shield SFX (played via playSfxSample / fadeShieldLoop in
 // 120-procedural-sound-effects.js). Volume is applied per-play from AUDIO_SETTINGS. ----
@@ -5722,7 +5722,7 @@ function _tauriEnsureMaps() {
   _tauriMapsInit = (async () => {
     try {
       const path = window.__TAURI__.path, fs = window.__TAURI__.fs;
-      const dir = await path.join(await path.appDataDir(), 'Maps');
+      const dir = await path.join(await path.localDataDir(), 'Rogue Racer', 'Maps');
       await fs.mkdir(dir, { recursive: true });
       _tauriMapsDir = dir;
       _localDirHandle = dir;
@@ -5895,6 +5895,55 @@ async function _engineArrayBufferFromFolder(src) {
     const f = await fh.getFile();
     return await f.arrayBuffer();
   } catch (_) { return null; }
+}
+
+// --- Native desktop (Tauri) external audio folder ---
+// All audio lives in %LOCALAPPDATA%\Rogue Racer\Audio (outside the executable) so
+// it can be updated without a full rebuild. Files are read via the fs plugin and
+// handed to the game as raw bytes (engines) or blob: URLs (sampled <audio>).
+let _tauriAudioDir = null;
+async function _tauriAudioDirPath() {
+  if (_tauriAudioDir) return _tauriAudioDir;
+  const path = window.__TAURI__.path;
+  _tauriAudioDir = await path.join(await path.localDataDir(), 'Rogue Racer', 'Audio');
+  return _tauriAudioDir;
+}
+// relSrc looks like 'Audio/Effects/x.ogg' -> reads Rogue Racer\Audio\Effects\x.ogg.
+async function _tauriAudioBytes(relSrc) {
+  try {
+    const path = window.__TAURI__.path, fs = window.__TAURI__.fs;
+    const dir = await _tauriAudioDirPath();
+    const parts = String(relSrc).replace(/^Audio[\/\\]/, '').split(/[\/\\]/);
+    const fp = await path.join(dir, ...parts);
+    return await fs.readFile(fp); // Uint8Array
+  } catch (_) { return null; }
+}
+const _tauriAudioUrlCache = {};
+async function _tauriAudioObjectUrl(relSrc) {
+  if (_tauriAudioUrlCache[relSrc]) return _tauriAudioUrlCache[relSrc];
+  const bytes = await _tauriAudioBytes(relSrc);
+  if (!bytes) return null;
+  const url = URL.createObjectURL(new Blob([bytes]));
+  _tauriAudioUrlCache[relSrc] = url;
+  return url;
+}
+// Repoint the static <audio> elements (menu music + sampled SFX, declared in
+// 060-game-engine.js) at the external folder. No-op in the browser.
+async function _tauriRetargetAudioElements() {
+  if (!IS_TAURI) return;
+  const map = [
+    [menuMusic,     'Audio/Tracks/menu.ogg'],
+    [builderMusic,  'Audio/Tracks/menu2.ogg'],
+    [countdownVoice,'Audio/Effects/321go.ogg'],
+    [sfxMachineGun, 'Audio/Effects/Machine gun bullet.ogg'],
+    [sfxShell,      'Audio/Effects/shell.ogg'],
+    [sfxShieldLoop, 'Audio/Effects/sheild long.ogg'],
+    [sfxShieldDown, 'Audio/Effects/shield down.ogg'],
+    [sfxShieldHit,  'Audio/Effects/shield hit.ogg'],
+  ];
+  for (const [el, rel] of map) {
+    try { const u = await _tauriAudioObjectUrl(rel); if (u && el) el.src = u; } catch (_) {}
+  }
 }
 
 async function _applyGameRoot(root, remember) {
@@ -6081,7 +6130,7 @@ function applyAudioSettings() {
   applyMusicMixVolumes();
   countdownVoice.volume = CAR_TUNING.audioCountdownBaseVolume * AUDIO_SETTINGS.fx * AUDIO_SETTINGS.master;
   // Keep the shield-active ambience loop at the correct level if it's playing.
-  try { if (!sfxShieldLoop.paused) sfxShieldLoop.volume = Math.max(0, Math.min(1, 0.55 * AUDIO_SETTINGS.fx * AUDIO_SETTINGS.master)); } catch (_) {}
+  try { if (!sfxShieldLoop.paused) sfxShieldLoop.volume = Math.max(0, Math.min(1, 0.12 * AUDIO_SETTINGS.fx * AUDIO_SETTINGS.master)); } catch (_) {}
   if (touchControlsRoot) {
     touchControlsRoot.style.display = AUDIO_SETTINGS.touchControls ? 'flex' : 'none';
   }
@@ -6382,6 +6431,21 @@ const ENGINE_TUNING = {
   [ENGINE_SCREAMER_SRC]:        { mode: 'xfade',  loopStart: 0.003, loopEnd: 0.093, xfade: 0.415, rateIdle: 0.30 },
 };
 
+// Per-engine loudness normalization (dialled in with engine-test.html's Volume
+// Normalizer). Each value is the target audible gain for that engine loop; it's
+// applied as a scale factor relative to audioEngineLocalBaseVol so both the local
+// and remote engine volume paths (zoom span, distance falloff) scale together.
+const ENGINE_VOLUME = {
+  [ENGINE_DEFAULT_SRC]:         0.14, // drifter
+  [ENGINE_DRAGGER_SRC]:         0.07,
+  [ENGINE_BOUNCER_PUNCHER_SRC]: 0.06, // puncher / baller
+  [ENGINE_NEEDLE_SRC]:          0.04,
+  [ENGINE_COIL_SRC]:            0.18,
+  [ENGINE_ROTOR_SRC]:           0.10,
+  [ENGINE_HOLO_SRC]:            0.09,
+  [ENGINE_SCREAMER_SRC]:        0.03,
+};
+
 // One decoded buffer "bank" per engine source.
 const engineBuffers = {}; // src -> { buffer, ready, loading, nextRetryAt, loopStart, loopEnd }
 function engineBankFor(src) {
@@ -6613,6 +6677,11 @@ function loadEngineBufferFor(src) {
     // Prefer the connected game folder (works from file://), then fall back to the network.
     let arr = await _engineArrayBufferFromFolder(src);
 
+    if (!arr && IS_TAURI) {
+      const bytes = await _tauriAudioBytes(src);
+      if (bytes) arr = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    }
+
     if (!arr) {
       try {
         const resp = await fetch(src);
@@ -6673,6 +6742,9 @@ async function decodeAndApplyEngineArrayBuffer(arr) {
 
 // Async preload on startup. Once each decodes, players swap to seamless buffer/crossfade loops.
 preloadAllEngines();
+
+// Native desktop: point the sampled <audio> elements at the external Audio folder.
+if (IS_TAURI) { _tauriRetargetAudioElements(); }
 
 function createEngineNode(id, carType) {
   const wantedSrc = engineSrcForCarType(carType);
@@ -6775,7 +6847,11 @@ function updateEngineAudio() {
     // Subtle tunable engine loudness wobble for more mechanical texture.
     const idSeed = (p.id || '').split('').reduce((s, ch) => s + ch.charCodeAt(0), 0) * 0.017;
     const noise = 1 + Math.sin(nowSec * (Math.PI * 2) * CAR_TUNING.audioEngineVolumeNoiseHz + idSeed) * CAR_TUNING.audioEngineVolumeNoiseAmp;
-    vol = Math.max(0, vol * noise);
+    // Per-engine loudness normalization: scale relative to the shared base volume
+    // so the zoom-span and distance-falloff behavior is preserved.
+    const _engNorm = ENGINE_VOLUME[node.engineSrc];
+    const _engScale = (_engNorm != null) ? (_engNorm / CAR_TUNING.audioEngineLocalBaseVol) : 1;
+    vol = Math.max(0, vol * noise * _engScale);
 
     const mix = Math.max(0, Math.min(1, AUDIO_SETTINGS.master * AUDIO_SETTINGS.fx * CAR_TUNING.audioEngineMixBase));
     if (node.isBuffer) {
@@ -7273,7 +7349,7 @@ function playShieldHit() {
   const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
   if (now - _shieldHitLast < 90) return;
   _shieldHitLast = now;
-  playSfxSample(sfxShieldHit, 0.6);
+  playSfxSample(sfxShieldHit, 0.14);
 }
 
 // Fade the shield-active ambience loop in (on activation) or out (on loss) over
@@ -7282,7 +7358,7 @@ let _shieldLoopOn = false;
 let _shieldFadeTimer = null;
 function fadeShieldLoop(on) {
   try {
-    const base = 0.55 * fxGain();
+    const base = 0.12 * fxGain();
     const target = on ? base : 0;
     if (on) {
       try { if (sfxShieldLoop.paused) { sfxShieldLoop.currentTime = 0; sfxShieldLoop.volume = 0; sfxShieldLoop.play().catch(() => {}); } } catch (_) {}
@@ -7346,7 +7422,7 @@ function playWallHit(intensity) {
     const now = audioCtx.currentTime;
     if (now - _lastWallHitAt < 0.07) return; // debounce rapid grinds
     _lastWallHitAt = now;
-    const vol = Math.max(0.08, Math.min(1, intensity || 0.5)) * g * 0.55;
+    const vol = Math.max(0.08, Math.min(1, intensity || 0.5)) * g * 0.12;
     // Low thud
     const osc = audioCtx.createOscillator();
     osc.type = 'sine';
@@ -7387,7 +7463,7 @@ function playPowerupPickup() {
       osc.frequency.value = f;
       const og = audioCtx.createGain();
       og.gain.setValueAtTime(0.0001, t);
-      og.gain.exponentialRampToValueAtTime(g * 0.34, t + 0.018);
+      og.gain.exponentialRampToValueAtTime(g * 0.07, t + 0.018);
       og.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
       osc.connect(og); og.connect(audioCtx.destination);
       osc.start(t); osc.stop(t + 0.22);
@@ -7398,19 +7474,19 @@ function playPowerupPickup() {
 // Powerup activation: a flavor per item type.
 function playItemUse(item) {
   switch (item) {
-    case 'boost':   playSweep(300, 920, 0.34, 'sawtooth', 0.32); break;
-    case 'shield':  playSweep(420, 680, 0.40, 'sine', 0.32); break;
-    case 'ghost':   playSweep(900, 1500, 0.50, 'sine', 0.22); break;
-    case 'oil':     playSweep(260, 90, 0.30, 'triangle', 0.30); break;
-    case 'mine':    playSweep(220, 70, 0.28, 'square', 0.26); break;
-    case 'pulse':   playSweep(120, 760, 0.30, 'sawtooth', 0.36); break;
-    case 'missile': playSweep(760, 220, 0.42, 'sawtooth', 0.32); break;
-    case 'shell':   playSfxSample(sfxShell, 0.75); break;
-    case 'ball':    playSweep(300, 540, 0.34, 'sine', 0.30); break;
-    case 'ghoul':   playSweep(160, 60, 0.55, 'triangle', 0.34); break;
-    case 'deathray':playSweep(1400, 400, 0.55, 'sawtooth', 0.30); break;
-    case 'drain':   playSweep(200, 900, 0.40, 'sine', 0.30); break;
-    case 'machinegun': playSfxSample(sfxMachineGun, 0.5); break;
+    case 'boost':   playSweep(300, 920, 0.34, 'sawtooth', 0.04); break;
+    case 'shield':  playSweep(420, 680, 0.40, 'sine', 0.04); break;
+    case 'ghost':   playSweep(900, 1500, 0.50, 'sine', 0.02); break;
+    case 'oil':     playSweep(260, 90, 0.30, 'triangle', 0.06); break;
+    case 'mine':    playSweep(220, 70, 0.28, 'square', 0.04); break;
+    case 'pulse':   playSweep(120, 760, 0.30, 'sawtooth', 0.03); break;
+    case 'missile': playSweep(760, 220, 0.42, 'sawtooth', 0.03); break;
+    case 'shell':   playSfxSample(sfxShell, 0.10); break;
+    case 'ball':    playSweep(300, 540, 0.34, 'sine', 0.03); break;
+    case 'ghoul':   playSweep(160, 60, 0.55, 'triangle', 0.03); break;
+    case 'deathray':playSweep(1400, 400, 0.55, 'sawtooth', 0.05); break;
+    case 'drain':   playSweep(200, 900, 0.40, 'sine', 0.04); break;
+    case 'machinegun': playSfxSample(sfxMachineGun, 0.10); break;
     default:        playSweep(420, 820, 0.30, 'sawtooth', 0.30);
   }
 }
@@ -7445,7 +7521,7 @@ function setIceSlide(amount) {
   if (!iceSlide) return;
   const a = Math.min(1, amount);
   try {
-    iceSlide.gain.gain.setTargetAtTime(a * g * 0.2, audioCtx.currentTime, 0.05);
+    iceSlide.gain.gain.setTargetAtTime(a * g * 0.01, audioCtx.currentTime, 0.05);
     iceSlide.flt.frequency.setTargetAtTime(4200 + a * 4200, audioCtx.currentTime, 0.1);
   } catch (_) {}
 }
@@ -7488,7 +7564,7 @@ function setDriftScreech(amount) {
   if (!driftScreech) return;
   const a = Math.min(1, amount);
   try {
-    driftScreech.gain.gain.setTargetAtTime(a * g * 0.13, audioCtx.currentTime, 0.05);
+    driftScreech.gain.gain.setTargetAtTime(a * g * 0.04, audioCtx.currentTime, 0.05);
     driftScreech.flt.frequency.setTargetAtTime(650 + a * 750, audioCtx.currentTime, 0.08);
   } catch (_) {}
 }
@@ -7551,7 +7627,7 @@ function updateResetHold(dt) {
 
   // White noise rises from silence (eased so it starts truly quiet).
   if (resetNoise) {
-    resetNoise.gain.gain.value = Math.min(0.32, resetHold.charge * resetHold.charge * 0.32);
+    resetNoise.gain.gain.value = Math.min(0.03, resetHold.charge * resetHold.charge * 0.03);
   }
 
   // Smoke vents faster as the charge climbs.
@@ -8413,21 +8489,29 @@ function updateMyPlayer(dt) {
     if ((me.rotorSpinUp || 0) > 0) maxSpeed *= CAR_TUNING.rotorSpinUpSpeedMult;
   }
   if (me.boosting > 0) { maxSpeed *= CAR_TUNING.boostSpeedMultiplier; me.boosting -= dt; }
-  // Boost-pad bonus: each pad you crossed adds an independent hump that decays to 0 over
-  // CAR_TUNING.boostPadBonusSec; the humps SUM so stacking pads gives an even bigger
-  // boost. The total raises top speed here and drives the white speed vignette in render.
+  // Boost-pad bonus: each pad you crossed adds an independent "hump" over
+  // CAR_TUNING.boostPadBonusSec. Two things are summed from the live humps:
+  //   boostPadBonus = per-pad speed fraction * envelope  -> raises top speed (stacks)
+  //   boostPadEnv   = the normalized 1->0 envelope        -> drives the white vignette
+  // so one pad flashes the vignette to full white and fades over 2s, and stacking pads
+  // gives a bigger/longer speed boost.
   {
     let boostPadBonus = 0;
+    let boostPadEnv = 0;
     if (Array.isArray(me.boostHumps) && me.boostHumps.length) {
       const nowB = performance.now();
       const life = CAR_TUNING.boostPadBonusSec * 1000;
       me.boostHumps = me.boostHumps.filter(h => nowB - h.t0 < life);
-      for (const h of me.boostHumps) boostPadBonus += h.mag * Math.max(0, 1 - (nowB - h.t0) / life);
+      for (const h of me.boostHumps) {
+        const env = Math.max(0, 1 - (nowB - h.t0) / life);
+        boostPadBonus += h.mag * env;
+        boostPadEnv += env;
+      }
     }
     me.boostBonus = boostPadBonus;
     if (boostPadBonus > 0) maxSpeed *= (1 + boostPadBonus);
-    // White vignette: fast fade-in (~0.2s), then follows the bonus back down to 0.
-    const vigTarget = Math.min(1, boostPadBonus);
+    // Vignette: fast fade-in (~0.2s) to the (capped) envelope, then follows it back to 0.
+    const vigTarget = Math.min(1, boostPadEnv);
     me.boostVignette = vigTarget > (me.boostVignette || 0)
       ? Math.min(vigTarget, (me.boostVignette || 0) + dt / 0.2)
       : vigTarget;
@@ -8955,20 +9039,20 @@ function updateMyPlayer(dt) {
         continue;
       }
       if (obs.type === 'boost_pad' && d < hitR) {
-        // Booster strip: no solid collision — you drive straight through it. Edge-triggered
-        // (one kick per pad you cross, not one per frame): it bumps your current speed a
-        // little higher and adds a decaying speed hump (see maxSpeed above) that also lifts
-        // your top speed so the kick isn't clamped. Crossing several pads stacks the humps
-        // for a bigger boost. It is NOT the nitro item. Fattens your trail for a second.
+        // Booster strip: no solid collision. Edge-triggered (one kick per pad you cross).
+        // Each crossing adds a decaying "hump": the normalized envelope drives the white
+        // vignette, and (scaled by the per-pad kick) raises your speed. Stacking pads
+        // stacks the humps for a bigger boost. NOT the nitro item; no booster trail.
         boostPadContact = true;
         if (!me._onBoostPad) {
-          const shipAccel = Math.max(1, Math.min(10, (carCfg.accelMult || 1) * 5)); // 1..10
-          const trackSpeed = Math.max(1, Math.min(9, speedScale));                 // 1..9
-          const mag = CAR_TUNING.boostPadPushPerStat * shipAccel * trackSpeed;      // fraction
+          const shipAccel = carCfg.ratings
+            ? Math.max(1, Math.min(10, carCfg.ratings.accel || 5))            // 1..10 (roster ships)
+            : Math.max(1, Math.min(10, Math.round((carCfg.accelMult || 1) * 5))); // prototypes have no rating
+          const trackSpeed = Math.max(1, Math.min(9, speedScale));            // 1..9
+          const mag = CAR_TUNING.boostPadPushPerStat * shipAccel * trackSpeed; // fraction of current speed
           (me.boostHumps || (me.boostHumps = [])).push({ t0: performance.now(), mag });
           me.vx *= (1 + mag);
           me.vy *= (1 + mag);
-          me.trailBoost = Math.max(me.trailBoost || 0, 1);
         }
         continue;
       }
@@ -9222,7 +9306,7 @@ function updateMyPlayer(dt) {
     if (wantShield && !_shieldLoopOn) { _shieldLoopOn = true; fadeShieldLoop(true); }
     else if (!wantShield && _shieldLoopOn) {
       _shieldLoopOn = false; fadeShieldLoop(false);
-      if (G.raceStarted && !me.finished) playSfxSample(sfxShieldDown, 0.75);
+      if (G.raceStarted && !me.finished) playSfxSample(sfxShieldDown, 0.14);
     }
   }
 
@@ -18222,6 +18306,94 @@ function runLayerSystemRegressionTests() {
     });
   }
 
+  // ---------- debug: live tuning editor (hidden command) ----------
+  // Opens a scrollable list of every numeric CAR_TUNING value with an input box.
+  // Edits are written straight into CAR_TUNING, which the engine reads every frame,
+  // so tweaks take effect instantly — even in the middle of a race. Copy buttons
+  // dump the values as ready-to-paste JS so they can be handed back for the source.
+  function openDebugTuning(){
+    return openWindow('debugtuning', 'DEBUG \u00B7 TUNING', {
+      width: 480, height: 580, minW: 340, minH: 320,
+      onOpen: (w) => {
+        const body = w.body;
+        body.innerHTML = '';
+        body.style.cssText += ';padding:10px;overflow:hidden;display:flex;flex-direction:column;gap:8px;';
+
+        // Snapshot the shipped defaults once so "changed" highlighting and reset work
+        // even after values have been edited and the window reopened.
+        if (!window.__tuningDefaults) {
+          window.__tuningDefaults = {};
+          for (const k in CAR_TUNING) if (typeof CAR_TUNING[k] === 'number') window.__tuningDefaults[k] = CAR_TUNING[k];
+        }
+        const defaults = window.__tuningDefaults;
+        const keys = Object.keys(CAR_TUNING).filter(k => typeof CAR_TUNING[k] === 'number').sort();
+
+        const hint = document.createElement('div');
+        hint.textContent = 'Live tuning \u2014 edits apply instantly, even mid-race. Yellow = changed.';
+        hint.style.cssText = 'font-size:0.64rem;color:#6fdc95;opacity:0.85;letter-spacing:0.03em;';
+
+        const bar = document.createElement('div');
+        bar.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;align-items:center;';
+        const search = document.createElement('input');
+        search.type = 'text'; search.placeholder = 'filter\u2026';
+        search.style.cssText = 'flex:1;min-width:110px;font-family:inherit;font-size:0.72rem;color:#c9ffd8;background:rgba(4,23,12,0.9);border:1px solid #1f7a45;border-radius:4px;padding:5px 8px;';
+        const copyAllBtn = tagWinBtn('Copy All');
+        const copyChangedBtn = tagWinBtn('Copy Changed');
+        const resetBtn = tagWinBtn('Reset All');
+        bar.appendChild(search); bar.appendChild(copyAllBtn); bar.appendChild(copyChangedBtn); bar.appendChild(resetBtn);
+
+        const list = document.createElement('div');
+        list.style.cssText = 'flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:1px;padding-right:4px;';
+
+        const rows = [];
+        keys.forEach(k => {
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:0.7rem;padding:2px 4px;border-radius:3px;';
+          const name = document.createElement('span');
+          name.textContent = k; name.title = k;
+          name.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+          const inp = document.createElement('input');
+          inp.type = 'number'; inp.step = 'any'; inp.value = CAR_TUNING[k];
+          inp.style.cssText = 'width:96px;font-family:inherit;font-size:0.7rem;color:#eafff0;background:rgba(4,23,12,0.9);border:1px solid #1f7a45;border-radius:4px;padding:4px 6px;text-align:right;';
+          const mark = () => {
+            const changed = CAR_TUNING[k] !== defaults[k];
+            name.style.color = changed ? '#ffe08a' : '#c9ffd8';
+            inp.style.borderColor = changed ? '#c9a24a' : '#1f7a45';
+          };
+          inp.addEventListener('input', () => {
+            const v = parseFloat(inp.value);
+            if (Number.isFinite(v)) { CAR_TUNING[k] = v; mark(); }
+          });
+          mark();
+          row.appendChild(name); row.appendChild(inp);
+          list.appendChild(row);
+          rows.push({ k, row, inp, mark });
+        });
+
+        search.addEventListener('input', () => {
+          const q = search.value.trim().toLowerCase();
+          rows.forEach(r => { r.row.style.display = (!q || r.k.toLowerCase().includes(q)) ? '' : 'none'; });
+        });
+
+        const flash = (btn, ok) => { const t = btn.textContent; btn.textContent = ok; setTimeout(() => { btn.textContent = t; }, 1200); };
+        const copy = (text, btn, ok) => { try { navigator.clipboard.writeText(text).then(() => flash(btn, ok)).catch(() => {}); } catch (_) {} };
+        copyAllBtn.addEventListener('click', () => {
+          copy(keys.map(k => '  ' + k + ': ' + CAR_TUNING[k] + ',').join('\n'), copyAllBtn, 'Copied!');
+        });
+        copyChangedBtn.addEventListener('click', () => {
+          const ch = keys.filter(k => CAR_TUNING[k] !== defaults[k]);
+          copy(ch.length ? ch.map(k => '  ' + k + ': ' + CAR_TUNING[k] + ',').join('\n') : '(no changes)', copyChangedBtn, ch.length ? 'Copied!' : 'None');
+        });
+        resetBtn.addEventListener('click', () => {
+          keys.forEach(k => { CAR_TUNING[k] = defaults[k]; });
+          rows.forEach(r => { r.inp.value = CAR_TUNING[r.k]; r.mark(); });
+        });
+
+        body.appendChild(hint); body.appendChild(bar); body.appendChild(list);
+      }
+    });
+  }
+
   // ---------- SYNCED RACE BOOT SEQUENCE ----------
   // A deterministic, seed-driven "diagnostics + launch" animation played on every
   // client so all racers see the exact same quips. Do NOT surface the sync in-game.
@@ -19192,6 +19364,16 @@ function runLayerSystemRegressionTests() {
       'A multiplayer roguelike racer rendered on an imaginary CRT.',
       'All menus are a terminal. Try: host, join <code>, editor.',
     ], { speed: 12 }) },
+    // Hidden dev command (intentionally absent from `help`). Unlocks the live
+    // tuning editor so every CAR_TUNING value can be tweaked mid-round.
+    debug: { desc: 'live tuning editor', instant: true, run: (a) => {
+      if ((a[0] || '') !== '19812') {
+        print('Unknown command "debug' + (a.length ? ' ' + a.join(' ') : '') + '" use "HELP" for a list of commands.', 'err');
+        return;
+      }
+      print('debug mode unlocked \u2014 live tuning editor', 'hi');
+      openDebugTuning();
+    } },
   };
 
   // A short spinner shown before non-window commands run, matching the help style.

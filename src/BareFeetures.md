@@ -3,5 +3,4 @@ Add autopilot powerup
 Add powerup timers
 Rework shield to block all hits for a duration
 Rework shield to not insta kill you upon hitting an obstacle
-
 GO BY ALL OF THE FEATURES EASIEST TO HARDEST

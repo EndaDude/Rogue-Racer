@@ -23,7 +23,7 @@ function playShieldHit() {
   const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
   if (now - _shieldHitLast < 90) return;
   _shieldHitLast = now;
-  playSfxSample(sfxShieldHit, 0.6);
+  playSfxSample(sfxShieldHit, 0.14);
 }
 
 // Fade the shield-active ambience loop in (on activation) or out (on loss) over
@@ -32,7 +32,7 @@ let _shieldLoopOn = false;
 let _shieldFadeTimer = null;
 function fadeShieldLoop(on) {
   try {
-    const base = 0.55 * fxGain();
+    const base = 0.12 * fxGain();
     const target = on ? base : 0;
     if (on) {
       try { if (sfxShieldLoop.paused) { sfxShieldLoop.currentTime = 0; sfxShieldLoop.volume = 0; sfxShieldLoop.play().catch(() => {}); } } catch (_) {}
@@ -96,7 +96,7 @@ function playWallHit(intensity) {
     const now = audioCtx.currentTime;
     if (now - _lastWallHitAt < 0.07) return; // debounce rapid grinds
     _lastWallHitAt = now;
-    const vol = Math.max(0.08, Math.min(1, intensity || 0.5)) * g * 0.55;
+    const vol = Math.max(0.08, Math.min(1, intensity || 0.5)) * g * 0.12;
     // Low thud
     const osc = audioCtx.createOscillator();
     osc.type = 'sine';
@@ -137,7 +137,7 @@ function playPowerupPickup() {
       osc.frequency.value = f;
       const og = audioCtx.createGain();
       og.gain.setValueAtTime(0.0001, t);
-      og.gain.exponentialRampToValueAtTime(g * 0.34, t + 0.018);
+      og.gain.exponentialRampToValueAtTime(g * 0.07, t + 0.018);
       og.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
       osc.connect(og); og.connect(audioCtx.destination);
       osc.start(t); osc.stop(t + 0.22);
@@ -148,19 +148,19 @@ function playPowerupPickup() {
 // Powerup activation: a flavor per item type.
 function playItemUse(item) {
   switch (item) {
-    case 'boost':   playSweep(300, 920, 0.34, 'sawtooth', 0.32); break;
-    case 'shield':  playSweep(420, 680, 0.40, 'sine', 0.32); break;
-    case 'ghost':   playSweep(900, 1500, 0.50, 'sine', 0.22); break;
-    case 'oil':     playSweep(260, 90, 0.30, 'triangle', 0.30); break;
-    case 'mine':    playSweep(220, 70, 0.28, 'square', 0.26); break;
-    case 'pulse':   playSweep(120, 760, 0.30, 'sawtooth', 0.36); break;
-    case 'missile': playSweep(760, 220, 0.42, 'sawtooth', 0.32); break;
-    case 'shell':   playSfxSample(sfxShell, 0.75); break;
-    case 'ball':    playSweep(300, 540, 0.34, 'sine', 0.30); break;
-    case 'ghoul':   playSweep(160, 60, 0.55, 'triangle', 0.34); break;
-    case 'deathray':playSweep(1400, 400, 0.55, 'sawtooth', 0.30); break;
-    case 'drain':   playSweep(200, 900, 0.40, 'sine', 0.30); break;
-    case 'machinegun': playSfxSample(sfxMachineGun, 0.5); break;
+    case 'boost':   playSweep(300, 920, 0.34, 'sawtooth', 0.04); break;
+    case 'shield':  playSweep(420, 680, 0.40, 'sine', 0.04); break;
+    case 'ghost':   playSweep(900, 1500, 0.50, 'sine', 0.02); break;
+    case 'oil':     playSweep(260, 90, 0.30, 'triangle', 0.06); break;
+    case 'mine':    playSweep(220, 70, 0.28, 'square', 0.04); break;
+    case 'pulse':   playSweep(120, 760, 0.30, 'sawtooth', 0.03); break;
+    case 'missile': playSweep(760, 220, 0.42, 'sawtooth', 0.03); break;
+    case 'shell':   playSfxSample(sfxShell, 0.10); break;
+    case 'ball':    playSweep(300, 540, 0.34, 'sine', 0.03); break;
+    case 'ghoul':   playSweep(160, 60, 0.55, 'triangle', 0.03); break;
+    case 'deathray':playSweep(1400, 400, 0.55, 'sawtooth', 0.05); break;
+    case 'drain':   playSweep(200, 900, 0.40, 'sine', 0.04); break;
+    case 'machinegun': playSfxSample(sfxMachineGun, 0.10); break;
     default:        playSweep(420, 820, 0.30, 'sawtooth', 0.30);
   }
 }
@@ -195,7 +195,7 @@ function setIceSlide(amount) {
   if (!iceSlide) return;
   const a = Math.min(1, amount);
   try {
-    iceSlide.gain.gain.setTargetAtTime(a * g * 0.2, audioCtx.currentTime, 0.05);
+    iceSlide.gain.gain.setTargetAtTime(a * g * 0.01, audioCtx.currentTime, 0.05);
     iceSlide.flt.frequency.setTargetAtTime(4200 + a * 4200, audioCtx.currentTime, 0.1);
   } catch (_) {}
 }
@@ -238,7 +238,7 @@ function setDriftScreech(amount) {
   if (!driftScreech) return;
   const a = Math.min(1, amount);
   try {
-    driftScreech.gain.gain.setTargetAtTime(a * g * 0.13, audioCtx.currentTime, 0.05);
+    driftScreech.gain.gain.setTargetAtTime(a * g * 0.04, audioCtx.currentTime, 0.05);
     driftScreech.flt.frequency.setTargetAtTime(650 + a * 750, audioCtx.currentTime, 0.08);
   } catch (_) {}
 }
@@ -301,7 +301,7 @@ function updateResetHold(dt) {
 
   // White noise rises from silence (eased so it starts truly quiet).
   if (resetNoise) {
-    resetNoise.gain.gain.value = Math.min(0.32, resetHold.charge * resetHold.charge * 0.32);
+    resetNoise.gain.gain.value = Math.min(0.03, resetHold.charge * resetHold.charge * 0.03);
   }
 
   // Smoke vents faster as the charge climbs.
@@ -1163,21 +1163,29 @@ function updateMyPlayer(dt) {
     if ((me.rotorSpinUp || 0) > 0) maxSpeed *= CAR_TUNING.rotorSpinUpSpeedMult;
   }
   if (me.boosting > 0) { maxSpeed *= CAR_TUNING.boostSpeedMultiplier; me.boosting -= dt; }
-  // Boost-pad bonus: each pad you crossed adds an independent hump that decays to 0 over
-  // CAR_TUNING.boostPadBonusSec; the humps SUM so stacking pads gives an even bigger
-  // boost. The total raises top speed here and drives the white speed vignette in render.
+  // Boost-pad bonus: each pad you crossed adds an independent "hump" over
+  // CAR_TUNING.boostPadBonusSec. Two things are summed from the live humps:
+  //   boostPadBonus = per-pad speed fraction * envelope  -> raises top speed (stacks)
+  //   boostPadEnv   = the normalized 1->0 envelope        -> drives the white vignette
+  // so one pad flashes the vignette to full white and fades over 2s, and stacking pads
+  // gives a bigger/longer speed boost.
   {
     let boostPadBonus = 0;
+    let boostPadEnv = 0;
     if (Array.isArray(me.boostHumps) && me.boostHumps.length) {
       const nowB = performance.now();
       const life = CAR_TUNING.boostPadBonusSec * 1000;
       me.boostHumps = me.boostHumps.filter(h => nowB - h.t0 < life);
-      for (const h of me.boostHumps) boostPadBonus += h.mag * Math.max(0, 1 - (nowB - h.t0) / life);
+      for (const h of me.boostHumps) {
+        const env = Math.max(0, 1 - (nowB - h.t0) / life);
+        boostPadBonus += h.mag * env;
+        boostPadEnv += env;
+      }
     }
     me.boostBonus = boostPadBonus;
     if (boostPadBonus > 0) maxSpeed *= (1 + boostPadBonus);
-    // White vignette: fast fade-in (~0.2s), then follows the bonus back down to 0.
-    const vigTarget = Math.min(1, boostPadBonus);
+    // Vignette: fast fade-in (~0.2s) to the (capped) envelope, then follows it back to 0.
+    const vigTarget = Math.min(1, boostPadEnv);
     me.boostVignette = vigTarget > (me.boostVignette || 0)
       ? Math.min(vigTarget, (me.boostVignette || 0) + dt / 0.2)
       : vigTarget;
@@ -1705,20 +1713,20 @@ function updateMyPlayer(dt) {
         continue;
       }
       if (obs.type === 'boost_pad' && d < hitR) {
-        // Booster strip: no solid collision — you drive straight through it. Edge-triggered
-        // (one kick per pad you cross, not one per frame): it bumps your current speed a
-        // little higher and adds a decaying speed hump (see maxSpeed above) that also lifts
-        // your top speed so the kick isn't clamped. Crossing several pads stacks the humps
-        // for a bigger boost. It is NOT the nitro item. Fattens your trail for a second.
+        // Booster strip: no solid collision. Edge-triggered (one kick per pad you cross).
+        // Each crossing adds a decaying "hump": the normalized envelope drives the white
+        // vignette, and (scaled by the per-pad kick) raises your speed. Stacking pads
+        // stacks the humps for a bigger boost. NOT the nitro item; no booster trail.
         boostPadContact = true;
         if (!me._onBoostPad) {
-          const shipAccel = Math.max(1, Math.min(10, (carCfg.accelMult || 1) * 5)); // 1..10
-          const trackSpeed = Math.max(1, Math.min(9, speedScale));                 // 1..9
-          const mag = CAR_TUNING.boostPadPushPerStat * shipAccel * trackSpeed;      // fraction
+          const shipAccel = carCfg.ratings
+            ? Math.max(1, Math.min(10, carCfg.ratings.accel || 5))            // 1..10 (roster ships)
+            : Math.max(1, Math.min(10, Math.round((carCfg.accelMult || 1) * 5))); // prototypes have no rating
+          const trackSpeed = Math.max(1, Math.min(9, speedScale));            // 1..9
+          const mag = CAR_TUNING.boostPadPushPerStat * shipAccel * trackSpeed; // fraction of current speed
           (me.boostHumps || (me.boostHumps = [])).push({ t0: performance.now(), mag });
           me.vx *= (1 + mag);
           me.vy *= (1 + mag);
-          me.trailBoost = Math.max(me.trailBoost || 0, 1);
         }
         continue;
       }
@@ -1972,7 +1980,7 @@ function updateMyPlayer(dt) {
     if (wantShield && !_shieldLoopOn) { _shieldLoopOn = true; fadeShieldLoop(true); }
     else if (!wantShield && _shieldLoopOn) {
       _shieldLoopOn = false; fadeShieldLoop(false);
-      if (G.raceStarted && !me.finished) playSfxSample(sfxShieldDown, 0.75);
+      if (G.raceStarted && !me.finished) playSfxSample(sfxShieldDown, 0.14);
     }
   }
 
