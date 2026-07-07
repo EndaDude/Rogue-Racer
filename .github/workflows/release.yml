@@ -18,14 +18,24 @@ jobs:
         include:
           - platform: 'ubuntu-22.04'
             args: '--bundles appimage,deb'
+            rust_target: ''
           - platform: 'windows-latest'
             args: '--bundles nsis'
+            rust_target: ''
+          - platform: 'macos-latest'
+            args: '--bundles dmg --target aarch64-apple-darwin'
+            rust_target: 'aarch64-apple-darwin'
+          - platform: 'macos-13'
+            args: '--bundles dmg --target x86_64-apple-darwin'
+            rust_target: 'x86_64-apple-darwin'
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
