@@ -795,6 +795,7 @@ function resolveRaceLaps(map) {
 
 // Host-authoritative: build a track from the given map (or random) and start the race for everyone.
 function hostLaunchRace(selectedMap) {
+  sendToAll({type: 'player_reset', id: 'all', x: 0, y: 0})
   const resultsScr = document.getElementById('results-screen');
   if (resultsScr) resultsScr.style.display = 'none';
   clearPostRaceTimer();

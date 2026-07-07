@@ -377,6 +377,12 @@ function onData(data, fromId) {
         applyDamage(me, CAR_TUNING.puncherShockDamage / Math.max(0.5, getCarTypeCfg(me.carType).crashResist || 1), 'shock');
       }
     }
+  } else if (data.type === 'player_reset') {
+    if (G.isHost) sendToAll({type: 'player_reset', id:data.id, x: data.x, y: data.y});
+    if (!(data.id == G.myId || data.id == 'all')) return;
+    const me = G.players[G.myId]
+    me.x = data.x
+    me.y = data.y
   } else if (data.type === 'player_finished') {
     if (!G.finishOrder.includes(data.id)) {
       G.finishOrder.push(data.id);

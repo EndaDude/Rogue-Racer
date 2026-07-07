@@ -297,6 +297,17 @@ function render(dt) {
     const d = layer - myLayerView;
     ctx.save();
     applyLayerTransform(d);
+    // Viewport cull rect for this layer (world space). A point p appears at screen
+    // offset effZoom*ls*(p-cam) from centre, so the visible world half-extent is
+    // (halfScreen)/(effZoom*ls); pad it so nothing pops at the edges. Per-entity
+    // draws below skip anything outside this via inView().
+    {
+      const ls = layerVisualScale(d) || 1;
+      const es = effZoom * ls;
+      const chw = (W / 2) / es + 160;
+      const chh = (H / 2) / es + 160;
+      G._cull = { minX: G.camera.x - chw, maxX: G.camera.x + chw, minY: G.camera.y - chh, maxY: G.camera.y + chh };
+    }
     // An overpass must visually cover everything on the floors beneath it — cars AND
     // walls/markings (all drawn in Phase C, above Phase A's ground). Re-blit this floor's
     // deck here for the player's own layer and any higher one, so lower layers' Phase C
@@ -327,6 +338,7 @@ function render(dt) {
     drawFx(ctx, layer);
     ctx.restore();
   }
+  G._cull = null; // screen-space / projectile passes below are not layer-culled
   drawMissiles(ctx);
   drawShells(ctx);
   drawBalls(ctx);
@@ -1406,8 +1418,9 @@ function drawObstacles(ctx, layer) {
   G.track.obstacles.forEach(obs => {
     if (obs.active === false) return;
     if (obstacleLayer(obs) !== layer) return;
-    ensureObstacleRuntime(obs);
     const rr = (obs.r || 12) * (obs.scale || 1);
+    if (!inView(obs.x, obs.y, rr + 6)) return;
+    ensureObstacleRuntime(obs);
     const rot = ((obs.rot || 0) * Math.PI) / 180;
     ctx.save();
     ctx.translate(obs.x, obs.y);
@@ -1527,6 +1540,7 @@ function drawImpactParticles(ctx, layer) {
     const snow = frameLayerBucket('snow', G.snowParticles, layer);
     for (let i = 0; i < snow.length; i++) {
       const p = snow[i];
+      if (!inView(p.x, p.y, (p.r || 0) + 3)) continue;
       const a = Math.max(0, p.life / p.maxLife);
       ctx.fillStyle = 'rgba(248,250,252,' + (0.85 * a) + ')';
       ctx.beginPath();
@@ -1538,6 +1552,7 @@ function drawImpactParticles(ctx, layer) {
     const brick = frameLayerBucket('brick', G.brickShards, layer);
     for (let i = 0; i < brick.length; i++) {
       const b = brick[i];
+      if (!inView(b.x, b.y, (b.r || 0) + 3)) continue;
       const a = Math.max(0, b.life / b.maxLife);
       ctx.fillStyle = 'rgba(194,65,12,' + (0.88 * a) + ')';
       ctx.beginPath();
@@ -1550,6 +1565,7 @@ function drawImpactParticles(ctx, layer) {
 function drawItems(ctx, layer) {
   G.track.items.forEach(item => {
     if (itemLayer(item) !== layer) return;
+    if (!inView(item.x, item.y, 20)) return;
     const t = Date.now()/1000;
     const glow = Math.sin(t*3)*0.3+0.7;
     const active = item.active !== false;
@@ -1625,6 +1641,7 @@ function drawGates(ctx, layer) {
 function drawOilSlicks(ctx, layer) {
   G.track.oilSlicks.forEach(slick => {
     if (bridgeFloorAt(slick.x, slick.y) !== layer) return;
+    if (!inView(slick.x, slick.y, slick.r * 1.5 + 4)) return;
     ctx.save();
     ctx.globalAlpha=0.6;
     ctx.fillStyle='#1e293b';
@@ -2232,6 +2249,9 @@ function drawPlayers(ctx, targetLayer) {
   const bucket = frameLayerBucket('players', framePlayers(), targetLayer);
   for (let bi = 0; bi < bucket.length; bi++) {
     const p = bucket[bi];
+    // Off-screen cars cost the most per entity (hull + sheen + decals + label), so
+    // skip them. Radius is generous to keep name tags / effects from popping.
+    if (!inView(p.x, p.y, 90)) continue;
     const typeCfg = getCarTypeCfg(p.carType);
     const shape = typeCfg.shape;
     const drawW = shape === 'puncher' ? CAR_H : CAR_W;
@@ -2446,74 +2466,86 @@ function drawPlayers(ctx, targetLayer) {
   }
 }
 
-function drawMinimap() {
-  const t = G.track;
+// Build the static minimap layer (track outline + finish marker + bounds/transform)
+// once per track into an offscreen canvas. The outline and bounds never change
+// during a race, so caching them turns drawMinimap's per-frame cost from "rescan
+// the whole spline + rebuild hundreds of path segments" into a single drawImage.
+function buildMinimapStatic(t) {
   const sp = t.spline;
-  // Prefer the unified DRIVE geometry so the minimap shows the actual drivable
-  // network — the main loop MINUS the hidden fork "spleen" segments PLUS every fork
-  // path — instead of the raw centre spline. Falls back to the spline for tracks
-  // without drive geometry (e.g. random maps).
   const useDrive = Array.isArray(t.driveSpline) && Array.isArray(t.driveSegs) && t.driveSpline.length >= 2 && t.driveSegs.length > 0;
   const dsp = useDrive ? t.driveSpline : sp;
-  const mmW=140, mmH=140, pad=10;
-  mmCtx.clearRect(0,0,mmW,mmH);
-
-  // find bounds
-  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-  dsp.forEach(p=>{minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y);});
-  const scaleX=(mmW-pad*2)/(maxX-minX||1);
-  const scaleY=(mmH-pad*2)/(maxY-minY||1);
-  const scale=Math.min(scaleX,scaleY);
-  const offX=pad+(mmW-pad*2-(maxX-minX)*scale)/2;
-  const offY=pad+(mmH-pad*2-(maxY-minY)*scale)/2;
-  const tx=x=>(x-minX)*scale+offX;
-  const ty=y=>(y-minY)*scale+offY;
-
-  mmCtx.strokeStyle='rgba(100,100,160,0.8)';
-  mmCtx.lineWidth=3;
-
+  const mmW = 140, mmH = 140, pad = 10;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of dsp) {
+    if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+  }
+  const scaleX = (mmW - pad * 2) / (maxX - minX || 1);
+  const scaleY = (mmH - pad * 2) / (maxY - minY || 1);
+  const scale = Math.min(scaleX, scaleY);
+  const offX = pad + (mmW - pad * 2 - (maxX - minX) * scale) / 2;
+  const offY = pad + (mmH - pad * 2 - (maxY - minY) * scale) / 2;
+  const tx = x => (x - minX) * scale + offX;
+  const ty = y => (y - minY) * scale + offY;
+  const cv = document.createElement('canvas');
+  cv.width = mmW; cv.height = mmH;
+  const c = cv.getContext('2d');
+  c.strokeStyle = 'rgba(100,100,160,0.8)';
+  c.lineWidth = 3;
   if (useDrive) {
-    // Draw each drive segment individually. Hidden spleen segments aren't in driveSegs,
-    // so they simply don't appear; forks are, so they do. Void samples leave a gap.
     const dv = Array.isArray(t.driveVoid) && t.driveVoid.length === dsp.length ? t.driveVoid : null;
-    mmCtx.beginPath();
+    c.beginPath();
     for (const seg of t.driveSegs) {
       const a = dsp[seg.i], b = dsp[seg.j];
       if (!a || !b) continue;
       if (dv && (dv[seg.i] || dv[seg.j])) continue;
-      mmCtx.moveTo(tx(a.x), ty(a.y));
-      mmCtx.lineTo(tx(b.x), ty(b.y));
+      c.moveTo(tx(a.x), ty(a.y));
+      c.lineTo(tx(b.x), ty(b.y));
     }
-    mmCtx.stroke();
+    c.stroke();
   } else {
     const sv = Array.isArray(t.splineVoid) && t.splineVoid.length === sp.length ? t.splineVoid : null;
     const hasVoid = sv && sv.some(Boolean);
-    mmCtx.beginPath();
+    c.beginPath();
     if (!hasVoid) {
-      mmCtx.moveTo(tx(sp[0].x),ty(sp[0].y));
-      for(let i=1;i<sp.length;i++) mmCtx.lineTo(tx(sp[i].x),ty(sp[i].y));
-      mmCtx.closePath();
+      c.moveTo(tx(sp[0].x), ty(sp[0].y));
+      for (let i = 1; i < sp.length; i++) c.lineTo(tx(sp[i].x), ty(sp[i].y));
+      c.closePath();
     } else {
-      // Void samples are holes: break the path so they leave a gap instead of a line.
       const n = sp.length;
       let penDown = false;
       for (let i = 0; i <= n; i++) {
         const idx = i % n;
         if (sv[idx]) { penDown = false; continue; }
         const X = tx(sp[idx].x), Y = ty(sp[idx].y);
-        if (!penDown) { mmCtx.moveTo(X, Y); penDown = true; }
-        else mmCtx.lineTo(X, Y);
+        if (!penDown) { c.moveTo(X, Y); penDown = true; }
+        else c.lineTo(X, Y);
       }
     }
-    mmCtx.stroke();
+    c.stroke();
   }
-
-  // Finish line marker + live item boxes for at-a-glance route planning.
+  // Finish-line marker (static).
   if (sp && sp.length) {
     const f0 = sp[0];
-    mmCtx.fillStyle = '#e2e8f0';
-    mmCtx.fillRect(tx(f0.x) - 2.5, ty(f0.y) - 2.5, 5, 5);
+    c.fillStyle = '#e2e8f0';
+    c.fillRect(tx(f0.x) - 2.5, ty(f0.y) - 2.5, 5, 5);
   }
+  return { canvas: cv, minX, minY, scale, offX, offY };
+}
+
+function drawMinimap() {
+  const t = G.track;
+  const mmW = 140, mmH = 140;
+  // Static outline is cached per track; a fresh map is a new object with no _mm.
+  if (!t._mm) t._mm = buildMinimapStatic(t);
+  const mm = t._mm;
+  const tx = x => (x - mm.minX) * mm.scale + mm.offX;
+  const ty = y => (y - mm.minY) * mm.scale + mm.offY;
+
+  mmCtx.clearRect(0, 0, mmW, mmH);
+  mmCtx.drawImage(mm.canvas, 0, 0);
+
+  // Live item boxes (active state changes as they're collected / respawn).
   if (t.items && t.items.length) {
     mmCtx.fillStyle = 'rgba(251,191,36,0.85)';
     for (const it of t.items) {

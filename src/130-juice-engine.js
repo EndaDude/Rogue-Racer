@@ -174,6 +174,7 @@ function drawFx(ctx, layer) {
   ctx.save();
   for (let i = 0; i < bucket.length; i++) {
     const p = bucket[i];
+    if (!inView(p.x, p.y, p.text ? 40 : (p.r || 0) + 4)) continue;
     const t = 1 - p.life / p.maxLife;
     const a = Math.max(0, (1 - t) * (p.a0 || 0.8));
     if (a <= 0.01) continue;
@@ -221,6 +222,7 @@ function drawSkidMarks(ctx, layer) {
   ctx.lineCap = 'round';
   for (let i = 0; i < bucket.length; i++) {
     const s = bucket[i];
+    if (!inView((s.x1 + s.x2) * 0.5, (s.y1 + s.y2) * 0.5, 44)) continue;
     const a = Math.min(1, s.life / s.maxLife) * 0.42;
     ctx.strokeStyle = `rgba(8,8,14,${a})`;
     ctx.lineWidth = s.w;

@@ -129,6 +129,19 @@ function fxSpawnScale() {
 // the heavier per-car glow passes entirely).
 function lowFxOn() { return typeof AUDIO_SETTINGS !== 'undefined' && !!AUDIO_SETTINGS.lowFx; }
 
+// Per-layer viewport cull rectangle in world space, refreshed for each layer in
+// the Phase-C draw loop (render). inView() lets the high-count per-entity draws
+// skip anything fully off-screen instead of issuing canvas ops the browser would
+// only clip away. The rect already bakes in a generous margin, so callers pass
+// just the entity's own radius and edge pop-in can't happen.
+G._cull = null;
+function inView(x, y, r) {
+  const c = G._cull;
+  if (!c) return true;
+  r = r || 0;
+  return x + r >= c.minX && x - r <= c.maxX && y + r >= c.minY && y - r <= c.maxY;
+}
+
 function makePlayer(id, name, color, x, y, angle, carType) {
   return {
     id, name, color,

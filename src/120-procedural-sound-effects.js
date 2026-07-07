@@ -2642,6 +2642,7 @@ function drawMines(ctx, layer) {
   const bucket = frameLayerBucket('mines', G.mines, layer);
   for (let i = 0; i < bucket.length; i++) {
     const m = bucket[i];
+    if (!inView(m.x, m.y, (m.r || 14) + 4)) continue;
     ctx.save();
     ctx.translate(m.x, m.y);
     ctx.fillStyle = m.arm > 0 ? 'rgba(148,163,184,0.9)' : 'rgba(249,115,22,0.95)';
@@ -2663,6 +2664,7 @@ function drawDriftTrails(ctx, layer) {
   ctx.save();
   for (let i = 0; i < bucket.length; i++) {
     const t = bucket[i];
+    if (!inView(t.x, t.y, (t.r || 0) + 2)) continue;
     const a = Math.max(0, t.life / t.maxLife);
     ctx.globalAlpha = Math.min(1, a * 0.95);
     ctx.fillStyle = t.color;
