@@ -3553,10 +3553,10 @@ function onData(data, fromId) {
       if (!(data.id == G.myId)) sendToAll({type: 'kicked', id: data.id});
       return;
     }
-    try { if (peer) peer.destroy(); } catch(_) {}
-    peer = null; hostConn = null;
-    if (G._countdownTimer) { clearInterval(G._countdownTimer); G._countdownTimer = null; }
     if (data.id == G.myId){
+      try { if (peer) peer.destroy(); } catch(_) {}
+      peer = null; hostConn = null;
+      if (G._countdownTimer) { clearInterval(G._countdownTimer); G._countdownTimer = null; }
       G.players = {};
       lobbyRoomWrap.style.display = 'none';
       lobbyHost.style.display = 'none';
